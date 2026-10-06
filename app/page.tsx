@@ -1,69 +1,128 @@
-import Image from "next/image";
+'use client'
+import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
+import Link from 'next/link'
+
+interface Media {
+  id: string
+  title: string
+  type: 'movie' | 'series'
+  poster: string
+  url: string
+  description: string
+}
 
 export default function Home() {
+  const [mediaList, setMediaList] = useState<Media[]>([])
+  const [filteredList, setFilteredList] = useState<Media[]>([])
+  const [filter, setFilter] = useState<'all' | 'movie' | 'series'>('all')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchMedia() {
+      try {
+        const { data, error } = await supabase
+          .from('media')
+          .select('*')
+          .order('created_at', { ascending: false })
+
+        if (error) throw error
+
+        if (data) {
+          setMediaList(data)
+          setFilteredList(data)
+        }
+      } catch (err) {
+        console.error('Erreur chargement Supabase :', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchMedia()
+  }, [])
+
+  function handleFilter(type: 'all' | 'movie' | 'series') {
+    setFilter(type)
+    if (type === 'all') {
+      setFilteredList(mediaList)
+    } else {
+      setFilteredList(mediaList.filter(m => m.type === type))
+    }
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col selection:bg-red-600 selection:text-white">
+      {/* HEADER NAVBAR */}
+      <header className="sticky top-0 z-40 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-900 px-4 sm:px-8 py-4 flex items-center justify-between">
+        <div className="flex items-center space-x-6 sm:space-x-8">
+          <Link href="/" className="text-lg sm:text-xl font-bold tracking-tighter text-red-600">
+            YAMON<span className="text-white">FIM</span>
+          </Link>
+          <nav className="hidden sm:flex space-x-6 text-sm font-medium">
+            <button onClick={() => handleFilter('all')} className={`transition ${filter === 'all' ? 'text-white font-semibold' : 'text-zinc-400 hover:text-white'}`}>Catalogue</button>
+            <button onClick={() => handleFilter('movie')} className={`transition ${filter === 'movie' ? 'text-white font-semibold' : 'text-zinc-400 hover:text-white'}`}>Films</button>
+            <button onClick={() => handleFilter('series')} className={`transition ${filter === 'series' ? 'text-white font-semibold' : 'text-zinc-400 hover:text-white'}`}>Séries</button>
+          </nav>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
+        <div>
+          <a href="/admin" className="bg-zinc-900 border border-zinc-800 text-zinc-300 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium hover:bg-zinc-800 transition">
+            Admin
           </a>
         </div>
-      </main>
-    </div>
-  );
+      </header>
+
+      {/* CONTENU PRINCIPAL : CATALOGUE */}
+      <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-8 py-6 sm:py-8 space-y-8">
+        
+        {/* FILTRES MOBILE */}
+        <div className="flex sm:hidden space-x-2 text-xs overflow-x-auto pb-2">
+          <button onClick={() => handleFilter('all')} className={`px-4 py-2 rounded-lg border ${filter === 'all' ? 'bg-red-600 border-red-600 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-300'}`}>Tous</button>
+          <button onClick={() => handleFilter('movie')} className={`px-4 py-2 rounded-lg border ${filter === 'movie' ? 'bg-red-600 border-red-600 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-300'}`}>Films</button>
+          <button onClick={() => handleFilter('series')} className={`px-4 py-2 rounded-lg border ${filter === 'series' ? 'bg-red-600 border-red-600 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-300'}`}>Séries</button>
+        </div>
+
+        {/* GRILLE DU CATALOGUE */}
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Catalogue des programmes</h2>
+          </div>
+
+          {loading ? (
+            <div className="text-center py-24 text-zinc-500 text-sm">Chargement du catalogue...</div>
+          ) : filteredList.length === 0 ? (
+            <div className="text-center py-24 text-zinc-500 text-sm">Aucun programme trouvé. Ajoute-en via l'espace admin.</div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
+              {filteredList.map((m) => (
+                <Link 
+                  key={m.id} 
+                  href={`/watch/${m.id}`} 
+                  className="group cursor-pointer space-y-2 block"
+                >
+                  <div className="aspect-[2/3] rounded-xl overflow-hidden bg-zinc-900 border border-zinc-900 relative shadow-md">
+                    <img src={m.poster} alt={m.title} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                      <div className="w-12 h-12 rounded-full bg-red-600 text-white flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition">
+                        <span className="text-xs font-bold uppercase">Voir</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-xs sm:text-sm truncate group-hover:text-red-500 transition">{m.title}</h4>
+                    <span className="text-[10px] sm:text-xs text-zinc-500 uppercase">{m.type === 'movie' ? 'Film' : 'Série'}</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* FOOTER */}
+      <footer className="border-t border-zinc-900 py-6 text-center text-xs text-zinc-500 mt-auto px-4">
+        <p>&copy; 2026 YAMONFIM. Plateforme de diffusion privée.</p>
+      </footer>
+    </main>
+  )
 }
