@@ -1,20 +1,26 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 interface MediaItem {
-  id: string;
+  id: any;
   title: string;
   type: 'movie' | 'series';
   poster: string;
+  backdrop?: string;
   url: string;
   description: string;
 }
 
 export default function Home() {
+  const router = useRouter();
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedType, setSelectedType] = useState<'all' | 'movie' | 'series'>('all');
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
     async function fetchMedia() {
@@ -32,107 +38,212 @@ export default function Home() {
     fetchMedia();
   }, []);
 
-  const featured = mediaList[0] || {
-    title: "Bienvenue sur yamonfim",
+  const topMedia = mediaList.slice(0, 5);
+  const carouselItems = topMedia.length > 0 ? topMedia : mediaList.slice(0, 5);
+
+  useEffect(() => {
+    if (carouselItems.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentIndex((prevIndex) => (prevIndex + 1) % carouselItems.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [carouselItems.length]);
+
+  const featured = carouselItems[currentIndex] || {
+    title: "Bienvenue sur YAMONFIM",
     type: "movie",
     poster: "",
+    backdrop: "",
     description: "Ajoute tes premiers films ou séries depuis ton espace admin.",
     url: "#"
   };
 
+  const filteredMedia = mediaList.filter(item => {
+    const matchesType = selectedType === 'all' || item.type === selectedType;
+    const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          item.description?.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesType && matchesSearch;
+  });
+
+  const recentMovies = mediaList.filter(item => item.type === 'movie');
+  const recentSeries = mediaList.filter(item => item.type === 'series');
+
+  const heroImage = featured.backdrop?.trim() ? featured.backdrop : featured.poster;
+
   return (
-    <main className="min-h-screen bg-[#141414] text-white pb-24 font-sans">
+    <main className="min-h-screen bg-[#141414] text-white pb-28 font-sans selection:bg-red-600 selection:text-white">
       {/* 1. Navbar */}
-      <header className="flex items-center justify-between px-4 py-3 bg-[#141414]/90 backdrop-blur-md sticky top-0 z-50 border-b border-zinc-800/60">
-        <div className="flex items-center gap-2">
-          <span className="font-extrabold text-xl tracking-wider text-red-600">
+      <header className="flex items-center justify-between px-6 py-4 bg-[#141414]/90 backdrop-blur-md sticky top-0 z-50 border-b border-zinc-800/60">
+        <div className="flex items-center gap-6">
+          <span className="font-black text-xl tracking-wider text-red-600">
             YAMON<span className="text-white">FIM</span>
           </span>
+          <nav className="hidden md:flex items-center gap-4 text-xs font-medium text-zinc-400">
+            <button onClick={() => setSelectedType('all')} className={`transition ${selectedType === 'all' ? 'text-white font-bold' : 'hover:text-white'}`}>Accueil</button>
+            <button onClick={() => setSelectedType('movie')} className={`transition ${selectedType === 'movie' ? 'text-white font-bold' : 'hover:text-white'}`}>Films</button>
+            <button onClick={() => setSelectedType('series')} className={`transition ${selectedType === 'series' ? 'text-white font-bold' : 'hover:text-white'}`}>Séries</button>
+          </nav>
         </div>
-        <div className="flex items-center gap-4 text-sm text-zinc-300">
-          <a href="/admin" className="hover:text-red-500 transition text-xs bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-lg">
+        <div className="flex items-center gap-3">
+          <input
+            type="text"
+            placeholder="Rechercher..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="bg-zinc-900 border border-zinc-800 text-xs text-white px-3 py-2 rounded-lg focus:outline-none focus:border-red-600 w-36 md:w-52 transition"
+          />
+          <a href="/admin" className="hover:text-red-500 transition text-xs bg-zinc-900 border border-zinc-800 px-3 py-2 rounded-lg">
             Admin
           </a>
         </div>
       </header>
 
-      {/* 2. Hero Banner */}
-      <div className="relative h-[55vh] w-full flex items-end p-6 bg-gradient-to-t from-[#141414] via-[#141414]/50 to-transparent">
-        <div className="absolute inset-0 -z-10 bg-zinc-900">
-          {featured.poster ? (
-            <img src={featured.poster} alt={featured.title} className="w-full h-full object-cover opacity-60" />
-          ) : (
-            <div className="w-full h-full bg-gradient-to-br from-zinc-800 to-zinc-900" />
-          )}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-transparent to-transparent" />
-        </div>
-        
-        <div className="w-full z-10">
-          <div className="flex items-center gap-2 text-xs text-zinc-300 mb-2 font-medium">
-            <span className="uppercase">{featured.type === 'movie' ? 'Film' : 'Série'}</span>
+      {/* 2. Hero Banner Carrousel */}
+      {!searchQuery && selectedType === 'all' && (
+        <div className="relative h-[60vh] w-full flex items-end p-6 md:p-12 overflow-hidden transition-all duration-700">
+          <div className="absolute inset-0 -z-10 bg-[#141414]">
+            {heroImage ? (
+              <img 
+                key={featured.id + '-' + heroImage} 
+                src={heroImage} 
+                alt={featured.title} 
+                className="w-full h-full object-cover opacity-60 animate-fadeIn" 
+              />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-zinc-800 to-zinc-950" />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-[#141414]/40 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-r from-[#141414]/90 via-transparent to-transparent" />
           </div>
-          <h1 className="text-4xl font-black tracking-tight mb-2 drop-shadow-md">{featured.title}</h1>
-          <p className="text-xs text-zinc-300 line-clamp-2 mb-4 max-w-lg">{featured.description}</p>
           
-          {featured.url && featured.url !== '#' && (
-            <div className="flex gap-3">
-              <a href={featured.url} target="_blank" rel="noopener noreferrer" className="bg-red-600 text-white font-bold py-2.5 px-6 rounded-lg flex items-center justify-center gap-2 hover:bg-red-500 transition shadow-lg text-sm">
-                ▶ Regarder
-              </a>
+          <div className="w-full max-w-xl z-10 flex flex-col items-start">
+            <div className="flex items-center gap-2 text-xs text-zinc-300 mb-2 font-medium">
+              <span className="uppercase text-red-500 font-bold tracking-wider bg-red-600/20 px-2.5 py-1 rounded-md border border-red-500/30">
+                {featured.type === 'movie' ? 'Film' : 'Série'} • À la une
+              </span>
             </div>
-          )}
-        </div>
-      </div>
+            <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-2 drop-shadow-lg">{featured.title}</h1>
+            <p className="text-xs text-zinc-300 line-clamp-2 mb-6 max-w-lg leading-relaxed">{featured.description}</p>
+            
+            <div className="flex items-center gap-3">
+              <button onClick={() => router.push(`/watch/${featured.id}`)} className="bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 px-6 rounded-lg flex items-center justify-center gap-2 transition shadow-lg shadow-red-600/30 text-sm cursor-pointer">
+                ▶ Regarder
+              </button>
+              <button onClick={() => router.push(`/watch/${featured.id}`)} className="bg-zinc-900/80 backdrop-blur border border-zinc-800 text-zinc-300 font-medium py-2.5 px-5 rounded-lg text-sm transition hover:text-white cursor-pointer">
+                Plus d'infos
+              </button>
+            </div>
 
-      {/* 3. Section Catalogue / Ajouts récents */}
-      <section className="px-4 mt-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-bold tracking-wide">Ajouts récents</h2>
-          <span className="text-xs text-zinc-400">{mediaList.length} titres</span>
+            {carouselItems.length > 0 && (
+              <div className="flex gap-1.5 mt-8">
+                {carouselItems.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setCurrentIndex(idx)}
+                    className={`h-1.5 rounded-full transition-all duration-300 ${currentIndex === idx ? 'w-6 bg-red-600' : 'w-2 bg-zinc-700'}`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
+      )}
 
-        {loading ? (
-          <div className="text-zinc-500 text-sm py-8 text-center">Chargement du catalogue...</div>
-        ) : mediaList.length === 0 ? (
-          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-6 text-center">
-            <p className="text-zinc-400 text-sm mb-2">Aucun média pour le moment.</p>
-            <p className="text-xs text-zinc-500">Ajoute tes premiers contenus depuis l'espace admin.</p>
+      {/* 3. Sections Catalogue */}
+      <section className="px-4 md:px-12 mt-8 space-y-10">
+        {searchQuery ? (
+          <div>
+            <h2 className="text-lg font-bold tracking-wide mb-4">Résultats de recherche ({filteredMedia.length})</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
+              {filteredMedia.map((item) => (
+                <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="group relative bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-md transition-all duration-300 hover:scale-105 cursor-pointer aspect-[2/3]">
+                  {item.poster ? <img src={item.poster} alt={item.title} className="object-cover w-full h-full" /> : <div className="flex items-center justify-center h-full text-xs text-zinc-500 bg-zinc-800">Pas d'affiche</div>}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3.5">
+                    <h3 className="font-bold text-sm text-white truncate">{item.title}</h3>
+                    <p className="text-[11px] text-zinc-300 line-clamp-2 mt-1">{item.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : selectedType === 'movie' ? (
+          <div>
+            <h2 className="text-lg font-bold tracking-wide mb-4">Tous les Films</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
+              {recentMovies.map((item) => (
+                <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="group relative bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-md transition-all duration-300 hover:scale-105 cursor-pointer aspect-[2/3]">
+                  {item.poster ? <img src={item.poster} alt={item.title} className="object-cover w-full h-full" /> : <div className="flex items-center justify-center h-full text-xs text-zinc-500 bg-zinc-800">Pas d'affiche</div>}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3.5">
+                    <h3 className="font-bold text-sm text-white truncate">{item.title}</h3>
+                    <p className="text-[11px] text-zinc-300 line-clamp-2 mt-1">{item.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : selectedType === 'series' ? (
+          <div>
+            <h2 className="text-lg font-bold tracking-wide mb-4">Toutes les Séries</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
+              {recentSeries.map((item) => (
+                <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="group relative bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-md transition-all duration-300 hover:scale-105 cursor-pointer aspect-[2/3]">
+                  {item.poster ? <img src={item.poster} alt={item.title} className="object-cover w-full h-full" /> : <div className="flex items-center justify-center h-full text-xs text-zinc-500 bg-zinc-800">Pas d'affiche</div>}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3.5">
+                    <h3 className="font-bold text-sm text-white truncate">{item.title}</h3>
+                    <p className="text-[11px] text-zinc-300 line-clamp-2 mt-1">{item.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {mediaList.map((item) => (
-              <a 
-                key={item.id} 
-                href={item.url} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="group bg-zinc-900 rounded-xl overflow-hidden border border-zinc-800 shadow-lg transition-transform hover:scale-[1.02] cursor-pointer block"
-              >
-                <div className="aspect-[2/3] w-full bg-zinc-800 relative overflow-hidden">
-                  {item.poster ? (
-                    <img src={item.poster} alt={item.title} className="object-cover w-full h-full group-hover:scale-105 transition duration-300" />
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-xs text-zinc-500">Pas d'affiche</div>
-                  )}
-                  <span className="absolute top-2 right-2 bg-black/70 backdrop-blur text-[10px] px-2 py-0.5 rounded text-white uppercase font-semibold">
-                    {item.type === 'movie' ? 'Film' : 'Série'}
-                  </span>
+          <>
+            <div>
+              <h2 className="text-lg font-bold tracking-wide mb-4">Ajouts récents - Films</h2>
+              {recentMovies.length === 0 ? (
+                <p className="text-xs text-zinc-500">Aucun film récent.</p>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
+                  {recentMovies.map((item) => (
+                    <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="group relative bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-md transition-all duration-300 hover:scale-105 cursor-pointer aspect-[2/3]">
+                      {item.poster ? <img src={item.poster} alt={item.title} className="object-cover w-full h-full" /> : <div className="flex items-center justify-center h-full text-xs text-zinc-500 bg-zinc-800">Pas d'affiche</div>}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3.5">
+                        <h3 className="font-bold text-sm text-white truncate">{item.title}</h3>
+                        <p className="text-[11px] text-zinc-300 line-clamp-2 mt-1">{item.description}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="p-3">
-                  <h3 className="font-bold text-sm text-white truncate">{item.title}</h3>
-                  <p className="text-xs text-zinc-400 line-clamp-1 mt-0.5">{item.description}</p>
+              )}
+            </div>
+
+            <div>
+              <h2 className="text-lg font-bold tracking-wide mb-4">Ajouts récents - Séries</h2>
+              {recentSeries.length === 0 ? (
+                <p className="text-xs text-zinc-500">Aucune série récente.</p>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
+                  {recentSeries.map((item) => (
+                    <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="group relative bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-md transition-all duration-300 hover:scale-105 cursor-pointer aspect-[2/3]">
+                      {item.poster ? <img src={item.poster} alt={item.title} className="object-cover w-full h-full" /> : <div className="flex items-center justify-center h-full text-xs text-zinc-500 bg-zinc-800">Pas d'affiche</div>}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3.5">
+                        <h3 className="font-bold text-sm text-white truncate">{item.title}</h3>
+                        <p className="text-[11px] text-zinc-300 line-clamp-2 mt-1">{item.description}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </a>
-            ))}
-          </div>
+              )}
+            </div>
+          </>
         )}
       </section>
 
       {/* 4. Barre de navigation mobile */}
       <nav className="fixed bottom-0 left-0 right-0 bg-[#141414]/95 backdrop-blur-lg border-t border-zinc-800/80 py-3 px-6 flex justify-around text-xs text-zinc-400 z-50">
-        <div className="text-red-600 font-bold flex flex-col items-center gap-1 cursor-pointer">
+        <button onClick={() => setSelectedType('all')} className="text-red-600 font-bold flex flex-col items-center gap-1 cursor-pointer">
           <span className="text-base">🎬</span> Catalogue
-        </div>
+        </button>
         <a href="/admin" className="flex flex-col items-center gap-1 hover:text-white transition cursor-pointer">
           <span className="text-base">⚙️</span> Admin
         </a>
