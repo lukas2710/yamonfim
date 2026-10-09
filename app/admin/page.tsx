@@ -4,6 +4,17 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
+interface Episode {
+  number: number;
+  title: string;
+  embedUrl: string;
+}
+
+interface Season {
+  seasonNumber: number;
+  episodes: Episode[];
+}
+
 interface MediaItem {
   id: any;
   title: string;
@@ -13,6 +24,7 @@ interface MediaItem {
   url: string;
   embedUrl?: string;
   description: string;
+  seasons?: Season[];
 }
 
 export default function AdminPage() {
@@ -31,12 +43,16 @@ export default function AdminPage() {
   const [url, setUrl] = useState('');
   const [embedUrl, setEmbedUrl] = useState('');
   const [description, setDescription] = useState('');
+  
+  // États spécifiques pour les séries (Saisons / Épisodes)
+  const [seasons, setSeasons] = useState<Season[]>([
+    { seasonNumber: 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '' }] }
+  ]);
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Vérification de sécurité pour restreindre l'accès à ton e-mail uniquement
   useEffect(() => {
     async function checkAdmin() {
       const { data: { session } } = await supabase.auth.getSession();
@@ -72,6 +88,7 @@ export default function AdminPage() {
     setUrl(item.url || '');
     setEmbedUrl(item.embedUrl || '');
     setDescription(item.description || '');
+    setSeasons(item.seasons || [{ seasonNumber: 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '' }] }]);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -84,6 +101,7 @@ export default function AdminPage() {
     setUrl('');
     setEmbedUrl('');
     setDescription('');
+    setSeasons([{ seasonNumber: 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '' }] }]);
   };
 
   const handleDelete = async (id: any) => {
@@ -98,17 +116,71 @@ export default function AdminPage() {
     }
   };
 
+  // Gestion dynamique des saisons et épisodes
+  const addSeason = () => {
+    setSeasons(prev => [
+      ...prev,
+      { seasonNumber: prev.length + 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '' }] }
+    ]);
+  };
+
+  const removeSeason = (index: number) => {
+    setSeasons(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const addEpisode = (seasonIndex: number) => {
+    setSeasons(prev => {
+      const updated = [...prev];
+      const season = updated[seasonIndex];
+      season.episodes.push({
+        number: season.episodes.length + 1,
+        title: `Épisode ${season.episodes.length + 1}`,
+        embedUrl: ''
+      });
+      return updated;
+    });
+  };
+
+  const removeEpisode = (seasonIndex: number, epIndex: number) => {
+    setSeasons(prev => {
+      const updated = [...prev];
+      updated[seasonIndex].episodes = updated[seasonIndex].episodes.filter((_, i) => i !== epIndex);
+      return updated;
+    });
+  };
+
+  const updateEpisodeField = (seasonIndex: number, epIndex: number, field: keyof Episode, value: any) => {
+    setSeasons(prev => {
+      const updated = [...prev];
+      updated[seasonIndex].episodes[epIndex] = {
+        ...updated[seasonIndex].episodes[epIndex],
+        [field]: value
+      };
+      return updated;
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage('');
     setErrorMsg('');
 
+    const payload = {
+      title,
+      type,
+      poster,
+      backdrop,
+      url,
+      embedUrl: type === 'movie' ? embedUrl : '',
+      description,
+      seasons: type === 'series' ? seasons : null
+    };
+
     if (editingId !== null && editingId !== undefined) {
-      // Modification
       const { error } = await supabase
         .from('media')
-        .update({ title, type, poster, backdrop, url, embedUrl, description })
+        .update(payload)
         .eq('id', editingId);
 
       if (error) {
@@ -119,10 +191,7 @@ export default function AdminPage() {
         fetchMedia();
       }
     } else {
-      // Ajout
-      const { error } = await supabase.from('media').insert([
-        { title, type, poster, backdrop, url, embedUrl, description },
-      ]);
+      const { error } = await supabase.from('media').insert([payload]);
 
       if (error) {
         setErrorMsg(`Erreur enregistrement Supabase : ${error.message}`);
@@ -172,7 +241,7 @@ export default function AdminPage() {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
-              placeholder="Ex: Spider-Man"
+              placeholder="Ex: Spider-Man ou Breaking Bad"
             />
           </div>
 
@@ -210,27 +279,103 @@ export default function AdminPage() {
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-zinc-400 mb-1">Lien de lecture externe (URL)</label>
-            <input
-              type="text"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
-              placeholder="https://..."
-            />
-          </div>
+          {/* Conditionnel si c'est un film */}
+          {type === 'movie' && (
+            <>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-400 mb-1">Lien de lecture externe (URL)</label>
+                <input
+                  type="text"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
+                  placeholder="https://..."
+                />
+              </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-zinc-400 mb-1">Lien Iframe / Embed (Lecteur intégré)</label>
-            <input
-              type="text"
-              value={embedUrl}
-              onChange={(e) => setEmbedUrl(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
-              placeholder="https://... (lien direct iframe/embed)"
-            />
-          </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-400 mb-1">Lien Iframe / Embed (Lecteur intégré)</label>
+                <input
+                  type="text"
+                  value={embedUrl}
+                  onChange={(e) => setEmbedUrl(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
+                  placeholder="https://... (lien direct iframe/embed)"
+                />
+              </div>
+            </>
+          )}
+
+          {/* Gestion dynamique des Saisons et Épisodes si c'est une Série */}
+          {type === 'series' && (
+            <div className="border border-zinc-800 bg-zinc-950/60 p-4 rounded-xl space-y-4 mt-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-red-500">Gestion des Saisons & Épisodes</h3>
+                <button
+                  type="button"
+                  onClick={addSeason}
+                  className="bg-zinc-800 hover:bg-zinc-700 text-xs px-3 py-1.5 rounded-lg font-bold transition cursor-pointer"
+                >
+                  + Ajouter une saison
+                </button>
+              </div>
+
+              {seasons.map((season, sIndex) => (
+                <div key={sIndex} className="border border-zinc-800 bg-zinc-900/60 p-3 rounded-xl space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-white">Saison {season.seasonNumber}</span>
+                    {seasons.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeSeason(sIndex)}
+                        className="text-red-400 text-xs hover:underline cursor-pointer"
+                      >
+                        Supprimer la saison
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="space-y-2 pl-2 border-l border-zinc-800">
+                    {season.episodes.map((ep, eIndex) => (
+                      <div key={eIndex} className="flex gap-2 items-center">
+                        <span className="text-[11px] text-zinc-400 w-16 shrink-0">Ép. {ep.number}</span>
+                        <input
+                          type="text"
+                          placeholder="Nom (ex: Pilote)"
+                          value={ep.title}
+                          onChange={(e) => updateEpisodeField(sIndex, eIndex, 'title', e.target.value)}
+                          className="bg-zinc-950 border border-zinc-800 rounded-lg p-1.5 text-xs text-white focus:outline-none focus:border-red-600 w-1/3"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Lien Iframe / Embed de l'épisode"
+                          value={ep.embedUrl}
+                          onChange={(e) => updateEpisodeField(sIndex, eIndex, 'embedUrl', e.target.value)}
+                          className="bg-zinc-950 border border-zinc-800 rounded-lg p-1.5 text-xs text-white focus:outline-none focus:border-red-600 flex-1"
+                        />
+                        {season.episodes.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeEpisode(sIndex, eIndex)}
+                            className="text-zinc-500 hover:text-red-400 text-xs px-2 cursor-pointer"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => addEpisode(sIndex)}
+                      className="mt-2 text-xs bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 px-3 py-1 rounded-md transition cursor-pointer"
+                    >
+                      + Ajouter un épisode
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-semibold text-zinc-400 mb-1">Description</label>
