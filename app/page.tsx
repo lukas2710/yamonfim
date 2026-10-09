@@ -96,7 +96,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#141414] text-white pb-24 sm:pb-12 font-sans selection:bg-red-600 selection:text-white max-w-[100vw] overflow-x-hidden">
-      {/* 1. Header App Bar (Style App Mobile / TV) */}
+      {/* 1. Header App Bar */}
       <header className="flex items-center justify-between px-4 py-3 bg-[#141414]/95 backdrop-blur-md sticky top-0 z-50 border-b border-zinc-800/80">
         <span className="font-black text-lg tracking-wider text-red-600">
           YAMON<span className="text-white">FIM</span>
@@ -157,14 +157,14 @@ export default function Home() {
         </div>
       )}
 
-      {/* 3. Contenu du catalogue (Grille optimisée 3 colonnes sur mobile) */}
+      {/* 3. Contenu du catalogue avec défilement horizontal (style Netflix) */}
       <section className="px-3 sm:px-10 mt-5 space-y-8">
         {searchQuery ? (
           <div>
             <h2 className="text-sm sm:text-base font-bold mb-3">Résultats ({filteredMedia.length})</h2>
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3">
               {filteredMedia.map((item) => (
-                <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="bg-zinc-900 rounded-md overflow-hidden border border-zinc-800 aspect-[2/3] active:scale-95 transition cursor-pointer">
+                <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="bg-zinc-900 rounded-md overflow-hidden border border-zinc-800 aspect-[2/3] active:scale-95 transition cursor-pointer shrink-0">
                   {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-[10px] text-zinc-500 p-1 text-center">Aucune image</div>}
                 </div>
               ))}
@@ -173,9 +173,9 @@ export default function Home() {
         ) : selectedType === 'movie' ? (
           <div>
             <h2 className="text-sm sm:text-base font-bold mb-3">Films</h2>
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3">
+            <div className="flex gap-3 overflow-x-auto pb-3 pt-1 scrollbar-none [-webkit-overflow-scrolling:touch]">
               {recentMovies.map((item) => (
-                <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="bg-zinc-900 rounded-md overflow-hidden border border-zinc-800 aspect-[2/3] active:scale-95 transition cursor-pointer">
+                <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="bg-zinc-900 rounded-md overflow-hidden border border-zinc-800 w-[110px] sm:w-[150px] aspect-[2/3] active:scale-95 transition cursor-pointer shrink-0 shadow-lg">
                   {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-[10px] text-zinc-500 p-1 text-center">Aucune image</div>}
                 </div>
               ))}
@@ -184,9 +184,9 @@ export default function Home() {
         ) : selectedType === 'series' ? (
           <div>
             <h2 className="text-sm sm:text-base font-bold mb-3">Séries</h2>
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3">
+            <div className="flex gap-3 overflow-x-auto pb-3 pt-1 scrollbar-none [-webkit-overflow-scrolling:touch]">
               {recentSeries.map((item) => (
-                <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="bg-zinc-900 rounded-md overflow-hidden border border-zinc-800 aspect-[2/3] active:scale-95 transition cursor-pointer">
+                <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="bg-zinc-900 rounded-md overflow-hidden border border-zinc-800 w-[110px] sm:w-[150px] aspect-[2/3] active:scale-95 transition cursor-pointer shrink-0 shadow-lg">
                   {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-[10px] text-zinc-500 p-1 text-center">Aucune image</div>}
                 </div>
               ))}
@@ -199,9 +199,9 @@ export default function Home() {
               {recentMovies.length === 0 ? (
                 <p className="text-xs text-zinc-500">Aucun film.</p>
               ) : (
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3">
+                <div className="flex gap-3 overflow-x-auto pb-3 pt-1 scrollbar-none [-webkit-overflow-scrolling:touch]">
                   {recentMovies.map((item) => (
-                    <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="bg-zinc-900 rounded-md overflow-hidden border border-zinc-800 aspect-[2/3] active:scale-95 transition cursor-pointer">
+                    <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="bg-zinc-900 rounded-md overflow-hidden border border-zinc-800 w-[110px] sm:w-[150px] aspect-[2/3] active:scale-95 transition cursor-pointer shrink-0 shadow-lg">
                       {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-[10px] text-zinc-500 p-1 text-center">Aucune image</div>}
                     </div>
                   ))}
@@ -214,9 +214,9 @@ export default function Home() {
               {recentSeries.length === 0 ? (
                 <p className="text-xs text-zinc-500">Aucune série.</p>
               ) : (
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3">
+                <div className="flex gap-3 overflow-x-auto pb-3 pt-1 scrollbar-none [-webkit-overflow-scrolling:touch]">
                   {recentSeries.map((item) => (
-                    <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="bg-zinc-900 rounded-md overflow-hidden border border-zinc-800 aspect-[2/3] active:scale-95 transition cursor-pointer">
+                    <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="bg-zinc-900 rounded-md overflow-hidden border border-zinc-800 w-[110px] sm:w-[150px] aspect-[2/3] active:scale-95 transition cursor-pointer shrink-0 shadow-lg">
                       {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-[10px] text-zinc-500 p-1 text-center">Aucune image</div>}
                     </div>
                   ))}
