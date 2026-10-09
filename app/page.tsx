@@ -110,6 +110,9 @@ export default function Home() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="bg-zinc-900 border border-zinc-800 text-xs text-white px-3 py-1.5 rounded-lg focus:outline-none focus:border-red-600 w-32 sm:w-48 transition"
           />
+          <button onClick={() => router.push('/history')} className="text-xs bg-zinc-900 border border-zinc-800 px-2.5 py-1.5 rounded-lg text-zinc-300 hover:text-white transition cursor-pointer">
+            Historique
+          </button>
           {userEmail === ADMIN_EMAIL && (
             <a href="/admin" className="text-xs bg-zinc-900 border border-zinc-800 px-2.5 py-1.5 rounded-lg text-zinc-300 hover:text-white">
               Admin
@@ -121,7 +124,7 @@ export default function Home() {
         </div>
       </header>
 
-      {/* 2. Hero Banner / Carrousel */}
+      {/* 2. Hero Banner / Carrousel (Uniquement sur l'accueil global) */}
       {!searchQuery && selectedType === 'all' && (
         <div className="relative h-[38vh] sm:h-[55vh] w-full flex items-end p-4 sm:p-10 overflow-hidden bg-zinc-950">
           <div className="absolute inset-0 z-0">
@@ -140,7 +143,7 @@ export default function Home() {
           
           <div className="w-full max-w-xl z-10 flex flex-col items-start">
             <span className="uppercase text-[10px] text-red-500 font-bold tracking-wider bg-red-600/20 px-2 py-0.5 rounded-md border border-red-500/30 mb-1.5">
-              {featured.type === 'movie' ? 'Film' : 'Série'} • À la une
+              {featured.type === 'movie' ? 'Film' : 'Série'} À la une
             </span>
             <h1 className="text-xl sm:text-4xl font-black tracking-tight mb-1 drop-shadow-md line-clamp-1">{featured.title}</h1>
             <p className="text-[11px] sm:text-xs text-zinc-300 line-clamp-2 mb-3 max-w-md">{featured.description}</p>
@@ -157,7 +160,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* 3. Contenu du catalogue avec défilement horizontal (style Netflix) */}
+      {/* 3. Contenu du catalogue */}
       <section className="px-3 sm:px-10 mt-5 space-y-8">
         {searchQuery ? (
           <div>
@@ -172,10 +175,10 @@ export default function Home() {
           </div>
         ) : selectedType === 'movie' ? (
           <div>
-            <h2 className="text-sm sm:text-base font-bold mb-3">Films</h2>
-            <div className="flex gap-3 overflow-x-auto pb-3 pt-1 scrollbar-none [-webkit-overflow-scrolling:touch]">
+            <h2 className="text-sm sm:text-base font-bold mb-3">Films ({recentMovies.length})</h2>
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3">
               {recentMovies.map((item) => (
-                <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="bg-zinc-900 rounded-md overflow-hidden border border-zinc-800 w-[110px] sm:w-[150px] aspect-[2/3] active:scale-95 transition cursor-pointer shrink-0 shadow-lg">
+                <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="bg-zinc-900 rounded-md overflow-hidden border border-zinc-800 aspect-[2/3] active:scale-95 transition cursor-pointer shrink-0 shadow-lg">
                   {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-[10px] text-zinc-500 p-1 text-center">Aucune image</div>}
                 </div>
               ))}
@@ -183,10 +186,10 @@ export default function Home() {
           </div>
         ) : selectedType === 'series' ? (
           <div>
-            <h2 className="text-sm sm:text-base font-bold mb-3">Séries</h2>
-            <div className="flex gap-3 overflow-x-auto pb-3 pt-1 scrollbar-none [-webkit-overflow-scrolling:touch]">
+            <h2 className="text-sm sm:text-base font-bold mb-3">Séries ({recentSeries.length})</h2>
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3">
               {recentSeries.map((item) => (
-                <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="bg-zinc-900 rounded-md overflow-hidden border border-zinc-800 w-[110px] sm:w-[150px] aspect-[2/3] active:scale-95 transition cursor-pointer shrink-0 shadow-lg">
+                <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="bg-zinc-900 rounded-md overflow-hidden border border-zinc-800 aspect-[2/3] active:scale-95 transition cursor-pointer shrink-0 shadow-lg">
                   {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-[10px] text-zinc-500 p-1 text-center">Aucune image</div>}
                 </div>
               ))}
@@ -227,25 +230,31 @@ export default function Home() {
         )}
       </section>
 
-      {/* 4. Barre de navigation application mobile fixe en bas */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-[#141414]/95 backdrop-blur-lg border-t border-zinc-800 py-2.5 px-6 flex justify-around items-center z-50 sm:hidden">
+      {/* 4. Barre de navigation mobile fixe en bas */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-[#141414]/95 backdrop-blur-lg border-t border-zinc-800 py-2.5 px-4 flex justify-around items-center z-50 sm:hidden">
         <button 
           onClick={() => { setSelectedType('all'); setSearchQuery(''); }} 
-          className={`flex flex-col items-center gap-0.5 text-[10px] transition ${selectedType === 'all' && !searchQuery ? 'text-red-600 font-bold' : 'text-zinc-400'}`}
+          className={`flex flex-col items-center gap-0.5 text-[10px] transition cursor-pointer ${selectedType === 'all' && !searchQuery ? 'text-red-600 font-bold' : 'text-zinc-400'}`}
         >
           <span className="text-lg">🏠</span> Accueil
         </button>
         <button 
           onClick={() => { setSelectedType('movie'); setSearchQuery(''); }} 
-          className={`flex flex-col items-center gap-0.5 text-[10px] transition ${selectedType === 'movie' ? 'text-red-600 font-bold' : 'text-zinc-400'}`}
+          className={`flex flex-col items-center gap-0.5 text-[10px] transition cursor-pointer ${selectedType === 'movie' ? 'text-red-600 font-bold' : 'text-zinc-400'}`}
         >
           <span className="text-lg">🎬</span> Films
         </button>
         <button 
           onClick={() => { setSelectedType('series'); setSearchQuery(''); }} 
-          className={`flex flex-col items-center gap-0.5 text-[10px] transition ${selectedType === 'series' ? 'text-red-600 font-bold' : 'text-zinc-400'}`}
+          className={`flex flex-col items-center gap-0.5 text-[10px] transition cursor-pointer ${selectedType === 'series' ? 'text-red-600 font-bold' : 'text-zinc-400'}`}
         >
           <span className="text-lg">📺</span> Séries
+        </button>
+        <button 
+          onClick={() => router.push('/history')} 
+          className="flex flex-col items-center gap-0.5 text-[10px] text-zinc-400 hover:text-white transition cursor-pointer"
+        >
+          <span className="text-lg">✓</span> Historique
         </button>
       </nav>
     </main>

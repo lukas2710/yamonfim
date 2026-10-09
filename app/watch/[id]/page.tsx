@@ -25,6 +25,7 @@ interface MediaItem {
   embedUrl?: string;
   description: string;
   seasons?: Season[];
+  watched?: Record<string, boolean>;
 }
 
 export default function WatchPage() {
@@ -36,10 +37,7 @@ export default function WatchPage() {
   const [loading, setLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  // Onglet actif par défaut pour les séries
   const [activeTab, setActiveTab] = useState<'episodes' | 'synopsis'>('episodes');
-
-  // Sélection des saisons et épisodes
   const [selectedSeasonIdx, setSelectedSeasonIdx] = useState(0);
   const [selectedEpisodeIdx, setSelectedEpisodeIdx] = useState(0);
 
@@ -61,6 +59,22 @@ export default function WatchPage() {
 
     fetchMediaById();
   }, [id]);
+
+  // Fonction pour basculer et sauvegarder l'état "Vu" directement dans Supabase
+  const toggleWatched = async (key: string) => {
+    if (!media) return;
+    const currentWatched = media.watched || {};
+    const updatedWatched = { ...currentWatched, [key]: !currentWatched[key] };
+
+    // Mise à jour locale immédiate pour la fluidité
+    setMedia({ ...media, watched: updatedWatched });
+
+    // Enregistrement dans Supabase
+    await supabase
+      .from('media')
+      .update({ watched: updatedWatched })
+      .eq('id', media.id);
+  };
 
   const getCleanEmbedUrl = (rawUrl?: string) => {
     if (!rawUrl) return '';
@@ -100,6 +114,7 @@ export default function WatchPage() {
 
   let currentEmbedRaw = '';
   let currentEpisodeTitle = '';
+  let currentKey = media.type === 'movie' ? 'movie_main' : `s${selectedSeasonIdx}_e${selectedEpisodeIdx}`;
 
   if (media.type === 'series' && media.seasons && media.seasons.length > 0) {
     const currentSeason = media.seasons[selectedSeasonIdx] || media.seasons[0];
@@ -112,11 +127,12 @@ export default function WatchPage() {
 
   const finalEmbedUrl = getCleanEmbedUrl(currentEmbedRaw);
   const bgImage = (media.backdrop && media.backdrop.trim() !== '') ? media.backdrop : media.poster;
+  const isCurrentWatched = media.watched ? !!media.watched[currentKey] : false;
 
   return (
     <main className="min-h-screen bg-[#141414] text-white font-sans pb-24 selection:bg-red-600 selection:text-white">
       
-      {/* 1. Header Navigation Style Pro */}
+      {/* 1. Header Navigation */}
       <header className="flex items-center justify-between px-4 sm:px-6 py-3.5 bg-[#141414]/90 backdrop-blur-md sticky top-0 z-50 border-b border-zinc-800/60">
         <button 
           onClick={() => router.push('/')}
@@ -138,7 +154,10 @@ export default function WatchPage() {
               {currentEpisodeTitle && <p className="text-[10px] text-red-500 font-semibold">{currentEpisodeTitle}</p>}
             </div>
             <button 
-              onClick={() => setIsPlaying(false)}
+              onClick={() => {
+                setIsPlaying(false);
+                toggleWatched(currentKey);
+              }}
               className="bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer"
             >
               Fermer ✕
@@ -170,15 +189,26 @@ export default function WatchPage() {
         )}
 
         <div className="px-4 sm:px-6 -mt-20 relative z-10 space-y-3">
-          <span className="inline-block text-[10px] uppercase font-bold text-red-500 bg-red-600/20 px-2.5 py-1 rounded-md border border-red-500/30">
-            {media.type === 'movie' ? 'Film' : 'Série'}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="inline-block text-[10px] uppercase font-bold text-red-500 bg-red-600/20 px-2.5 py-1 rounded-md border border-red-500/30">
+              {media.type === 'movie' ? 'Film' : 'Série'}
+            </span>
+            {isCurrentWatched && (
+              <span className="inline-block text-[10px] uppercase font-bold text-green-400 bg-green-500/20 px-2 py-0.5 rounded border border-green-500/30">
+                ✓ Vu
+              </span>
+            )}
+          </div>
+          
           <h1 className="text-2xl sm:text-4xl font-black tracking-tight">{media.title}</h1>
 
           {/* Boutons d'actions rapides */}
           <div className="flex items-center gap-2.5 pt-1 overflow-x-auto pb-2">
             <button 
-              onClick={() => setIsPlaying(true)}
+              onClick={() => {
+                setIsPlaying(true);
+                toggleWatched(currentKey);
+              }}
               className="bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 px-6 rounded-xl text-xs transition shadow-lg shadow-red-600/20 flex items-center gap-2 shrink-0 cursor-pointer"
             >
               <span>▶</span> Lecture
@@ -186,17 +216,17 @@ export default function WatchPage() {
             <button className="bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white font-medium py-2.5 px-4 rounded-xl text-xs transition shrink-0 cursor-pointer flex items-center gap-1.5">
               <span>+</span> Ma liste
             </button>
-            <button className="bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white font-medium py-2.5 px-3 rounded-xl text-xs transition shrink-0 cursor-pointer">
-              👍
-            </button>
-            <button className="bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white font-medium py-2.5 px-3 rounded-xl text-xs transition shrink-0 cursor-pointer">
-              🔗
+            <button 
+              onClick={() => toggleWatched(currentKey)}
+              className={`border font-medium py-2.5 px-4 rounded-xl text-xs transition shrink-0 cursor-pointer flex items-center gap-1.5 ${isCurrentWatched ? 'bg-green-600/20 border-green-500/40 text-green-400' : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-white'}`}
+            >
+              {isCurrentWatched ? '✓ Déjà vu' : 'Marquer comme vu'}
             </button>
           </div>
         </div>
       </div>
 
-      {/* 4. Navigation (Onglets uniquement pour les séries, affichage direct pour les films) */}
+      {/* 4. Navigation (Onglets pour séries / Synopsis direct pour films) */}
       {media.type === 'series' && (
         <div className="px-4 sm:px-6 mt-6 border-b border-zinc-800/80 flex gap-6 text-xs font-bold">
           <button 
@@ -217,7 +247,7 @@ export default function WatchPage() {
       {/* 5. Contenu */}
       <div className="px-4 sm:px-6 mt-6 space-y-4">
         
-        {/* FILMS : Affichage direct du synopsis */}
+        {/* FILMS : Synopsis */}
         {media.type === 'movie' && (
           <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-5 space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Synopsis</h3>
@@ -227,7 +257,7 @@ export default function WatchPage() {
           </div>
         )}
 
-        {/* SÉRIES : Onglet Épisodes */}
+        {/* SÉRIES : Épisodes avec badge "VU" individuel */}
         {media.type === 'series' && activeTab === 'episodes' && media.seasons && media.seasons.length > 0 && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -248,41 +278,54 @@ export default function WatchPage() {
             </div>
 
             <div className="space-y-3 pt-2">
-              {media.seasons[selectedSeasonIdx]?.episodes.map((ep, eIdx) => (
-                <div
-                  key={eIdx}
-                  onClick={() => {
-                    setSelectedEpisodeIdx(eIdx);
-                    setIsPlaying(true);
-                  }}
-                  className={`group bg-zinc-900/60 border rounded-xl p-3 flex items-center justify-between gap-4 transition cursor-pointer ${selectedEpisodeIdx === eIdx ? 'border-red-600 bg-red-600/10' : 'border-zinc-800/80 hover:border-zinc-700'}`}
-                >
-                  <div className="flex items-center gap-3.5 overflow-hidden">
-                    <div className="w-24 aspect-video bg-zinc-800 rounded-lg overflow-hidden shrink-0 relative flex items-center justify-center border border-zinc-700/50">
-                      {media.poster ? (
-                        <img src={media.poster} alt="" className="w-full h-full object-cover opacity-80 group-hover:scale-105 transition duration-300" />
-                      ) : null}
-                      <div className="absolute inset-0 bg-black/30 flex items-center justify-center text-white text-xs">
-                        ▶
+              {media.seasons[selectedSeasonIdx]?.episodes.map((ep, eIdx) => {
+                const epKey = `s${selectedSeasonIdx}_e${eIdx}`;
+                const isEpWatched = media.watched ? !!media.watched[epKey] : false;
+
+                return (
+                  <div
+                    key={eIdx}
+                    onClick={() => {
+                      setSelectedEpisodeIdx(eIdx);
+                      setIsPlaying(true);
+                      toggleWatched(epKey);
+                    }}
+                    className={`group bg-zinc-900/60 border rounded-xl p-3 flex items-center justify-between gap-4 transition cursor-pointer ${selectedEpisodeIdx === eIdx ? 'border-red-600 bg-red-600/10' : 'border-zinc-800/80 hover:border-zinc-700'}`}
+                  >
+                    <div className="flex items-center gap-3.5 overflow-hidden">
+                      <div className="w-24 aspect-video bg-zinc-800 rounded-lg overflow-hidden shrink-0 relative flex items-center justify-center border border-zinc-700/50">
+                        {media.poster ? (
+                          <img src={media.poster} alt="" className="w-full h-full object-cover opacity-80 group-hover:scale-105 transition duration-300" />
+                        ) : null}
+                        <div className="absolute inset-0 bg-black/30 flex items-center justify-center text-white text-xs">
+                          ▶
+                        </div>
+                      </div>
+
+                      <div className="truncate">
+                        <span className="text-[10px] text-red-500 font-bold uppercase tracking-wider block">
+                          E0{ep.number}
+                        </span>
+                        <h4 className="text-xs font-bold text-white truncate">{ep.title}</h4>
                       </div>
                     </div>
 
-                    <div className="truncate">
-                      <span className="text-[10px] text-red-500 font-bold uppercase tracking-wider block">
-                        E0{ep.number}
-                      </span>
-                      <h4 className="text-xs font-bold text-white truncate">{ep.title}</h4>
+                    <div className="flex items-center gap-3 shrink-0">
+                      {isEpWatched && (
+                        <span className="text-[10px] bg-green-500/20 text-green-400 border border-green-500/30 px-2 py-0.5 rounded font-bold">
+                          VU
+                        </span>
+                      )}
+                      <span className="text-xs text-zinc-500">▶</span>
                     </div>
                   </div>
-
-                  <span className="text-xs text-zinc-500 shrink-0">▶</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
 
-        {/* SÉRIES : Onglet Synopsis */}
+        {/* SÉRIES : Synopsis */}
         {media.type === 'series' && activeTab === 'synopsis' && (
           <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-5 space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Synopsis</h3>
