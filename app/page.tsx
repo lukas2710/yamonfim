@@ -21,9 +21,20 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState<'all' | 'movie' | 'series'>('all');
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  const ADMIN_EMAIL = 'lukas.leclerc312@gmail.com';
 
   useEffect(() => {
-    async function fetchMedia() {
+    async function checkUserAndFetch() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/login');
+        return;
+      }
+
+      setUserEmail(session.user.email || null);
+
       const { data, error } = await supabase
         .from('media')
         .select('*')
@@ -35,8 +46,13 @@ export default function Home() {
       setLoading(false);
     }
 
-    fetchMedia();
-  }, []);
+    checkUserAndFetch();
+  }, [router]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
 
   const topMedia = mediaList.slice(0, 5);
   const carouselItems = topMedia.length > 0 ? topMedia : mediaList.slice(0, 5);
@@ -68,8 +84,15 @@ export default function Home() {
   const recentMovies = mediaList.filter(item => item.type === 'movie');
   const recentSeries = mediaList.filter(item => item.type === 'series');
 
-  // Utilisation prioritaire de la colonne backdrop de Supabase, sinon poster
   const heroImage = (featured.backdrop && featured.backdrop.trim() !== '') ? featured.backdrop : featured.poster;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#141414] text-white flex items-center justify-center text-sm">
+        Chargement...
+      </div>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[#141414] text-white pb-28 font-sans selection:bg-red-600 selection:text-white">
@@ -93,9 +116,17 @@ export default function Home() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="bg-zinc-900 border border-zinc-800 text-xs text-white px-3 py-2 rounded-lg focus:outline-none focus:border-red-600 w-36 md:w-52 transition"
           />
-          <a href="/admin" className="hover:text-red-500 transition text-xs bg-zinc-900 border border-zinc-800 px-3 py-2 rounded-lg">
-            Admin
-          </a>
+          
+          {/* Le bouton Admin s'affiche uniquement si c'est ton e-mail */}
+          {userEmail === ADMIN_EMAIL && (
+            <a href="/admin" className="hover:text-red-500 transition text-xs bg-zinc-900 border border-zinc-800 px-3 py-2 rounded-lg">
+              Admin
+            </a>
+          )}
+
+          <button onClick={handleLogout} className="text-xs bg-zinc-900 border border-zinc-800 hover:border-red-600 px-3 py-2 rounded-lg text-zinc-300 transition cursor-pointer">
+            Déconnexion
+          </button>
         </div>
       </header>
 
@@ -245,9 +276,6 @@ export default function Home() {
         <button onClick={() => setSelectedType('all')} className="text-red-600 font-bold flex flex-col items-center gap-1 cursor-pointer">
           <span className="text-base">🎬</span> Catalogue
         </button>
-        <a href="/admin" className="flex flex-col items-center gap-1 hover:text-white transition cursor-pointer">
-          <span className="text-base">⚙️</span> Admin
-        </a>
       </nav>
     </main>
   );

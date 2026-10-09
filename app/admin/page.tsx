@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 interface MediaItem {
@@ -15,6 +16,11 @@ interface MediaItem {
 }
 
 export default function AdminPage() {
+  const router = useRouter();
+  const [loadingAuth, setLoadingAuth] = useState(true);
+
+  const ADMIN_EMAIL = 'lukas.leclerc312@gmail.com';
+
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [editingId, setEditingId] = useState<any>(null);
 
@@ -30,6 +36,22 @@ export default function AdminPage() {
   const [message, setMessage] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
+  // Vérification de sécurité pour restreindre l'accès à ton e-mail uniquement
+  useEffect(() => {
+    async function checkAdmin() {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session || session.user.email !== ADMIN_EMAIL) {
+        router.push('/');
+        return;
+      }
+      setLoadingAuth(false);
+      fetchMedia();
+    }
+
+    checkAdmin();
+  }, [router]);
+
   const fetchMedia = async () => {
     const { data, error } = await supabase
       .from('media')
@@ -40,10 +62,6 @@ export default function AdminPage() {
       setMediaList(data);
     }
   };
-
-  useEffect(() => {
-    fetchMedia();
-  }, []);
 
   const handleEdit = (item: MediaItem) => {
     setEditingId(item.id);
@@ -117,12 +135,21 @@ export default function AdminPage() {
     setLoading(false);
   };
 
+  if (loadingAuth) {
+    return (
+      <div className="min-h-screen bg-[#141414] text-white flex items-center justify-center text-sm">
+        Vérification des accès...
+      </div>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[#141414] text-white p-6 md:p-12 font-sans pb-32">
       <header className="flex justify-between items-center mb-8 pb-4 border-b border-zinc-800">
         <span className="font-black text-xl tracking-wider text-red-600">
           YAMON<span className="text-white">FIM</span> <span className="text-xs text-zinc-400 font-normal">/ Admin</span>
         </span>
+
         <a href="/" className="text-xs bg-zinc-900 border border-zinc-800 px-3 py-2 rounded-lg hover:text-red-500 transition">
           Retour au site
         </a>
