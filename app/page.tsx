@@ -68,7 +68,8 @@ export default function Home() {
   const recentMovies = mediaList.filter(item => item.type === 'movie');
   const recentSeries = mediaList.filter(item => item.type === 'series');
 
-  const heroImage = featured.backdrop?.trim() ? featured.backdrop : featured.poster;
+  // Utilisation prioritaire de la colonne backdrop de Supabase, sinon poster
+  const heroImage = (featured.backdrop && featured.backdrop.trim() !== '') ? featured.backdrop : featured.poster;
 
   return (
     <main className="min-h-screen bg-[#141414] text-white pb-28 font-sans selection:bg-red-600 selection:text-white">
@@ -79,9 +80,9 @@ export default function Home() {
             YAMON<span className="text-white">FIM</span>
           </span>
           <nav className="hidden md:flex items-center gap-4 text-xs font-medium text-zinc-400">
-            <button onClick={() => setSelectedType('all')} className={`transition ${selectedType === 'all' ? 'text-white font-bold' : 'hover:text-white'}`}>Accueil</button>
-            <button onClick={() => setSelectedType('movie')} className={`transition ${selectedType === 'movie' ? 'text-white font-bold' : 'hover:text-white'}`}>Films</button>
-            <button onClick={() => setSelectedType('series')} className={`transition ${selectedType === 'series' ? 'text-white font-bold' : 'hover:text-white'}`}>Séries</button>
+            <button onClick={() => setSelectedType('all')} className={`transition cursor-pointer ${selectedType === 'all' ? 'text-white font-bold' : 'hover:text-white'}`}>Accueil</button>
+            <button onClick={() => setSelectedType('movie')} className={`transition cursor-pointer ${selectedType === 'movie' ? 'text-white font-bold' : 'hover:text-white'}`}>Films</button>
+            <button onClick={() => setSelectedType('series')} className={`transition cursor-pointer ${selectedType === 'series' ? 'text-white font-bold' : 'hover:text-white'}`}>Séries</button>
           </nav>
         </div>
         <div className="flex items-center gap-3">
@@ -98,19 +99,19 @@ export default function Home() {
         </div>
       </header>
 
-      {/* 2. Hero Banner Carrousel */}
+      {/* 2. Hero Banner Carrousel avec Backdrop Supabase */}
       {!searchQuery && selectedType === 'all' && (
-        <div className="relative h-[60vh] w-full flex items-end p-6 md:p-12 overflow-hidden transition-all duration-700">
-          <div className="absolute inset-0 -z-10 bg-[#141414]">
+        <div className="relative h-[60vh] w-full flex items-end p-6 md:p-12 overflow-hidden bg-zinc-950">
+          <div className="absolute inset-0 z-0">
             {heroImage ? (
               <img 
                 key={featured.id + '-' + heroImage} 
                 src={heroImage} 
                 alt={featured.title} 
-                className="w-full h-full object-cover opacity-60 animate-fadeIn" 
+                className="w-full h-full object-cover object-center opacity-85" 
               />
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-zinc-800 to-zinc-950" />
+              <div className="w-full h-full bg-zinc-900" />
             )}
             <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-[#141414]/40 to-transparent" />
             <div className="absolute inset-0 bg-gradient-to-r from-[#141414]/90 via-transparent to-transparent" />
@@ -140,7 +141,7 @@ export default function Home() {
                   <button
                     key={idx}
                     onClick={() => setCurrentIndex(idx)}
-                    className={`h-1.5 rounded-full transition-all duration-300 ${currentIndex === idx ? 'w-6 bg-red-600' : 'w-2 bg-zinc-700'}`}
+                    className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${currentIndex === idx ? 'w-6 bg-red-600' : 'w-2 bg-zinc-700'}`}
                   />
                 ))}
               </div>
@@ -157,7 +158,7 @@ export default function Home() {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
               {filteredMedia.map((item) => (
                 <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="group relative bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-md transition-all duration-300 hover:scale-105 cursor-pointer aspect-[2/3]">
-                  {item.poster ? <img src={item.poster} alt={item.title} className="object-cover w-full h-full" /> : <div className="flex items-center justify-center h-full text-xs text-zinc-500 bg-zinc-800">Pas d'affiche</div>}
+                  {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-xs text-zinc-500">Pas d'affiche</div>}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3.5">
                     <h3 className="font-bold text-sm text-white truncate">{item.title}</h3>
                     <p className="text-[11px] text-zinc-300 line-clamp-2 mt-1">{item.description}</p>
@@ -172,7 +173,7 @@ export default function Home() {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
               {recentMovies.map((item) => (
                 <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="group relative bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-md transition-all duration-300 hover:scale-105 cursor-pointer aspect-[2/3]">
-                  {item.poster ? <img src={item.poster} alt={item.title} className="object-cover w-full h-full" /> : <div className="flex items-center justify-center h-full text-xs text-zinc-500 bg-zinc-800">Pas d'affiche</div>}
+                  {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-xs text-zinc-500">Pas d'affiche</div>}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3.5">
                     <h3 className="font-bold text-sm text-white truncate">{item.title}</h3>
                     <p className="text-[11px] text-zinc-300 line-clamp-2 mt-1">{item.description}</p>
@@ -187,7 +188,7 @@ export default function Home() {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
               {recentSeries.map((item) => (
                 <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="group relative bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-md transition-all duration-300 hover:scale-105 cursor-pointer aspect-[2/3]">
-                  {item.poster ? <img src={item.poster} alt={item.title} className="object-cover w-full h-full" /> : <div className="flex items-center justify-center h-full text-xs text-zinc-500 bg-zinc-800">Pas d'affiche</div>}
+                  {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-xs text-zinc-500">Pas d'affiche</div>}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3.5">
                     <h3 className="font-bold text-sm text-white truncate">{item.title}</h3>
                     <p className="text-[11px] text-zinc-300 line-clamp-2 mt-1">{item.description}</p>
@@ -206,7 +207,7 @@ export default function Home() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
                   {recentMovies.map((item) => (
                     <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="group relative bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-md transition-all duration-300 hover:scale-105 cursor-pointer aspect-[2/3]">
-                      {item.poster ? <img src={item.poster} alt={item.title} className="object-cover w-full h-full" /> : <div className="flex items-center justify-center h-full text-xs text-zinc-500 bg-zinc-800">Pas d'affiche</div>}
+                      {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-xs text-zinc-500">Pas d'affiche</div>}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3.5">
                         <h3 className="font-bold text-sm text-white truncate">{item.title}</h3>
                         <p className="text-[11px] text-zinc-300 line-clamp-2 mt-1">{item.description}</p>
@@ -225,7 +226,7 @@ export default function Home() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
                   {recentSeries.map((item) => (
                     <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="group relative bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-md transition-all duration-300 hover:scale-105 cursor-pointer aspect-[2/3]">
-                      {item.poster ? <img src={item.poster} alt={item.title} className="object-cover w-full h-full" /> : <div className="flex items-center justify-center h-full text-xs text-zinc-500 bg-zinc-800">Pas d'affiche</div>}
+                      {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-xs text-zinc-500">Pas d'affiche</div>}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3.5">
                         <h3 className="font-bold text-sm text-white truncate">{item.title}</h3>
                         <p className="text-[11px] text-zinc-300 line-clamp-2 mt-1">{item.description}</p>

@@ -10,6 +10,7 @@ interface MediaItem {
   poster: string;
   backdrop?: string;
   url: string;
+  embedUrl?: string;
   description: string;
 }
 
@@ -22,6 +23,7 @@ export default function AdminPage() {
   const [poster, setPoster] = useState('');
   const [backdrop, setBackdrop] = useState('');
   const [url, setUrl] = useState('');
+  const [embedUrl, setEmbedUrl] = useState('');
   const [description, setDescription] = useState('');
 
   const [loading, setLoading] = useState(false);
@@ -50,6 +52,7 @@ export default function AdminPage() {
     setPoster(item.poster || '');
     setBackdrop(item.backdrop || '');
     setUrl(item.url || '');
+    setEmbedUrl(item.embedUrl || '');
     setDescription(item.description || '');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -61,6 +64,7 @@ export default function AdminPage() {
     setPoster('');
     setBackdrop('');
     setUrl('');
+    setEmbedUrl('');
     setDescription('');
   };
 
@@ -86,7 +90,7 @@ export default function AdminPage() {
       // Modification
       const { error } = await supabase
         .from('media')
-        .update({ title, type, poster, backdrop, url, description })
+        .update({ title, type, poster, backdrop, url, embedUrl, description })
         .eq('id', editingId);
 
       if (error) {
@@ -99,7 +103,7 @@ export default function AdminPage() {
     } else {
       // Ajout
       const { error } = await supabase.from('media').insert([
-        { title, type, poster, backdrop, url, description },
+        { title, type, poster, backdrop, url, embedUrl, description },
       ]);
 
       if (error) {
@@ -160,7 +164,7 @@ export default function AdminPage() {
           <div>
             <label className="block text-xs font-semibold text-zinc-400 mb-1">Affiche (Poster Portrait - Grilles)</label>
             <input
-              type="url"
+              type="text"
               value={poster}
               onChange={(e) => setPoster(e.target.value)}
               className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
@@ -171,7 +175,7 @@ export default function AdminPage() {
           <div>
             <label className="block text-xs font-semibold text-zinc-400 mb-1">Bandeau (Backdrop Paysage - Carrousel Haut)</label>
             <input
-              type="url"
+              type="text"
               value={backdrop}
               onChange={(e) => setBackdrop(e.target.value)}
               className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
@@ -180,14 +184,24 @@ export default function AdminPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-zinc-400 mb-1">Lien de lecture (URL)</label>
+            <label className="block text-xs font-semibold text-zinc-400 mb-1">Lien de lecture externe (URL)</label>
             <input
-              type="url"
-              required
+              type="text"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
               placeholder="https://..."
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-zinc-400 mb-1">Lien Iframe / Embed (Lecteur intégré)</label>
+            <input
+              type="text"
+              value={embedUrl}
+              onChange={(e) => setEmbedUrl(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
+              placeholder="https://... (lien direct iframe/embed)"
             />
           </div>
 
@@ -206,7 +220,7 @@ export default function AdminPage() {
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 bg-red-600 hover:bg-red-500 font-bold py-3 rounded-lg text-xs transition shadow-lg shadow-red-600/20 disabled:opacity-50"
+              className="flex-1 bg-red-600 hover:bg-red-500 font-bold py-3 rounded-lg text-xs transition shadow-lg shadow-red-600/20 disabled:opacity-50 cursor-pointer"
             >
               {loading ? 'Enregistrement...' : editingId !== null ? 'Mettre à jour' : 'Ajouter au catalogue'}
             </button>
@@ -214,7 +228,7 @@ export default function AdminPage() {
               <button
                 type="button"
                 onClick={handleCancel}
-                className="bg-zinc-800 hover:bg-zinc-700 font-bold py-3 px-5 rounded-lg text-xs transition"
+                className="bg-zinc-800 hover:bg-zinc-700 font-bold py-3 px-5 rounded-lg text-xs transition cursor-pointer"
               >
                 Annuler
               </button>
@@ -240,13 +254,13 @@ export default function AdminPage() {
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={() => handleEdit(item)}
-                  className="bg-zinc-800 hover:bg-zinc-700 text-xs px-3 py-1.5 rounded-lg transition"
+                  className="bg-zinc-800 hover:bg-zinc-700 text-xs px-3 py-1.5 rounded-lg transition cursor-pointer"
                 >
                   Modifier
                 </button>
                 <button
                   onClick={() => handleDelete(item.id)}
-                  className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 text-xs px-3 py-1.5 rounded-lg transition"
+                  className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 text-xs px-3 py-1.5 rounded-lg transition cursor-pointer"
                 >
                   Supprimer
                 </button>
