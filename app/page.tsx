@@ -95,135 +95,99 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-[#141414] text-white pb-28 font-sans selection:bg-red-600 selection:text-white">
-      {/* 1. Navbar */}
-      <header className="flex items-center justify-between px-6 py-4 bg-[#141414]/90 backdrop-blur-md sticky top-0 z-50 border-b border-zinc-800/60">
-        <div className="flex items-center gap-6">
-          <span className="font-black text-xl tracking-wider text-red-600">
-            YAMON<span className="text-white">FIM</span>
-          </span>
-          <nav className="hidden md:flex items-center gap-4 text-xs font-medium text-zinc-400">
-            <button onClick={() => setSelectedType('all')} className={`transition cursor-pointer ${selectedType === 'all' ? 'text-white font-bold' : 'hover:text-white'}`}>Accueil</button>
-            <button onClick={() => setSelectedType('movie')} className={`transition cursor-pointer ${selectedType === 'movie' ? 'text-white font-bold' : 'hover:text-white'}`}>Films</button>
-            <button onClick={() => setSelectedType('series')} className={`transition cursor-pointer ${selectedType === 'series' ? 'text-white font-bold' : 'hover:text-white'}`}>Séries</button>
-          </nav>
-        </div>
-        <div className="flex items-center gap-3">
+    <main className="min-h-screen bg-[#141414] text-white pb-24 sm:pb-12 font-sans selection:bg-red-600 selection:text-white max-w-[100vw] overflow-x-hidden">
+      {/* 1. Header App Bar (Style App Mobile / TV) */}
+      <header className="flex items-center justify-between px-4 py-3 bg-[#141414]/95 backdrop-blur-md sticky top-0 z-50 border-b border-zinc-800/80">
+        <span className="font-black text-lg tracking-wider text-red-600">
+          YAMON<span className="text-white">FIM</span>
+        </span>
+
+        <div className="flex items-center gap-2">
           <input
             type="text"
             placeholder="Rechercher..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="bg-zinc-900 border border-zinc-800 text-xs text-white px-3 py-2 rounded-lg focus:outline-none focus:border-red-600 w-36 md:w-52 transition"
+            className="bg-zinc-900 border border-zinc-800 text-xs text-white px-3 py-1.5 rounded-lg focus:outline-none focus:border-red-600 w-32 sm:w-48 transition"
           />
-          
-          {/* Le bouton Admin s'affiche uniquement si c'est ton e-mail */}
           {userEmail === ADMIN_EMAIL && (
-            <a href="/admin" className="hover:text-red-500 transition text-xs bg-zinc-900 border border-zinc-800 px-3 py-2 rounded-lg">
+            <a href="/admin" className="text-xs bg-zinc-900 border border-zinc-800 px-2.5 py-1.5 rounded-lg text-zinc-300 hover:text-white">
               Admin
             </a>
           )}
-
-          <button onClick={handleLogout} className="text-xs bg-zinc-900 border border-zinc-800 hover:border-red-600 px-3 py-2 rounded-lg text-zinc-300 transition cursor-pointer">
-            Déconnexion
+          <button onClick={handleLogout} className="text-xs bg-zinc-900 border border-zinc-800 px-2.5 py-1.5 rounded-lg text-zinc-400 hover:text-white">
+            Déco
           </button>
         </div>
       </header>
 
-      {/* 2. Hero Banner Carrousel avec Backdrop Supabase */}
+      {/* 2. Hero Banner / Carrousel */}
       {!searchQuery && selectedType === 'all' && (
-        <div className="relative h-[60vh] w-full flex items-end p-6 md:p-12 overflow-hidden bg-zinc-950">
+        <div className="relative h-[38vh] sm:h-[55vh] w-full flex items-end p-4 sm:p-10 overflow-hidden bg-zinc-950">
           <div className="absolute inset-0 z-0">
             {heroImage ? (
               <img 
                 key={featured.id + '-' + heroImage} 
                 src={heroImage} 
                 alt={featured.title} 
-                className="w-full h-full object-cover object-center opacity-85" 
+                className="w-full h-full object-cover object-center opacity-80" 
               />
             ) : (
               <div className="w-full h-full bg-zinc-900" />
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-[#141414]/40 to-transparent" />
-            <div className="absolute inset-0 bg-gradient-to-r from-[#141414]/90 via-transparent to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-[#141414]/50 to-transparent" />
           </div>
           
           <div className="w-full max-w-xl z-10 flex flex-col items-start">
-            <div className="flex items-center gap-2 text-xs text-zinc-300 mb-2 font-medium">
-              <span className="uppercase text-red-500 font-bold tracking-wider bg-red-600/20 px-2.5 py-1 rounded-md border border-red-500/30">
-                {featured.type === 'movie' ? 'Film' : 'Série'} • À la une
-              </span>
-            </div>
-            <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-2 drop-shadow-lg">{featured.title}</h1>
-            <p className="text-xs text-zinc-300 line-clamp-2 mb-6 max-w-lg leading-relaxed">{featured.description}</p>
+            <span className="uppercase text-[10px] text-red-500 font-bold tracking-wider bg-red-600/20 px-2 py-0.5 rounded-md border border-red-500/30 mb-1.5">
+              {featured.type === 'movie' ? 'Film' : 'Série'} • À la une
+            </span>
+            <h1 className="text-xl sm:text-4xl font-black tracking-tight mb-1 drop-shadow-md line-clamp-1">{featured.title}</h1>
+            <p className="text-[11px] sm:text-xs text-zinc-300 line-clamp-2 mb-3 max-w-md">{featured.description}</p>
             
-            <div className="flex items-center gap-3">
-              <button onClick={() => router.push(`/watch/${featured.id}`)} className="bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 px-6 rounded-lg flex items-center justify-center gap-2 transition shadow-lg shadow-red-600/30 text-sm cursor-pointer">
+            <div className="flex items-center gap-2">
+              <button onClick={() => router.push(`/watch/${featured.id}`)} className="bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-1.5 transition text-xs shadow-lg shadow-red-600/30 cursor-pointer">
                 ▶ Regarder
               </button>
-              <button onClick={() => router.push(`/watch/${featured.id}`)} className="bg-zinc-900/80 backdrop-blur border border-zinc-800 text-zinc-300 font-medium py-2.5 px-5 rounded-lg text-sm transition hover:text-white cursor-pointer">
-                Plus d'infos
+              <button onClick={() => router.push(`/watch/${featured.id}`)} className="bg-zinc-800/80 backdrop-blur border border-zinc-700 text-zinc-200 font-medium py-2 px-3.5 rounded-lg text-xs transition cursor-pointer">
+                Détails
               </button>
             </div>
-
-            {carouselItems.length > 0 && (
-              <div className="flex gap-1.5 mt-8">
-                {carouselItems.map((_, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setCurrentIndex(idx)}
-                    className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${currentIndex === idx ? 'w-6 bg-red-600' : 'w-2 bg-zinc-700'}`}
-                  />
-                ))}
-              </div>
-            )}
           </div>
         </div>
       )}
 
-      {/* 3. Sections Catalogue */}
-      <section className="px-4 md:px-12 mt-8 space-y-10">
+      {/* 3. Contenu du catalogue (Grille optimisée 3 colonnes sur mobile) */}
+      <section className="px-3 sm:px-10 mt-5 space-y-8">
         {searchQuery ? (
           <div>
-            <h2 className="text-lg font-bold tracking-wide mb-4">Résultats de recherche ({filteredMedia.length})</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
+            <h2 className="text-sm sm:text-base font-bold mb-3">Résultats ({filteredMedia.length})</h2>
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3">
               {filteredMedia.map((item) => (
-                <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="group relative bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-md transition-all duration-300 hover:scale-105 cursor-pointer aspect-[2/3]">
-                  {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-xs text-zinc-500">Pas d'affiche</div>}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3.5">
-                    <h3 className="font-bold text-sm text-white truncate">{item.title}</h3>
-                    <p className="text-[11px] text-zinc-300 line-clamp-2 mt-1">{item.description}</p>
-                  </div>
+                <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="bg-zinc-900 rounded-md overflow-hidden border border-zinc-800 aspect-[2/3] active:scale-95 transition cursor-pointer">
+                  {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-[10px] text-zinc-500 p-1 text-center">Aucune image</div>}
                 </div>
               ))}
             </div>
           </div>
         ) : selectedType === 'movie' ? (
           <div>
-            <h2 className="text-lg font-bold tracking-wide mb-4">Tous les Films</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
+            <h2 className="text-sm sm:text-base font-bold mb-3">Films</h2>
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3">
               {recentMovies.map((item) => (
-                <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="group relative bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-md transition-all duration-300 hover:scale-105 cursor-pointer aspect-[2/3]">
-                  {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-xs text-zinc-500">Pas d'affiche</div>}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3.5">
-                    <h3 className="font-bold text-sm text-white truncate">{item.title}</h3>
-                    <p className="text-[11px] text-zinc-300 line-clamp-2 mt-1">{item.description}</p>
-                  </div>
+                <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="bg-zinc-900 rounded-md overflow-hidden border border-zinc-800 aspect-[2/3] active:scale-95 transition cursor-pointer">
+                  {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-[10px] text-zinc-500 p-1 text-center">Aucune image</div>}
                 </div>
               ))}
             </div>
           </div>
         ) : selectedType === 'series' ? (
           <div>
-            <h2 className="text-lg font-bold tracking-wide mb-4">Toutes les Séries</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
+            <h2 className="text-sm sm:text-base font-bold mb-3">Séries</h2>
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3">
               {recentSeries.map((item) => (
-                <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="group relative bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-md transition-all duration-300 hover:scale-105 cursor-pointer aspect-[2/3]">
-                  {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-xs text-zinc-500">Pas d'affiche</div>}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3.5">
-                    <h3 className="font-bold text-sm text-white truncate">{item.title}</h3>
-                    <p className="text-[11px] text-zinc-300 line-clamp-2 mt-1">{item.description}</p>
-                  </div>
+                <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="bg-zinc-900 rounded-md overflow-hidden border border-zinc-800 aspect-[2/3] active:scale-95 transition cursor-pointer">
+                  {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-[10px] text-zinc-500 p-1 text-center">Aucune image</div>}
                 </div>
               ))}
             </div>
@@ -231,18 +195,14 @@ export default function Home() {
         ) : (
           <>
             <div>
-              <h2 className="text-lg font-bold tracking-wide mb-4">Ajouts récents - Films</h2>
+              <h2 className="text-sm sm:text-base font-bold mb-3">Films récents</h2>
               {recentMovies.length === 0 ? (
-                <p className="text-xs text-zinc-500">Aucun film récent.</p>
+                <p className="text-xs text-zinc-500">Aucun film.</p>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3">
                   {recentMovies.map((item) => (
-                    <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="group relative bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-md transition-all duration-300 hover:scale-105 cursor-pointer aspect-[2/3]">
-                      {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-xs text-zinc-500">Pas d'affiche</div>}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3.5">
-                        <h3 className="font-bold text-sm text-white truncate">{item.title}</h3>
-                        <p className="text-[11px] text-zinc-300 line-clamp-2 mt-1">{item.description}</p>
-                      </div>
+                    <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="bg-zinc-900 rounded-md overflow-hidden border border-zinc-800 aspect-[2/3] active:scale-95 transition cursor-pointer">
+                      {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-[10px] text-zinc-500 p-1 text-center">Aucune image</div>}
                     </div>
                   ))}
                 </div>
@@ -250,18 +210,14 @@ export default function Home() {
             </div>
 
             <div>
-              <h2 className="text-lg font-bold tracking-wide mb-4">Ajouts récents - Séries</h2>
+              <h2 className="text-sm sm:text-base font-bold mb-3">Séries récentes</h2>
               {recentSeries.length === 0 ? (
-                <p className="text-xs text-zinc-500">Aucune série récente.</p>
+                <p className="text-xs text-zinc-500">Aucune série.</p>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3">
                   {recentSeries.map((item) => (
-                    <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="group relative bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-md transition-all duration-300 hover:scale-105 cursor-pointer aspect-[2/3]">
-                      {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-xs text-zinc-500">Pas d'affiche</div>}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-3.5">
-                        <h3 className="font-bold text-sm text-white truncate">{item.title}</h3>
-                        <p className="text-[11px] text-zinc-300 line-clamp-2 mt-1">{item.description}</p>
-                      </div>
+                    <div key={item.id} onClick={() => router.push(`/watch/${item.id}`)} className="bg-zinc-900 rounded-md overflow-hidden border border-zinc-800 aspect-[2/3] active:scale-95 transition cursor-pointer">
+                      {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-[10px] text-zinc-500 p-1 text-center">Aucune image</div>}
                     </div>
                   ))}
                 </div>
@@ -271,10 +227,25 @@ export default function Home() {
         )}
       </section>
 
-      {/* 4. Barre de navigation mobile */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-[#141414]/95 backdrop-blur-lg border-t border-zinc-800/80 py-3 px-6 flex justify-around text-xs text-zinc-400 z-50">
-        <button onClick={() => setSelectedType('all')} className="text-red-600 font-bold flex flex-col items-center gap-1 cursor-pointer">
-          <span className="text-base">🎬</span> Catalogue
+      {/* 4. Barre de navigation application mobile fixe en bas */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-[#141414]/95 backdrop-blur-lg border-t border-zinc-800 py-2.5 px-6 flex justify-around items-center z-50 sm:hidden">
+        <button 
+          onClick={() => { setSelectedType('all'); setSearchQuery(''); }} 
+          className={`flex flex-col items-center gap-0.5 text-[10px] transition ${selectedType === 'all' && !searchQuery ? 'text-red-600 font-bold' : 'text-zinc-400'}`}
+        >
+          <span className="text-lg">🏠</span> Accueil
+        </button>
+        <button 
+          onClick={() => { setSelectedType('movie'); setSearchQuery(''); }} 
+          className={`flex flex-col items-center gap-0.5 text-[10px] transition ${selectedType === 'movie' ? 'text-red-600 font-bold' : 'text-zinc-400'}`}
+        >
+          <span className="text-lg">🎬</span> Films
+        </button>
+        <button 
+          onClick={() => { setSelectedType('series'); setSearchQuery(''); }} 
+          className={`flex flex-col items-center gap-0.5 text-[10px] transition ${selectedType === 'series' ? 'text-red-600 font-bold' : 'text-zinc-400'}`}
+        >
+          <span className="text-lg">📺</span> Séries
         </button>
       </nav>
     </main>
