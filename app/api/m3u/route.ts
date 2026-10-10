@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 export async function GET() {
-  // Récupération des contenus depuis Supabase
   const { data: mediaList, error } = await supabase
     .from('media')
     .select('*')
@@ -14,25 +13,23 @@ export async function GET() {
     });
   }
 
-  // En-tête du fichier M3U
-  let m3uContent = '#EXTM3U\n\n';
+  let m3uContent = '#EXTM3U\n';
 
-  // Boucle sur chaque élément pour construire les entrées M3U
   mediaList.forEach((item) => {
     const group = item.type === 'movie' ? 'Films' : 'Séries';
     const poster = item.poster || '';
     const title = item.title || 'Titre inconnu';
     const streamUrl = item.url || '';
 
-    // Balise M3U avec titre, affiche et catégorie
     m3uContent += `#EXTINF:-1 tvg-logo="${poster}" group-title="${group}",${title}\n`;
-    m3uContent += `${streamUrl}\n\n`;
+    m3uContent += `${streamUrl}\n`;
   });
 
   return new NextResponse(m3uContent, {
+    status: 200,
     headers: {
       'Content-Type': 'audio/x-mpegurl; charset=utf-8',
-      'Content-Disposition': 'inline; filename="yamonfim.m3u"',
+      'Access-Control-Allow-Origin': '*',
     },
   });
 }
