@@ -133,7 +133,7 @@ export default function Home() {
                 key={featured.id + '-' + heroImage} 
                 src={heroImage} 
                 alt={featured.title} 
-                className="w-full h-full object-cover object-center opacity-80" 
+                className="w-full h-full object-cover object-center scale-105 opacity-80" 
               />
             ) : (
               <div className="w-full h-full bg-zinc-900" />

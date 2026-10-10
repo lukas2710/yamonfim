@@ -8,11 +8,14 @@ interface Episode {
   number: number;
   title: string;
   embedUrl: string;
+  still_path?: string;
+  runtime?: number; // Durée de l'épisode en minutes récupérée de TMDb
 }
 
 interface Season {
   seasonNumber: number;
   episodes: Episode[];
+  poster_path?: string;
 }
 
 interface MediaItem {
@@ -32,10 +35,12 @@ export default function AdminPage() {
   const [loadingAuth, setLoadingAuth] = useState(true);
 
   const ADMIN_EMAIL = 'lukas.leclerc312@gmail.com';
+  const TMDB_KEY = 'af281c5089038e174e83c576ff765be9';
 
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [editingId, setEditingId] = useState<any>(null);
 
+  const [tmdbIdInput, setTmdbIdInput] = useState('');
   const [title, setTitle] = useState('');
   const [type, setType] = useState<'movie' | 'series'>('movie');
   const [poster, setPoster] = useState('');
@@ -44,9 +49,8 @@ export default function AdminPage() {
   const [embedUrl, setEmbedUrl] = useState('');
   const [description, setDescription] = useState('');
   
-  // États spécifiques pour les séries (Saisons / Épisodes)
   const [seasons, setSeasons] = useState<Season[]>([
-    { seasonNumber: 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '' }] }
+    { seasonNumber: 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '', runtime: 45 }] }
   ]);
 
   const [loading, setLoading] = useState(false);
@@ -56,7 +60,6 @@ export default function AdminPage() {
   useEffect(() => {
     async function checkAdmin() {
       const { data: { session } } = await supabase.auth.getSession();
-      
       if (!session || session.user.email !== ADMIN_EMAIL) {
         router.push('/');
         return;
@@ -64,7 +67,6 @@ export default function AdminPage() {
       setLoadingAuth(false);
       fetchMedia();
     }
-
     checkAdmin();
   }, [router]);
 
@@ -79,6 +81,93 @@ export default function AdminPage() {
     }
   };
 
+  // Importation TMDb en préservant les liens existants et en récupérant les durées
+  const handleFetchTmdb = async () => {
+    if (!tmdbIdInput) {
+      setErrorMsg("Veuillez entrer un ID TMDb.");
+      return;
+    }
+    setLoading(true);
+    setErrorMsg('');
+    setMessage('');
+
+    try {
+      const endpoint = type === 'movie' ? 'movie' : 'tv';
+      const res = await fetch(
+        `https://api.themoviedb.org/3/${endpoint}/${tmdbIdInput}?api_key=${TMDB_KEY}&language=fr-FR`
+      );
+      const data = await res.json();
+
+      if (data && !data.success && data.status_code !== 34) {
+        setTitle(data.title || data.name || '');
+        setDescription(data.overview || '');
+        
+        let mainPoster = '';
+        let mainBackdrop = '';
+
+        if (data.poster_path) {
+          mainPoster = `https://image.tmdb.org/t/p/w500${data.poster_path}`;
+          setPoster(mainPoster);
+        }
+        if (data.backdrop_path) {
+          mainBackdrop = `https://image.tmdb.org/t/p/original${data.backdrop_path}`;
+          setBackdrop(mainBackdrop);
+        }
+
+        if (type === 'series' && data.number_of_seasons) {
+          const fetchedSeasons: Season[] = [];
+
+          for (let sNum = 1; sNum <= data.number_of_seasons; sNum++) {
+            try {
+              const seasonRes = await fetch(
+                `https://api.themoviedb.org/3/tv/${tmdbIdInput}/season/${sNum}?api_key=${TMDB_KEY}&language=fr-FR`
+              );
+              const seasonData = await seasonRes.json();
+
+              if (seasonData && seasonData.episodes) {
+                const seasonPoster = seasonData.poster_path 
+                  ? `https://image.tmdb.org/t/p/w500${seasonData.poster_path}` 
+                  : mainPoster;
+
+                const existingSeason = seasons.find(s => s.seasonNumber === sNum);
+
+                const episodesList = seasonData.episodes.map((ep: any) => {
+                  const existingEp = existingSeason?.episodes.find(e => e.number === ep.episode_number);
+                  return {
+                    number: ep.episode_number,
+                    title: ep.name || `Épisode ${ep.episode_number}`,
+                    embedUrl: existingEp ? existingEp.embedUrl : '', // Conserve le lien si existant
+                    still_path: ep.still_path ? `https://image.tmdb.org/t/p/w500${ep.still_path}` : seasonPoster,
+                    runtime: ep.runtime || data.episode_run_time?.[0] || 45 // Durée en min (TMDb)
+                  };
+                });
+
+                fetchedSeasons.push({
+                  seasonNumber: sNum,
+                  poster_path: seasonPoster,
+                  episodes: episodesList
+                });
+              }
+            } catch (err) {
+              console.error(`Erreur saison ${sNum}`, err);
+            }
+          }
+
+          if (fetchedSeasons.length > 0) {
+            setSeasons(fetchedSeasons);
+          }
+        }
+
+        setMessage('Informations TMDb chargées avec succès (liens et durées préservés) !');
+      } else {
+        setErrorMsg("ID TMDb introuvable.");
+      }
+    } catch (err) {
+      setErrorMsg("Erreur lors de la récupération TMDb.");
+    }
+    setLoading(false);
+  };
+
   const handleEdit = (item: MediaItem) => {
     setEditingId(item.id);
     setTitle(item.title || '');
@@ -88,12 +177,13 @@ export default function AdminPage() {
     setUrl(item.url || '');
     setEmbedUrl(item.embedUrl || '');
     setDescription(item.description || '');
-    setSeasons(item.seasons || [{ seasonNumber: 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '' }] }]);
+    setSeasons(item.seasons || [{ seasonNumber: 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '', runtime: 45 }] }]);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleCancel = () => {
     setEditingId(null);
+    setTmdbIdInput('');
     setTitle('');
     setType('movie');
     setPoster('');
@@ -101,7 +191,7 @@ export default function AdminPage() {
     setUrl('');
     setEmbedUrl('');
     setDescription('');
-    setSeasons([{ seasonNumber: 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '' }] }]);
+    setSeasons([{ seasonNumber: 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '', runtime: 45 }] }]);
   };
 
   const handleDelete = async (id: any) => {
@@ -114,39 +204,6 @@ export default function AdminPage() {
       setMessage('Média supprimé avec succès.');
       fetchMedia();
     }
-  };
-
-  // Gestion dynamique des saisons et épisodes
-  const addSeason = () => {
-    setSeasons(prev => [
-      ...prev,
-      { seasonNumber: prev.length + 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '' }] }
-    ]);
-  };
-
-  const removeSeason = (index: number) => {
-    setSeasons(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const addEpisode = (seasonIndex: number) => {
-    setSeasons(prev => {
-      const updated = [...prev];
-      const season = updated[seasonIndex];
-      season.episodes.push({
-        number: season.episodes.length + 1,
-        title: `Épisode ${season.episodes.length + 1}`,
-        embedUrl: ''
-      });
-      return updated;
-    });
-  };
-
-  const removeEpisode = (seasonIndex: number, epIndex: number) => {
-    setSeasons(prev => {
-      const updated = [...prev];
-      updated[seasonIndex].episodes = updated[seasonIndex].episodes.filter((_, i) => i !== epIndex);
-      return updated;
-    });
   };
 
   const updateEpisodeField = (seasonIndex: number, epIndex: number, field: keyof Episode, value: any) => {
@@ -178,11 +235,7 @@ export default function AdminPage() {
     };
 
     if (editingId !== null && editingId !== undefined) {
-      const { error } = await supabase
-        .from('media')
-        .update(payload)
-        .eq('id', editingId);
-
+      const { error } = await supabase.from('media').update(payload).eq('id', editingId);
       if (error) {
         setErrorMsg(`Erreur modification : ${error.message}`);
       } else {
@@ -192,7 +245,6 @@ export default function AdminPage() {
       }
     } else {
       const { error } = await supabase.from('media').insert([payload]);
-
       if (error) {
         setErrorMsg(`Erreur enregistrement Supabase : ${error.message}`);
       } else {
@@ -205,11 +257,7 @@ export default function AdminPage() {
   };
 
   if (loadingAuth) {
-    return (
-      <div className="min-h-screen bg-[#141414] text-white flex items-center justify-center text-sm">
-        Vérification des accès...
-      </div>
-    );
+    return <div className="min-h-screen bg-[#141414] text-white flex items-center justify-center text-sm">Vérification des accès...</div>;
   }
 
   return (
@@ -218,7 +266,6 @@ export default function AdminPage() {
         <span className="font-black text-xl tracking-wider text-red-600">
           YAMON<span className="text-white">FIM</span> <span className="text-xs text-zinc-400 font-normal">/ Admin</span>
         </span>
-
         <a href="/" className="text-xs bg-zinc-900 border border-zinc-800 px-3 py-2 rounded-lg hover:text-red-500 transition">
           Retour au site
         </a>
@@ -234,18 +281,6 @@ export default function AdminPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-zinc-400 mb-1">Titre</label>
-            <input
-              type="text"
-              required
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
-              placeholder="Ex: Spider-Man ou Breaking Bad"
-            />
-          </div>
-
-          <div>
             <label className="block text-xs font-semibold text-zinc-400 mb-1">Type</label>
             <select
               value={type}
@@ -257,123 +292,102 @@ export default function AdminPage() {
             </select>
           </div>
 
+          <div className="border border-zinc-800 bg-zinc-950/40 p-4 rounded-xl space-y-3">
+            <label className="block text-xs font-semibold text-red-500 uppercase tracking-wider">Importation automatique TMDb</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={tmdbIdInput}
+                onChange={(e) => setTmdbIdInput(e.target.value)}
+                placeholder="ID TMDb (ex: 1399)"
+                className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
+              />
+              <button
+                type="button"
+                onClick={handleFetchTmdb}
+                disabled={loading}
+                className="bg-zinc-800 hover:bg-zinc-700 text-xs font-bold px-4 py-2 rounded-lg transition cursor-pointer"
+              >
+                {loading ? 'Chargement...' : 'Importer via TMDb'}
+              </button>
+            </div>
+          </div>
+
           <div>
-            <label className="block text-xs font-semibold text-zinc-400 mb-1">Affiche (Poster Portrait - Grilles)</label>
+            <label className="block text-xs font-semibold text-zinc-400 mb-1">Titre</label>
+            <input
+              type="text"
+              required
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-zinc-400 mb-1">Affiche (Poster Portrait)</label>
             <input
               type="text"
               value={poster}
               onChange={(e) => setPoster(e.target.value)}
               className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
-              placeholder="https://... (image verticale)"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-zinc-400 mb-1">Bandeau (Backdrop Paysage - Carrousel Haut)</label>
+            <label className="block text-xs font-semibold text-zinc-400 mb-1">Bandeau (Backdrop Paysage)</label>
             <input
               type="text"
               value={backdrop}
               onChange={(e) => setBackdrop(e.target.value)}
               className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
-              placeholder="https://... (image horizontale)"
             />
           </div>
 
-          {/* Conditionnel si c'est un film */}
           {type === 'movie' && (
-            <>
-              <div>
-                <label className="block text-xs font-semibold text-zinc-400 mb-1">Lien de lecture externe (URL)</label>
-                <input
-                  type="text"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
-                  placeholder="https://..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-zinc-400 mb-1">Lien Iframe / Embed (Lecteur intégré)</label>
-                <input
-                  type="text"
-                  value={embedUrl}
-                  onChange={(e) => setEmbedUrl(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
-                  placeholder="https://... (lien direct iframe/embed)"
-                />
-              </div>
-            </>
+            <div>
+              <label className="block text-xs font-semibold text-zinc-400 mb-1">Lien de lecture (URL / M3U direct)</label>
+              <input
+                type="text"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
+              />
+            </div>
           )}
 
-          {/* Gestion dynamique des Saisons et Épisodes si c'est une Série */}
           {type === 'series' && (
-            <div className="border border-zinc-800 bg-zinc-950/60 p-4 rounded-xl space-y-4 mt-4">
-              <div className="flex justify-between items-center">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-red-500">Gestion des Saisons & Épisodes</h3>
-                <button
-                  type="button"
-                  onClick={addSeason}
-                  className="bg-zinc-800 hover:bg-zinc-700 text-xs px-3 py-1.5 rounded-lg font-bold transition cursor-pointer"
-                >
-                  + Ajouter une saison
-                </button>
-              </div>
-
-              {seasons.map((season, sIndex) => (
-                <div key={sIndex} className="border border-zinc-800 bg-zinc-900/60 p-3 rounded-xl space-y-3">
-                  <div className="flex justify-between items-center">
+            <div className="border border-zinc-800 bg-zinc-950/60 p-4 rounded-xl space-y-4">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-red-500">
+                Saisons & Épisodes ({seasons.length} saisons)
+              </h3>
+              <div className="max-h-60 overflow-y-auto space-y-3 pr-2">
+                {seasons.map((season, sIndex) => (
+                  <div key={sIndex} className="bg-zinc-900 p-3 rounded-lg border border-zinc-800 space-y-2">
                     <span className="text-xs font-bold text-white">Saison {season.seasonNumber}</span>
-                    {seasons.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeSeason(sIndex)}
-                        className="text-red-400 text-xs hover:underline cursor-pointer"
-                      >
-                        Supprimer la saison
-                      </button>
-                    )}
+                    <div className="space-y-1">
+                      {season.episodes.map((ep, eIndex) => (
+                        <div key={eIndex} className="flex gap-2 items-center text-xs">
+                          <span className="text-zinc-500 w-10">E{ep.number}</span>
+                          <input
+                            type="text"
+                            value={ep.title}
+                            onChange={(e) => updateEpisodeField(sIndex, eIndex, 'title', e.target.value)}
+                            className="bg-zinc-950 border border-zinc-800 rounded p-1 text-white w-1/3 text-xs"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Lien Iframe / Embed"
+                            value={ep.embedUrl}
+                            onChange={(e) => updateEpisodeField(sIndex, eIndex, 'embedUrl', e.target.value)}
+                            className="bg-zinc-950 border border-zinc-800 rounded p-1 text-white flex-1 text-xs"
+                          />
+                        </div>
+                      ))}
+                    </div>
                   </div>
-
-                  <div className="space-y-2 pl-2 border-l border-zinc-800">
-                    {season.episodes.map((ep, eIndex) => (
-                      <div key={eIndex} className="flex gap-2 items-center">
-                        <span className="text-[11px] text-zinc-400 w-16 shrink-0">Ép. {ep.number}</span>
-                        <input
-                          type="text"
-                          placeholder="Nom (ex: Pilote)"
-                          value={ep.title}
-                          onChange={(e) => updateEpisodeField(sIndex, eIndex, 'title', e.target.value)}
-                          className="bg-zinc-950 border border-zinc-800 rounded-lg p-1.5 text-xs text-white focus:outline-none focus:border-red-600 w-1/3"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Lien Iframe / Embed de l'épisode"
-                          value={ep.embedUrl}
-                          onChange={(e) => updateEpisodeField(sIndex, eIndex, 'embedUrl', e.target.value)}
-                          className="bg-zinc-950 border border-zinc-800 rounded-lg p-1.5 text-xs text-white focus:outline-none focus:border-red-600 flex-1"
-                        />
-                        {season.episodes.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeEpisode(sIndex, eIndex)}
-                            className="text-zinc-500 hover:text-red-400 text-xs px-2 cursor-pointer"
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => addEpisode(sIndex)}
-                      className="mt-2 text-xs bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 px-3 py-1 rounded-md transition cursor-pointer"
-                    >
-                      + Ajouter un épisode
-                    </button>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
 
@@ -384,7 +398,6 @@ export default function AdminPage() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600 resize-none"
-              placeholder="Résumé du film ou de la série..."
             />
           </div>
 
@@ -392,7 +405,7 @@ export default function AdminPage() {
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 bg-red-600 hover:bg-red-500 font-bold py-3 rounded-lg text-xs transition shadow-lg shadow-red-600/20 disabled:opacity-50 cursor-pointer"
+              className="flex-1 bg-red-600 hover:bg-red-500 font-bold py-3 rounded-lg text-xs transition cursor-pointer shadow-lg shadow-red-600/20"
             >
               {loading ? 'Enregistrement...' : editingId !== null ? 'Mettre à jour' : 'Ajouter au catalogue'}
             </button>
@@ -424,16 +437,10 @@ export default function AdminPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => handleEdit(item)}
-                  className="bg-zinc-800 hover:bg-zinc-700 text-xs px-3 py-1.5 rounded-lg transition cursor-pointer"
-                >
+                <button onClick={() => handleEdit(item)} className="bg-zinc-800 hover:bg-zinc-700 text-xs px-3 py-1.5 rounded-lg transition cursor-pointer">
                   Modifier
                 </button>
-                <button
-                  onClick={() => handleDelete(item.id)}
-                  className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 text-xs px-3 py-1.5 rounded-lg transition cursor-pointer"
-                >
+                <button onClick={() => handleDelete(item.id)} className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 text-xs px-3 py-1.5 rounded-lg transition cursor-pointer">
                   Supprimer
                 </button>
               </div>
