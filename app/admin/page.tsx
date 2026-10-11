@@ -49,8 +49,8 @@ export default function AdminPage() {
   const [url, setUrl] = useState('');
   const [embedUrl, setEmbedUrl] = useState('');
   const [description, setDescription] = useState('');
-  const [genresInput, setGenresInput] = useState(''); // <--- NOUVEAU : Champ pour les genres
-  
+  const [genresInput, setGenresInput] = useState('');
+
   const [seasons, setSeasons] = useState<Season[]>([
     { seasonNumber: 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '', runtime: 45 }] }
   ]);
@@ -83,7 +83,6 @@ export default function AdminPage() {
     }
   };
 
-  // Importation TMDb avec genres, liens et durées
   const handleFetchTmdb = async () => {
     if (!tmdbIdInput) {
       setErrorMsg("Veuillez entrer un ID TMDb.");
@@ -103,8 +102,7 @@ export default function AdminPage() {
       if (data && !data.success && data.status_code !== 34) {
         setTitle(data.title || data.name || '');
         setDescription(data.overview || '');
-        
-        // Récupération des genres TMDb
+
         if (data.genres && Array.isArray(data.genres)) {
           const genreNames = data.genres.map((g: any) => g.name);
           setGenresInput(genreNames.join(', '));
@@ -233,7 +231,6 @@ export default function AdminPage() {
     setMessage('');
     setErrorMsg('');
 
-    // Transformer le champ texte des genres en tableau propre (ex: "Action, Drame" -> ["Action", "Drame"])
     const genresArray = genresInput
       ? genresInput.split(',').map(g => g.trim()).filter(Boolean)
       : [];
@@ -246,7 +243,7 @@ export default function AdminPage() {
       url,
       embedUrl: type === 'movie' ? embedUrl : '',
       description,
-      genres: genresArray, // <--- Enregistrement des catégories
+      genres: genresArray,
       seasons: type === 'series' ? seasons : null
     };
 
@@ -264,7 +261,15 @@ export default function AdminPage() {
       if (error) {
         setErrorMsg(`Erreur enregistrement Supabase : ${error.message}`);
       } else {
-        setMessage('Média ajouté avec succès !');
+        // Synchronisation automatique des demandes correspondantes
+        if (tmdbIdInput) {
+          await supabase
+            .from('requests')
+            .update({ status: 'ajoute' })
+            .eq('tmdb_id', tmdbIdInput);
+        }
+
+        setMessage('Média ajouté avec succès et demandes synchronisées !');
         handleCancel();
         fetchMedia();
       }
@@ -342,7 +347,7 @@ export default function AdminPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-zinc-400 mb-1">Catégories / Genres (séparés par des virgules)</label>
+            <label className="block text-xs font-semibold text-zinc-400 mb-1">Catégories / Genres</label>
             <input
               type="text"
               value={genresInput}

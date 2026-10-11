@@ -22,6 +22,12 @@ interface MediaItem {
   };
 }
 
+const DEFAULT_GENRES = [
+  'Action', 'Aventure', 'Animation', 'Comédie', 'Crime', 
+  'Documentaire', 'Drame', 'Famille', 'Fantastique', 'Horreur', 
+  'Mystère', 'Romance', 'Science-Fiction', 'Thriller'
+];
+
 export default function Home() {
   const router = useRouter();
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
@@ -125,13 +131,12 @@ export default function Home() {
     router.push('/login');
   };
 
-  // Récupération des genres spécifiques au type sélectionné (movie ou series)
+  const dbGenres = mediaList
+    .filter(item => selectedType !== 'all' && item.type === selectedType)
+    .flatMap((item) => item.genres || []);
+
   const availableGenres = Array.from(
-    new Set(
-      mediaList
-        .filter(item => selectedType !== 'all' && item.type === selectedType)
-        .flatMap((item) => item.genres || [])
-    )
+    new Set(dbGenres.length > 0 ? dbGenres : DEFAULT_GENRES)
   ).sort();
 
   const topMedia = mediaList.slice(0, 5);
@@ -216,7 +221,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* Header */}
+      {/* Header PC */}
       <header className="flex items-center justify-between px-4 sm:px-10 py-3 bg-[#141414]/95 backdrop-blur-md sticky top-0 z-50 border-b border-zinc-800/80">
         <div className="flex items-center gap-6">
           <span className="font-black text-lg tracking-wider text-red-600 shrink-0">
@@ -241,6 +246,12 @@ export default function Home() {
               className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${selectedType === 'series' ? 'bg-red-600 text-white' : 'text-zinc-400 hover:text-white'}`}
             >
               Séries
+            </button>
+            <button
+              onClick={() => router.push('/requests')}
+              className="px-3 py-1 rounded-lg text-xs font-bold text-zinc-400 hover:text-white transition cursor-pointer"
+            >
+              Demandes
             </button>
           </nav>
         </div>
@@ -275,7 +286,7 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Hero Banner (Uniquement sur l'Accueil) */}
+      {/* Hero Banner */}
       {!searchQuery && selectedType === 'all' && (
         <div className="relative h-[38vh] sm:h-[55vh] w-full flex items-end p-4 sm:p-10 overflow-hidden bg-zinc-950">
           <div className="absolute inset-0 z-0">
@@ -311,8 +322,8 @@ export default function Home() {
         </div>
       )}
 
-      {/* Barre des genres : Visible uniquement sur l'onglet Films ou Séries */}
-      {selectedType !== 'all' && availableGenres.length > 0 && (
+      {/* Barre des genres */}
+      {selectedType !== 'all' && (
         <div className="px-3 sm:px-10 mt-6">
           <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none [-webkit-overflow-scrolling:touch]">
             <button
@@ -348,7 +359,7 @@ export default function Home() {
           <div>
             <h2 className="text-sm sm:text-base font-bold mb-3">
               {selectedType === 'movie' ? 'Films' : selectedType === 'series' ? 'Séries' : 'Résultats'}{' '}
-              {selectedGenre !== 'all' ? `• Genre "${selectedGenre}"` : ''} ({filteredMedia.length})
+              {selectedGenre !== 'all' ? `• ${selectedGenre}` : ''} ({filteredMedia.length})
             </h2>
             {filteredMedia.length === 0 ? (
               <p className="text-xs text-zinc-500 py-4">Aucun contenu trouvé.</p>
@@ -454,7 +465,7 @@ export default function Home() {
         )}
       </section>
 
-      {/* Navigation mobile */}
+      {/* Navigation Mobile */}
       <nav className="fixed bottom-0 left-0 right-0 bg-[#141414]/95 backdrop-blur-lg border-t border-zinc-800 py-2.5 px-4 flex justify-around items-center z-50 sm:hidden">
         <button 
           onClick={() => { setSelectedType('all'); setSelectedGenre('all'); setSearchQuery(''); }} 
@@ -473,6 +484,12 @@ export default function Home() {
           className={`flex flex-col items-center gap-0.5 text-[10px] transition cursor-pointer ${selectedType === 'series' ? 'text-red-600 font-bold' : 'text-zinc-400'}`}
         >
           <span className="text-lg">📺</span> Séries
+        </button>
+        <button 
+          onClick={() => router.push('/requests')} 
+          className="flex flex-col items-center gap-0.5 text-[10px] text-zinc-400 hover:text-white transition cursor-pointer"
+        >
+          <span className="text-lg">📝</span> Demandes
         </button>
         <button 
           onClick={() => router.push('/history')} 
