@@ -32,6 +32,7 @@ export default function Home() {
   const router = useRouter();
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [continueWatchingList, setContinueWatchingList] = useState<MediaItem[]>([]);
+  const [customBanners, setCustomBanners] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState<'all' | 'movie' | 'series'>('all');
@@ -80,6 +81,18 @@ export default function Home() {
           .select('*')
           .eq('user_id', user.id)
           .order('updated_at', { ascending: false });
+
+        // Récupération des bannières actives avec vérification console
+        const { data: bannerData, error: bannerError } = await supabase
+          .from('banners')
+          .select('*')
+          .eq('active', true)
+          .order('created_at', { ascending: false });
+
+        console.log('Bannières récupérées depuis Supabase :', bannerData);
+        if (bannerError) console.error('Erreur SQL Bannières :', bannerError);
+
+        if (bannerData) setCustomBanners(bannerData);
 
         if (!mediaError && mediaData) {
           setMediaList(mediaData);
@@ -392,6 +405,52 @@ export default function Home() {
           </div>
         ) : (
           <>
+            {/* Bannières thématiques personnalisées (Sécurisées) */}
+            {customBanners.map((banner) => {
+              const bannerMedia = mediaList.filter((m) => 
+                banner.media_ids && Array.isArray(banner.media_ids) && banner.media_ids.some((id: any) => String(id) === String(m.id))
+              );
+
+              if (bannerMedia.length === 0) return null;
+
+              return (
+                <div key={banner.id} className="relative rounded-2xl overflow-hidden border border-zinc-800/80 p-4 sm:p-6 bg-zinc-900/60 my-6 shadow-xl">
+                  <div className="absolute inset-0 z-0 opacity-20">
+                    <img src={banner.backdrop} alt="" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-black via-black/80 to-transparent" />
+                  </div>
+
+                  <div className="relative z-10 space-y-3">
+                    <div>
+                      <h2 className="text-lg sm:text-xl font-black text-white flex items-center gap-2">
+                        <span className="text-red-600">🔥</span> {banner.title}
+                      </h2>
+                      {banner.subtitle && <p className="text-xs text-zinc-400">{banner.subtitle}</p>}
+                    </div>
+
+                    <div className="flex gap-4 overflow-x-auto pb-3 pt-1 scrollbar-none [-webkit-overflow-scrolling:touch]">
+                      {bannerMedia.map((item) => (
+                        <div 
+                          key={item.id} 
+                          tabIndex={0}
+                          onClick={() => handleMediaClick(item)} 
+                          className="bg-zinc-900 rounded-xl overflow-hidden border border-zinc-800 w-[130px] sm:w-[170px] aspect-[2/3] active:scale-95 hover:scale-105 transition duration-200 cursor-pointer shrink-0 shadow-lg relative group focus:outline-none focus:ring-4 focus:ring-red-600"
+                        >
+                          {item.poster ? <img src={item.poster} alt={item.title} className={`w-full h-full object-cover transition ${userLimitReached ? 'blur-[2px] opacity-40' : ''}`} /> : <div className="flex items-center justify-center h-full text-xs text-zinc-500 p-2 text-center">Aucune image</div>}
+                          {userLimitReached && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 backdrop-blur-[1px]">
+                              <span className="text-2xl mb-1">🔒</span>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30">VIP Requis</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
             {continueWatchingList.length > 0 && (
               <div>
                 <h2 className="text-base sm:text-lg font-bold mb-4 flex items-center gap-2 text-white">
