@@ -13,26 +13,41 @@ export default function LoginPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  
+  // Pop-up modal automatique
+  const [showInstallModal, setShowInstallModal] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
+    // Affiche le pop-up automatiquement après 1 seconde
+    const timer = setTimeout(() => {
+      setShowInstallModal(true);
+    }, 1000);
+
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
+      setShowInstallModal(true);
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
     return () => {
+      clearTimeout(timer);
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     };
   }, []);
 
   const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setDeferredPrompt(null);
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+        setShowInstallModal(false);
+      }
+    } else {
+      setShowGuide(true);
     }
   };
 
@@ -80,24 +95,65 @@ export default function LoginPage() {
       {/* Lumière rouge en arrière-plan */}
       <div className="absolute top-[-180px] left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-red-600/10 blur-[130px] rounded-full pointer-events-none" />
 
-      <div className="relative w-full max-w-[430px]">
-        {/* Bouton d'installation PWA si disponible */}
-        {deferredPrompt && (
-          <div className="mb-5 bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between shadow-xl">
-            <div>
-              <p className="text-xs font-bold text-white">Installer l'application</p>
-              <p className="text-[11px] text-zinc-400">Ajoute YAMONFIM sur ton écran d'accueil</p>
+      {/* Pop-up Modal Automatique d'installation */}
+      {showInstallModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in zoom-in duration-200">
+          <div className="bg-[#1b1b1b] border border-zinc-800 rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl relative">
+            <button
+              onClick={() => setShowInstallModal(false)}
+              className="absolute top-3 right-3 text-zinc-500 hover:text-white text-base font-bold p-1"
+            >
+              ✕
+            </button>
+
+            <div className="w-14 h-14 bg-red-600/10 border border-red-500/30 text-red-500 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-4">
+              📲
             </div>
+
+            <h3 className="text-lg font-black text-white mb-1">
+              Installer YAMONFIM
+            </h3>
+            <p className="text-xs text-zinc-400 mb-6 leading-relaxed">
+              Installe l'application sur ton écran d'accueil pour un accès rapide et une expérience plein écran sur PC, Mobile et TV.
+            </p>
+
+            {!showGuide ? (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={handleInstallClick}
+                  className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3.5 rounded-xl text-xs transition cursor-pointer shadow-lg shadow-red-600/20"
+                >
+                  Installer directement 🚀
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowGuide(true)}
+                  className="w-full bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-semibold py-3 rounded-xl text-xs transition cursor-pointer border border-zinc-800"
+                >
+                  Instructions TV / iPhone / Safari ℹ️
+                </button>
+              </div>
+            ) : (
+              <div className="text-left space-y-3 text-[11px] text-zinc-300 bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 mb-4 max-h-52 overflow-y-auto">
+                <p><strong className="text-white">📱 iPhone / iPad :</strong> Touche le bouton <strong>Partager</strong> sur Safari puis choisis <strong>"Sur l'écran d'accueil"</strong>.</p>
+                <p><strong className="text-white">💻 PC / Chrome / Edge :</strong> Clique sur l'icône 🖥️ en haut à droite de la barre d'adresse.</p>
+                <p><strong className="text-white">📺 TV Connectée :</strong> Ajoute l'URL dans les <strong>Favoris</strong> du navigateur web de ta TV.</p>
+              </div>
+            )}
+
             <button
               type="button"
-              onClick={handleInstallClick}
-              className="bg-red-600 hover:bg-red-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition cursor-pointer"
+              onClick={() => setShowInstallModal(false)}
+              className="mt-4 text-xs text-zinc-500 hover:text-zinc-300 transition"
             >
-              Installer
+              Continuer vers le site
             </button>
           </div>
-        )}
+        </div>
+      )}
 
+      <div className="relative w-full max-w-[430px]">
         {/* Logo */}
         <div className="text-center mb-7">
           <h1 className="text-4xl sm:text-5xl font-black tracking-[-2px]">
