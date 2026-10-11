@@ -14,15 +14,14 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   
-  // Pop-up modal automatique
+  // Pop-up modal automatique au chargement
   const [showInstallModal, setShowInstallModal] = useState(false);
-  const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
-    // Affiche le pop-up automatiquement après 1 seconde
+    // Affiche le pop-up automatiquement après 800ms
     const timer = setTimeout(() => {
       setShowInstallModal(true);
-    }, 1000);
+    }, 800);
 
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
@@ -40,6 +39,7 @@ export default function LoginPage() {
 
   const handleInstallClick = async () => {
     if (deferredPrompt) {
+      // Déclenche la pop-up native d'installation du navigateur (Android / PC)
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
       if (outcome === 'accepted') {
@@ -47,7 +47,7 @@ export default function LoginPage() {
         setShowInstallModal(false);
       }
     } else {
-      setShowGuide(true);
+      alert("Pour installer l'application :\n\n- Sur iPhone/iPad : Touche 'Partager' puis 'Sur l'écran d'accueil'.\n- Sur TV / Autre : Ajoute le site aux favoris de ton navigateur.");
     }
   };
 
@@ -97,16 +97,16 @@ export default function LoginPage() {
 
       {/* Pop-up Modal Automatique d'installation */}
       {showInstallModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in zoom-in duration-200">
           <div className="bg-[#1b1b1b] border border-zinc-800 rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl relative">
             <button
               onClick={() => setShowInstallModal(false)}
-              className="absolute top-3 right-3 text-zinc-500 hover:text-white text-base font-bold p-1"
+              className="absolute top-3 right-3 text-zinc-500 hover:text-white text-base font-bold p-1 cursor-pointer"
             >
               ✕
             </button>
 
-            <div className="w-14 h-14 bg-red-600/10 border border-red-500/30 text-red-500 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-4">
+            <div className="w-14 h-14 bg-red-600/10 border border-red-500/30 text-red-500 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-4 shadow-lg shadow-red-600/10">
               📲
             </div>
 
@@ -114,40 +114,23 @@ export default function LoginPage() {
               Installer YAMONFIM
             </h3>
             <p className="text-xs text-zinc-400 mb-6 leading-relaxed">
-              Installe l'application sur ton écran d'accueil pour un accès rapide et une expérience plein écran sur PC, Mobile et TV.
+              Installe l'application sur ton appareil pour profiter du mode plein écran et d'un accès instantané.
             </p>
 
-            {!showGuide ? (
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={handleInstallClick}
-                  className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3.5 rounded-xl text-xs transition cursor-pointer shadow-lg shadow-red-600/20"
-                >
-                  Installer directement 🚀
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowGuide(true)}
-                  className="w-full bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-semibold py-3 rounded-xl text-xs transition cursor-pointer border border-zinc-800"
-                >
-                  Instructions TV / iPhone / Safari ℹ️
-                </button>
-              </div>
-            ) : (
-              <div className="text-left space-y-3 text-[11px] text-zinc-300 bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 mb-4 max-h-52 overflow-y-auto">
-                <p><strong className="text-white">📱 iPhone / iPad :</strong> Touche le bouton <strong>Partager</strong> sur Safari puis choisis <strong>"Sur l'écran d'accueil"</strong>.</p>
-                <p><strong className="text-white">💻 PC / Chrome / Edge :</strong> Clique sur l'icône 🖥️ en haut à droite de la barre d'adresse.</p>
-                <p><strong className="text-white">📺 TV Connectée :</strong> Ajoute l'URL dans les <strong>Favoris</strong> du navigateur web de ta TV.</p>
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={handleInstallClick}
+              className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3.5 rounded-xl text-xs transition cursor-pointer shadow-lg shadow-red-600/20 mb-2"
+            >
+              Installer maintenant 🚀
+            </button>
 
             <button
               type="button"
               onClick={() => setShowInstallModal(false)}
-              className="mt-4 text-xs text-zinc-500 hover:text-zinc-300 transition"
+              className="text-xs text-zinc-500 hover:text-zinc-300 transition py-1 cursor-pointer"
             >
-              Continuer vers le site
+              Plus tard
             </button>
           </div>
         </div>
