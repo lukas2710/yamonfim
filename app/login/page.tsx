@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
@@ -12,6 +12,29 @@ export default function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+    }
+  };
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,6 +81,23 @@ export default function LoginPage() {
       <div className="absolute top-[-180px] left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-red-600/10 blur-[130px] rounded-full pointer-events-none" />
 
       <div className="relative w-full max-w-[430px]">
+        {/* Bouton d'installation PWA si disponible */}
+        {deferredPrompt && (
+          <div className="mb-5 bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between shadow-xl">
+            <div>
+              <p className="text-xs font-bold text-white">Installer l'application</p>
+              <p className="text-[11px] text-zinc-400">Ajoute YAMONFIM sur ton écran d'accueil</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleInstallClick}
+              className="bg-red-600 hover:bg-red-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition cursor-pointer"
+            >
+              Installer
+            </button>
+          </div>
+        )}
+
         {/* Logo */}
         <div className="text-center mb-7">
           <h1 className="text-4xl sm:text-5xl font-black tracking-[-2px]">
