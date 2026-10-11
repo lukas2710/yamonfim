@@ -8,6 +8,7 @@ interface Episode {
   number: number;
   title: string;
   embedUrl: string;
+  runtime?: number;
 }
 
 interface Season {
@@ -47,7 +48,6 @@ export default function HistoryPage() {
     setLoading(false);
   };
 
-  // Basculer l'état "Vu" directement dans Supabase
   const toggleWatchedStatus = async (mediaId: string, key: string) => {
     const mediaItem = mediaList.find(m => m.id === mediaId);
     if (!mediaItem) return;
@@ -55,7 +55,6 @@ export default function HistoryPage() {
     const currentWatched = mediaItem.watched || {};
     const updatedWatched = { ...currentWatched, [key]: !currentWatched[key] };
 
-    // Mise à jour locale pour la fluidité de l'interface
     setMediaList(prev =>
       prev.map(m => (m.id === mediaId ? { ...m, watched: updatedWatched } : m))
     );
@@ -64,7 +63,6 @@ export default function HistoryPage() {
       setSelectedSeries(prev => prev ? { ...prev, watched: updatedWatched } : null);
     }
 
-    // Sauvegarde dans Supabase
     await supabase
       .from('media')
       .update({ watched: updatedWatched })
@@ -79,16 +77,49 @@ export default function HistoryPage() {
     );
   }
 
-  const movies = mediaList.filter(m => m.type === 'movie');
-  const series = mediaList.filter(m => m.type === 'series');
+  // Calcul du temps total visionné (en heures)
+  let totalMinutesWatched = 0;
+
+  mediaList.forEach(item => {
+    if (!item.watched) return;
+
+    if (item.type === 'movie') {
+      if (item.watched['movie_main']) {
+        totalMinutesWatched += 120; // Estimation 2h par film par défaut
+      }
+    } else if (item.type === 'series' && item.seasons) {
+      item.seasons.forEach((season, sIdx) => {
+        season.episodes.forEach((ep, eIdx) => {
+          const epKey = `s${sIdx}_e${eIdx}`;
+          if (item.watched && item.watched[epKey]) {
+            totalMinutesWatched += ep.runtime || 45; // 45 min par épisode par défaut
+          }
+        });
+      });
+    }
+  });
+
+  const totalHoursWatched = (totalMinutesWatched / 60).toFixed(1);
+
+  // Filtrer uniquement les contenus ayant au moins un élément vu
+  const watchedMovies = mediaList.filter(m => {
+    if (m.type !== 'movie') return false;
+    return m.watched && !!m.watched['movie_main'];
+  });
+
+  const watchedSeries = mediaList.filter(m => {
+    if (m.type !== 'series' || !m.seasons || !m.watched) return false;
+    return Object.values(m.watched).some(val => val === true);
+  });
 
   return (
     <main className="min-h-screen bg-[#141414] text-white font-sans pb-24 selection:bg-red-600 selection:text-white">
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 bg-[#141414]/90 backdrop-blur-md sticky top-0 z-50 border-b border-zinc-800/60">
+      <header className="flex items-center justify-between px-6 py-4 bg-[#141414]/90 backdrop-blur-md sticky top-0 z-50 border-b border-zinc-800/65">
         <span className="font-black text-lg tracking-wider text-red-600">
           YAMON<span className="text-white">FIM</span> <span className="text-xs text-zinc-400 font-normal">/ Historique & Vus</span>
         </span>
+
         <button 
           onClick={() => router.push('/')}
           className="text-xs bg-zinc-900 border border-zinc-800 px-3.5 py-2 rounded-xl text-zinc-300 hover:text-white transition cursor-pointer"
@@ -99,16 +130,35 @@ export default function HistoryPage() {
 
       <div className="max-w-5xl mx-auto px-6 mt-8 space-y-10">
         
-        {/* SECTION FILMS */}
+        {/* COMPTEUR DE TEMPS (TIMER) */}
+        <div className="bg-gradient-to-r from-zinc-900 via-zinc-900/90 to-zinc-950 border border-zinc-800/80 rounded-2xl p-5 flex items-center justify-between shadow-xl">
+          <div className="space-y-1">
+            <span className="text-[10px] uppercase font-bold tracking-widest text-red-500 bg-red-600/10 px-2.5 py-1 rounded-md border border-red-500/20">
+              Statistiques de visionnage
+            </span>
+            <h3 className="text-sm sm:text-base font-bold text-white pt-1">
+              Temps total passé devant l'écran
+            </h3>
+            <p className="text-xs text-zinc-400">
+              Basé sur les films et épisodes marqués comme vus.
+            </p>
+          </div>
+          <div className="bg-zinc-950 border border-zinc-800 px-5 py-3 rounded-xl text-center shrink-0">
+            <span className="text-xl sm:text-2xl font-black text-red-500 block">{totalHoursWatched}</span>
+            <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Heures</span>
+          </div>
+        </div>
+
+        {/* SECTION FILMS VUS */}
         <div className="space-y-4">
           <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-400 border-b border-zinc-800 pb-2">
-            Films ({movies.length})
+            Films vus ({watchedMovies.length})
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {movies.map(movie => {
-              const isWatched = movie.watched ? !!movie.watched['movie_main'] : false;
-
-              return (
+          {watchedMovies.length === 0 ? (
+            <p className="text-xs text-zinc-500 italic">Aucun film visionné pour le moment.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {watchedMovies.map(movie => (
                 <div 
                   key={movie.id}
                   className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-3 flex items-center justify-between gap-3"
@@ -122,61 +172,64 @@ export default function HistoryPage() {
 
                   <button
                     onClick={() => toggleWatchedStatus(movie.id, 'movie_main')}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer shrink-0 ${isWatched ? 'bg-green-500/20 text-green-400 border border-green-500/40' : 'bg-zinc-800 text-zinc-400 hover:text-white'}`}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer shrink-0 bg-green-500/20 text-green-400 border border-green-500/40"
                   >
-                    {isWatched ? '✓ Vu' : 'Marquer vu'}
+                    ✓ Vu
                   </button>
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* SECTION SÉRIES */}
+        {/* SECTION SÉRIES VUES */}
         <div className="space-y-4">
           <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-400 border-b border-zinc-800 pb-2">
-            Séries ({series.length}) - Cliquez pour gérer les épisodes
+            Séries en cours / vues ({watchedSeries.length})
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {series.map(s => {
-              // Compter le nombre d'épisodes vus
-              let watchedCount = 0;
-              let totalEpisodes = 0;
-              if (s.seasons) {
-                s.seasons.forEach((season, sIdx) => {
-                  season.episodes.forEach((_, eIdx) => {
-                    totalEpisodes++;
-                    if (s.watched && s.watched[`s${sIdx}_e${eIdx}`]) {
-                      watchedCount++;
-                    }
+          {watchedSeries.length === 0 ? (
+            <p className="text-xs text-zinc-500 italic">Aucune série visionnée pour le moment.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {watchedSeries.map(s => {
+                let watchedCount = 0;
+                let totalEpisodes = 0;
+                if (s.seasons) {
+                  s.seasons.forEach((season, sIdx) => {
+                    season.episodes.forEach((_, eIdx) => {
+                      totalEpisodes++;
+                      if (s.watched && s.watched[`s${sIdx}_e${eIdx}`]) {
+                        watchedCount++;
+                      }
+                    });
                   });
-                });
-              }
+                }
 
-              return (
-                <div 
-                  key={s.id}
-                  onClick={() => {
-                    setSelectedSeries(s);
-                    setActiveSeasonIdx(0);
-                  }}
-                  className="bg-zinc-900/60 border border-zinc-800/80 hover:border-zinc-700 rounded-xl p-3 flex items-center justify-between gap-3 cursor-pointer transition"
-                >
-                  <div className="flex items-center gap-3 truncate">
-                    <div className="w-10 h-14 bg-zinc-800 rounded overflow-hidden shrink-0">
-                      {s.poster && <img src={s.poster} alt="" className="w-full h-full object-cover" />}
+                return (
+                  <div 
+                    key={s.id}
+                    onClick={() => {
+                      setSelectedSeries(s);
+                      setActiveSeasonIdx(0);
+                    }}
+                    className="bg-zinc-900/60 border border-zinc-800/80 hover:border-zinc-700 rounded-xl p-3 flex items-center justify-between gap-3 cursor-pointer transition"
+                  >
+                    <div className="flex items-center gap-3 truncate">
+                      <div className="w-10 h-14 bg-zinc-800 rounded overflow-hidden shrink-0">
+                        {s.poster && <img src={s.poster} alt="" className="w-full h-full object-cover" />}
+                      </div>
+                      <div className="truncate">
+                        <span className="text-xs font-bold block truncate">{s.title}</span>
+                        <span className="text-[10px] text-zinc-500">{watchedCount} / {totalEpisodes} vus</span>
+                      </div>
                     </div>
-                    <div className="truncate">
-                      <span className="text-xs font-bold block truncate">{s.title}</span>
-                      <span className="text-[10px] text-zinc-500">{watchedCount} / {totalEpisodes} vus</span>
-                    </div>
+
+                    <span className="text-xs text-red-500 font-bold">Gérer →</span>
                   </div>
-
-                  <span className="text-xs text-red-500 font-bold">Gérer →</span>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
       </div>
@@ -226,7 +279,7 @@ export default function HistoryPage() {
                     className={`p-3 rounded-xl border flex items-center justify-between transition cursor-pointer ${isWatched ? 'bg-green-500/10 border-green-500/40 text-white' : 'bg-zinc-950/60 border-zinc-800 text-zinc-300 hover:border-zinc-700'}`}
                   >
                     <div className="truncate pr-3">
-                      <span className="text-[10px] text-red-500 font-bold block">Épisode {ep.number}</span>
+                      <span className="text-[10px] text-red-500 font-bold block">Épisode {ep.number} {ep.runtime ? `• ${ep.runtime} min` : ''}</span>
                       <h4 className="text-xs font-medium truncate">{ep.title}</h4>
                     </div>
 

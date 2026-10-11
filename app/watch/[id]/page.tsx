@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 interface Episode {
@@ -19,7 +19,7 @@ interface Season {
 }
 
 interface MediaItem {
-  id: string;
+  id: any;
   title: string;
   type: 'movie' | 'series';
   poster: string;
@@ -33,15 +33,17 @@ interface MediaItem {
 
 export default function WatchPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const { id } = params;
 
   const [media, setMedia] = useState<MediaItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
-
-  // État de la popup d'avertissement
   const [showAdPopup, setShowAdPopup] = useState(true);
+
+  const [showVipModal, setShowVipModal] = useState(false);
+  const MAX_FREE_LIMIT = 5;
 
   const [activeTab, setActiveTab] = useState<'episodes' | 'synopsis'>('episodes');
   const [selectedSeasonIdx, setSelectedSeasonIdx] = useState(0);
@@ -52,30 +54,133 @@ export default function WatchPage() {
   useEffect(() => {
     if (!id) return;
 
-    async function fetchMediaById() {
-      const { data, error } = await supabase
-        .from('media')
-        .select('*')
-        .eq('id', id)
-        .single();
+    async function fetchMediaAndHistory() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
 
-      if (!error && data) {
-        setMedia(data);
+        const { data: mediaData, error } = await supabase
+          .from('media')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+        if (!error && mediaData) {
+          setMedia(mediaData);
+
+          const sParam = searchParams.get('s');
+          const eParam = searchParams.get('e');
+
+          if (sParam !== null && eParam !== null) {
+            setSelectedSeasonIdx(parseInt(sParam, 10));
+            setSelectedEpisodeIdx(parseInt(eParam, 10));
+          } else if (user) {
+            const { data: userHistory } = await supabase
+              .from('watch_history')
+              .select('*')
+              .eq('user_id', user.id)
+              .eq('media_id', String(id))
+              .maybeSingle();
+
+            if (userHistory) {
+              setSelectedSeasonIdx(userHistory.season_idx || 0);
+              setSelectedEpisodeIdx(userHistory.episode_idx || 0);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Erreur chargement:', err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
 
-    fetchMediaById();
-  }, [id]);
+    fetchMediaAndHistory();
+  }, [id, searchParams]);
 
-  const handleAutoNextEpisode = () => {
+  const saveWatchHistory = async (sIdx: number, eIdx: number) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session || !media) return;
+
+      const user = session.user;
+      const currentSeason = media.seasons?.[sIdx];
+
+      const payload = {
+        user_id: user.id,
+        media_id: String(media.id),
+        type: media.type,
+        season_idx: sIdx,
+        episode_idx: eIdx,
+        season_number: currentSeason?.seasonNumber || 1,
+        episode_number: currentSeason?.episodes?.[eIdx]?.number || 1,
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase
+        .from('watch_history')
+        .upsert(payload, { onConflict: 'user_id,media_id' });
+
+      if (error) {
+        console.error('Erreur Supabase watch_history:', error);
+      } else {
+        console.log('Progression enregistrée avec succès dans Supabase !');
+      }
+    } catch (err) {
+      console.error('Erreur d\'exécution saveWatchHistory:', err);
+    }
+  };
+
+  const checkAndIncrementWatch = async (): Promise<boolean> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return false;
+
+    const user = session.user;
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('is_vip, watch_count')
+      .eq('id', user.id)
+      .single();
+
+    if (profile) {
+      if (!profile.is_vip && (profile.watch_count || 0) >= MAX_FREE_LIMIT) {
+        setShowVipModal(true);
+        setIsPlaying(false);
+        return false;
+      }
+
+      if (!profile.is_vip) {
+        const newCount = (profile.watch_count || 0) + 1;
+        await supabase
+          .from('profiles')
+          .update({ watch_count: newCount })
+          .eq('id', user.id);
+      }
+    }
+    return true;
+  };
+
+  const startPlaying = async (sIdx = selectedSeasonIdx, eIdx = selectedEpisodeIdx) => {
+    const canPlay = await checkAndIncrementWatch();
+    if (!canPlay) return;
+
+    await saveWatchHistory(sIdx, eIdx);
+    setShowAdPopup(true);
+    setIsPlaying(true);
+  };
+
+  const handleAutoNextEpisode = async () => {
     if (!media || media.type !== 'series' || !media.seasons) return;
     const currentSeason = media.seasons[selectedSeasonIdx];
+
+    const canPlay = await checkAndIncrementWatch();
+    if (!canPlay) return;
 
     if (selectedEpisodeIdx < currentSeason.episodes.length - 1) {
       const nextEpIdx = selectedEpisodeIdx + 1;
       setSelectedEpisodeIdx(nextEpIdx);
       markAsWatched(`s${selectedSeasonIdx}_e${nextEpIdx}`);
+      await saveWatchHistory(selectedSeasonIdx, nextEpIdx);
       setShowAdPopup(true);
       setIsPlaying(true);
     } else if (selectedSeasonIdx < media.seasons.length - 1) {
@@ -83,6 +188,7 @@ export default function WatchPage() {
       setSelectedSeasonIdx(nextSeasonIdx);
       setSelectedEpisodeIdx(0);
       markAsWatched(`s${nextSeasonIdx}_e0`);
+      await saveWatchHistory(nextSeasonIdx, 0);
       setShowAdPopup(true);
       setIsPlaying(true);
     } else {
@@ -182,7 +288,42 @@ export default function WatchPage() {
   return (
     <main className="min-h-screen bg-[#141414] text-white font-sans pb-24 selection:bg-red-600 selection:text-white">
       
-      {/* Header Navigation */}
+      {showVipModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#0f172a] border border-slate-800 rounded-2xl max-w-md w-full p-6 sm:p-8 text-center shadow-2xl relative animate-in fade-in zoom-in duration-200">
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto mb-4 text-2xl shadow-lg shadow-amber-500/10">
+              🔒
+            </div>
+
+            <span className="text-[10px] uppercase font-bold tracking-widest text-amber-400 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20">
+              Accès Limité
+            </span>
+
+            <h3 className="text-xl font-black text-white mt-3 mb-2">
+              Passez à l'expérience VIP
+            </h3>
+
+            <p className="text-xs text-slate-300 leading-relaxed mb-6">
+              Vous avez atteint votre quota gratuit de <strong className="text-white">{MAX_FREE_LIMIT} visions</strong> ce mois-ci. Débloquez un accès illimité, sans publicité et en haute définition.
+            </p>
+
+            <button
+              onClick={() => window.location.href = 'https://buy.stripe.com/eVq6oGeqBbBvbYrbWOf3a0m'}
+              className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-extrabold py-3.5 px-4 rounded-xl text-xs transition shadow-xl shadow-amber-500/20 cursor-pointer mb-3"
+            >
+              Devenir Membre VIP 👑
+            </button>
+
+            <button
+              onClick={() => router.push('/')}
+              className="text-xs text-slate-400 hover:text-white transition cursor-pointer py-1"
+            >
+              Retour à l'accueil
+            </button>
+          </div>
+        </div>
+      )}
+
       <header className="flex items-center justify-between px-4 sm:px-6 py-3.5 bg-[#141414]/90 backdrop-blur-md sticky top-0 z-50 border-b border-zinc-800/60">
         <button 
           onClick={() => router.push('/')}
@@ -195,11 +336,9 @@ export default function WatchPage() {
         </span>
       </header>
 
-      {/* Lecteur Plein Écran */}
       {isPlaying && (
         <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-3 sm:p-6">
           
-          {/* Popup d'avertissement simple */}
           {showAdPopup ? (
             <div className="w-full max-w-sm bg-[#0f172a] border border-zinc-800/80 rounded-2xl p-6 text-center shadow-2xl relative z-10 animate-in fade-in zoom-in duration-200">
               
@@ -224,7 +363,6 @@ export default function WatchPage() {
 
             </div>
           ) : (
-            /* Lecteur Iframe une fois le bouton cliqué */
             <div className="w-full max-w-5xl flex flex-col h-full justify-center">
               <div className="w-full flex justify-between items-center mb-3 px-2">
                 <div>
@@ -272,7 +410,6 @@ export default function WatchPage() {
         </div>
       )}
 
-      {/* Hero Section */}
       <div className="relative w-full">
         {bgImage && (
           <div className="relative h-[45vh] sm:h-[55vh] w-full overflow-hidden">
@@ -299,24 +436,21 @@ export default function WatchPage() {
             <button 
               onClick={() => {
                 if (media.type === 'series') {
-                  setSelectedSeasonIdx(0);
-                  setSelectedEpisodeIdx(0);
-                  markAsWatched(`s0_e0`);
+                  markAsWatched(`s${selectedSeasonIdx}_e${selectedEpisodeIdx}`);
+                  startPlaying(selectedSeasonIdx, selectedEpisodeIdx);
                 } else {
                   markAsWatched(`movie_main`);
+                  startPlaying();
                 }
-                setShowAdPopup(true);
-                setIsPlaying(true);
               }}
               className="bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 px-6 rounded-xl text-xs transition shadow-lg shadow-red-600/20 flex items-center gap-2 cursor-pointer"
             >
-              <span>▶</span> {media.type === 'series' ? 'Commencer l\'épisode 1 de Saison 1' : 'Lecture'}
+              <span>▶</span> {media.type === 'series' ? `Lecture S${media.seasons?.[selectedSeasonIdx]?.seasonNumber || 1} Ép. ${(media.seasons?.[selectedSeasonIdx]?.episodes[selectedEpisodeIdx]?.number) || 1}` : 'Lecture'}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Infos Saisons / Épisodes */}
       {media.type === 'series' && media.seasons && (
         <div className="px-4 sm:px-6 mt-6 grid grid-cols-2 gap-3 max-w-sm">
           <div className="bg-zinc-900/60 border border-zinc-800 p-3 rounded-xl">
@@ -330,7 +464,6 @@ export default function WatchPage() {
         </div>
       )}
 
-      {/* Onglets */}
       {media.type === 'series' && (
         <div className="px-4 sm:px-6 mt-6 border-b border-zinc-800/80 flex gap-6 text-xs font-bold">
           <button onClick={() => setActiveTab('episodes')} className={`pb-3 transition cursor-pointer ${activeTab === 'episodes' ? 'text-white border-b-2 border-red-600' : 'text-zinc-500'}`}>Épisodes</button>
@@ -349,7 +482,6 @@ export default function WatchPage() {
         {media.type === 'series' && activeTab === 'episodes' && media.seasons && (
           <div className="space-y-6">
             
-            {/* Grille des Saisons */}
             <div className="space-y-3">
               <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-400">Saisons</h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
@@ -377,7 +509,6 @@ export default function WatchPage() {
               </div>
             </div>
 
-            {/* Liste des épisodes */}
             <div className="space-y-3 pt-4">
               <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-400">
                 Épisodes — Saison {media.seasons[selectedSeasonIdx]?.seasonNumber || 1}
@@ -392,11 +523,10 @@ export default function WatchPage() {
                   return (
                     <div
                       key={eIdx}
-                      onClick={() => {
+                      onClick={async () => {
                         setSelectedEpisodeIdx(eIdx);
-                        setShowAdPopup(true);
-                        setIsPlaying(true);
                         markAsWatched(epKey);
+                        await startPlaying(selectedSeasonIdx, eIdx);
                       }}
                       className="group bg-zinc-900/60 border border-zinc-800 hover:border-zinc-700 rounded-xl p-3 flex items-center justify-between gap-4 transition cursor-pointer"
                     >

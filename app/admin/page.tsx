@@ -9,7 +9,7 @@ interface Episode {
   title: string;
   embedUrl: string;
   still_path?: string;
-  runtime?: number; // Durée de l'épisode en minutes récupérée de TMDb
+  runtime?: number;
 }
 
 interface Season {
@@ -27,6 +27,7 @@ interface MediaItem {
   url: string;
   embedUrl?: string;
   description: string;
+  genres?: string[];
   seasons?: Season[];
 }
 
@@ -48,6 +49,7 @@ export default function AdminPage() {
   const [url, setUrl] = useState('');
   const [embedUrl, setEmbedUrl] = useState('');
   const [description, setDescription] = useState('');
+  const [genresInput, setGenresInput] = useState(''); // <--- NOUVEAU : Champ pour les genres
   
   const [seasons, setSeasons] = useState<Season[]>([
     { seasonNumber: 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '', runtime: 45 }] }
@@ -81,7 +83,7 @@ export default function AdminPage() {
     }
   };
 
-  // Importation TMDb en préservant les liens existants et en récupérant les durées
+  // Importation TMDb avec genres, liens et durées
   const handleFetchTmdb = async () => {
     if (!tmdbIdInput) {
       setErrorMsg("Veuillez entrer un ID TMDb.");
@@ -102,6 +104,12 @@ export default function AdminPage() {
         setTitle(data.title || data.name || '');
         setDescription(data.overview || '');
         
+        // Récupération des genres TMDb
+        if (data.genres && Array.isArray(data.genres)) {
+          const genreNames = data.genres.map((g: any) => g.name);
+          setGenresInput(genreNames.join(', '));
+        }
+
         let mainPoster = '';
         let mainBackdrop = '';
 
@@ -136,9 +144,9 @@ export default function AdminPage() {
                   return {
                     number: ep.episode_number,
                     title: ep.name || `Épisode ${ep.episode_number}`,
-                    embedUrl: existingEp ? existingEp.embedUrl : '', // Conserve le lien si existant
+                    embedUrl: existingEp ? existingEp.embedUrl : '',
                     still_path: ep.still_path ? `https://image.tmdb.org/t/p/w500${ep.still_path}` : seasonPoster,
-                    runtime: ep.runtime || data.episode_run_time?.[0] || 45 // Durée en min (TMDb)
+                    runtime: ep.runtime || data.episode_run_time?.[0] || 45
                   };
                 });
 
@@ -158,7 +166,7 @@ export default function AdminPage() {
           }
         }
 
-        setMessage('Informations TMDb chargées avec succès (liens et durées préservés) !');
+        setMessage('Informations TMDb chargées avec succès !');
       } else {
         setErrorMsg("ID TMDb introuvable.");
       }
@@ -177,6 +185,7 @@ export default function AdminPage() {
     setUrl(item.url || '');
     setEmbedUrl(item.embedUrl || '');
     setDescription(item.description || '');
+    setGenresInput(item.genres ? item.genres.join(', ') : '');
     setSeasons(item.seasons || [{ seasonNumber: 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '', runtime: 45 }] }]);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -191,6 +200,7 @@ export default function AdminPage() {
     setUrl('');
     setEmbedUrl('');
     setDescription('');
+    setGenresInput('');
     setSeasons([{ seasonNumber: 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '', runtime: 45 }] }]);
   };
 
@@ -223,6 +233,11 @@ export default function AdminPage() {
     setMessage('');
     setErrorMsg('');
 
+    // Transformer le champ texte des genres en tableau propre (ex: "Action, Drame" -> ["Action", "Drame"])
+    const genresArray = genresInput
+      ? genresInput.split(',').map(g => g.trim()).filter(Boolean)
+      : [];
+
     const payload = {
       title,
       type,
@@ -231,6 +246,7 @@ export default function AdminPage() {
       url,
       embedUrl: type === 'movie' ? embedUrl : '',
       description,
+      genres: genresArray, // <--- Enregistrement des catégories
       seasons: type === 'series' ? seasons : null
     };
 
@@ -266,6 +282,7 @@ export default function AdminPage() {
         <span className="font-black text-xl tracking-wider text-red-600">
           YAMON<span className="text-white">FIM</span> <span className="text-xs text-zinc-400 font-normal">/ Admin</span>
         </span>
+
         <a href="/" className="text-xs bg-zinc-900 border border-zinc-800 px-3 py-2 rounded-lg hover:text-red-500 transition">
           Retour au site
         </a>
@@ -320,6 +337,17 @@ export default function AdminPage() {
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-zinc-400 mb-1">Catégories / Genres (séparés par des virgules)</label>
+            <input
+              type="text"
+              value={genresInput}
+              onChange={(e) => setGenresInput(e.target.value)}
+              placeholder="ex: Action, Drame, Science-Fiction"
               className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
             />
           </div>
