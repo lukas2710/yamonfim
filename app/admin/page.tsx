@@ -41,7 +41,11 @@ export default function AdminPage() {
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [editingId, setEditingId] = useState<any>(null);
 
-  const [tmdbIdInput, setTmdbIdInput] = useState('');
+  // Remplacement de l'ID TMDb par la recherche textuelle
+  const [searchQuery, setSearchQuery] = useState('');
+  const [tmdbSearchResults, setTmdbSearchResults] = useState<any[]>([]);
+  const [selectedTmdbId, setSelectedTmdbId] = useState('');
+
   const [title, setTitle] = useState('');
   const [type, setType] = useState<'movie' | 'series'>('movie');
   const [poster, setPoster] = useState('');
@@ -50,6 +54,15 @@ export default function AdminPage() {
   const [embedUrl, setEmbedUrl] = useState('');
   const [description, setDescription] = useState('');
   const [genresInput, setGenresInput] = useState('');
+
+  // États pour l'extracteur de lien automatique par URL (Films)
+  const [scrapeTargetUrl, setScrapeTargetUrl] = useState('');
+  const [loadingScrape, setLoadingScrape] = useState(false);
+
+  // États pour l'extracteur de lien automatique par URL (Épisodes de séries)
+  const [activeEpisodeTarget, setActiveEpisodeTarget] = useState<{ sIndex: number; eIndex: number } | null>(null);
+  const [episodeScrapeUrl, setEpisodeScrapeUrl] = useState('');
+  const [loadingEpScrape, setLoadingEpScrape] = useState(false);
 
   const [seasons, setSeasons] = useState<Season[]>([
     { seasonNumber: 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '', runtime: 45 }] }
@@ -83,11 +96,34 @@ export default function AdminPage() {
     }
   };
 
-  const handleFetchTmdb = async () => {
-    if (!tmdbIdInput) {
-      setErrorMsg("Veuillez entrer un ID TMDb.");
+  // 1. Recherche par nom sur TMDb (au lieu d'entrer l'ID manuellement)
+  const handleSearchTmdbByName = async (query: string) => {
+    setSearchQuery(query);
+    if (query.length < 2) {
+      setTmdbSearchResults([]);
       return;
     }
+
+    try {
+      const endpoint = type === 'movie' ? 'movie' : 'tv';
+      const res = await fetch(
+        `https://api.themoviedb.org/3/search/${endpoint}?api_key=${TMDB_KEY}&query=${encodeURIComponent(query)}&language=fr-FR`
+      );
+      const data = await res.json();
+      setTmdbSearchResults(data.results || []);
+    } catch {
+      setTmdbSearchResults([]);
+    }
+  };
+
+  // 2. Sélection d'un média depuis les résultats TMDb et chargement automatique des données
+  const handleSelectTmdbItem = async (item: any) => {
+    const tmdbId = item.id;
+    setSelectedTmdbId(tmdbId);
+    setTitle(item.title || item.name || '');
+    setSearchQuery('');
+    setTmdbSearchResults([]);
+
     setLoading(true);
     setErrorMsg('');
     setMessage('');
@@ -95,12 +131,11 @@ export default function AdminPage() {
     try {
       const endpoint = type === 'movie' ? 'movie' : 'tv';
       const res = await fetch(
-        `https://api.themoviedb.org/3/${endpoint}/${tmdbIdInput}?api_key=${TMDB_KEY}&language=fr-FR`
+        `https://api.themoviedb.org/3/${endpoint}/${tmdbId}?api_key=${TMDB_KEY}&language=fr-FR`
       );
       const data = await res.json();
 
-      if (data && !data.success && data.status_code !== 34) {
-        setTitle(data.title || data.name || '');
+      if (data && !data.success) {
         setDescription(data.overview || '');
 
         if (data.genres && Array.isArray(data.genres)) {
@@ -126,7 +161,7 @@ export default function AdminPage() {
           for (let sNum = 1; sNum <= data.number_of_seasons; sNum++) {
             try {
               const seasonRes = await fetch(
-                `https://api.themoviedb.org/3/tv/${tmdbIdInput}/season/${sNum}?api_key=${TMDB_KEY}&language=fr-FR`
+                `https://api.themoviedb.org/3/tv/${tmdbId}/season/${sNum}?api_key=${TMDB_KEY}&language=fr-FR`
               );
               const seasonData = await seasonRes.json();
 
@@ -166,12 +201,82 @@ export default function AdminPage() {
 
         setMessage('Informations TMDb chargées avec succès !');
       } else {
-        setErrorMsg("ID TMDb introuvable.");
+        setErrorMsg("Impossible de récupérer les détails TMDb.");
       }
     } catch (err) {
       setErrorMsg("Erreur lors de la récupération TMDb.");
     }
     setLoading(false);
+  };
+
+  // 3. Extraction automatique du lien vidéo (Film)
+  const handleAutoScrape = async () => {
+    if (!scrapeTargetUrl) return;
+    setLoadingScrape(true);
+    setErrorMsg('');
+
+    try {
+      const res = await fetch('/api/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: scrapeTargetUrl }),
+      });
+
+      const rawText = await res.text();
+      let data;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        throw new Error("Erreur serveur : la route n'a pas renvoyé de JSON valide.");
+      }
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Impossible d'extraire le lien.");
+      }
+
+      setUrl(data.videoUrl);
+      setMessage('Lien vidéo du film extrait avec succès !');
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    } finally {
+      setLoadingScrape(false);
+    }
+  };
+
+  // 4. Extraction automatique du lien vidéo (Épisode de série)
+  const handleEpisodeScrape = async (sIndex: number, eIndex: number) => {
+    if (!episodeScrapeUrl) return;
+    setLoadingEpScrape(true);
+    setErrorMsg('');
+
+    try {
+      const res = await fetch('/api/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: episodeScrapeUrl }),
+      });
+
+      const rawText = await res.text();
+      let data;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        throw new Error("Erreur serveur : réponse non JSON.");
+      }
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Impossible d'extraire le lien de l'épisode.");
+      }
+
+      updateEpisodeField(sIndex, eIndex, 'embedUrl', data.videoUrl);
+      setMessage(`Lien extrait pour S${sIndex + 1}E${eIndex + 1} !`);
+      setActiveEpisodeTarget(null);
+      setEpisodeScrapeUrl('');
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    } finally {
+      setLoadingEpScrape(false);
+    }
   };
 
   const handleEdit = (item: MediaItem) => {
@@ -190,7 +295,8 @@ export default function AdminPage() {
 
   const handleCancel = () => {
     setEditingId(null);
-    setTmdbIdInput('');
+    setSelectedTmdbId('');
+    setSearchQuery('');
     setTitle('');
     setType('movie');
     setPoster('');
@@ -199,6 +305,9 @@ export default function AdminPage() {
     setEmbedUrl('');
     setDescription('');
     setGenresInput('');
+    setScrapeTargetUrl('');
+    setActiveEpisodeTarget(null);
+    setEpisodeScrapeUrl('');
     setSeasons([{ seasonNumber: 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '', runtime: 45 }] }]);
   };
 
@@ -261,12 +370,11 @@ export default function AdminPage() {
       if (error) {
         setErrorMsg(`Erreur enregistrement Supabase : ${error.message}`);
       } else {
-        // Synchronisation automatique des demandes correspondantes
-        if (tmdbIdInput) {
+        if (selectedTmdbId) {
           await supabase
             .from('requests')
             .update({ status: 'ajoute' })
-            .eq('tmdb_id', tmdbIdInput);
+            .eq('tmdb_id', selectedTmdbId);
         }
 
         setMessage('Média ajouté avec succès et demandes synchronisées !');
@@ -288,9 +396,15 @@ export default function AdminPage() {
           YAMON<span className="text-white">FIM</span> <span className="text-xs text-zinc-400 font-normal">/ Admin</span>
         </span>
 
-        <a href="/" className="text-xs bg-zinc-900 border border-zinc-800 px-3 py-2 rounded-lg hover:text-red-500 transition">
-          Retour au site
-        </a>
+        <div className="flex items-center gap-3">
+          {/* Bouton d'accès rapide à la page Banner */}
+          <a href="/admin/banner" className="text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-3 py-2 rounded-lg text-white transition">
+            Gérer la Banner
+          </a>
+          <a href="/" className="text-xs bg-zinc-900 border border-zinc-800 px-3 py-2 rounded-lg hover:text-red-500 transition">
+            Retour au site
+          </a>
+        </div>
       </header>
 
       <div className="max-w-2xl mx-auto bg-zinc-900/60 border border-zinc-800 rounded-2xl p-6 md:p-8 shadow-xl mb-12">
@@ -306,7 +420,11 @@ export default function AdminPage() {
             <label className="block text-xs font-semibold text-zinc-400 mb-1">Type</label>
             <select
               value={type}
-              onChange={(e) => setType(e.target.value as 'movie' | 'series')}
+              onChange={(e) => {
+                setType(e.target.value as 'movie' | 'series');
+                setSearchQuery('');
+                setTmdbSearchResults([]);
+              }}
               className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
             >
               <option value="movie">Film</option>
@@ -314,26 +432,64 @@ export default function AdminPage() {
             </select>
           </div>
 
-          <div className="border border-zinc-800 bg-zinc-950/40 p-4 rounded-xl space-y-3">
-            <label className="block text-xs font-semibold text-red-500 uppercase tracking-wider">Importation automatique TMDb</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={tmdbIdInput}
-                onChange={(e) => setTmdbIdInput(e.target.value)}
-                placeholder="ID TMDb (ex: 1399)"
-                className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
-              />
-              <button
-                type="button"
-                onClick={handleFetchTmdb}
-                disabled={loading}
-                className="bg-zinc-800 hover:bg-zinc-700 text-xs font-bold px-4 py-2 rounded-lg transition cursor-pointer"
-              >
-                {loading ? 'Chargement...' : 'Importer via TMDb'}
-              </button>
-            </div>
+          {/* Recherche TMDb par nom (sans ID) */}
+          <div className="border border-zinc-800 bg-zinc-950/40 p-4 rounded-xl space-y-3 relative">
+            <label className="block text-xs font-semibold text-red-500 uppercase tracking-wider">Rechercher sur TMDb par nom</label>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => handleSearchTmdbByName(e.target.value)}
+              placeholder="Tape le nom d'un film ou d'une série..."
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
+            />
+            {tmdbSearchResults.length > 0 && (
+              <ul className="absolute z-20 left-4 right-4 bg-zinc-900 border border-zinc-800 rounded-xl mt-1 max-h-60 overflow-y-auto shadow-2xl">
+                {tmdbSearchResults.map((item) => (
+                  <li
+                    key={item.id}
+                    onClick={() => handleSelectTmdbItem(item)}
+                    className="p-3 hover:bg-zinc-800 cursor-pointer text-xs flex items-center gap-3 border-b border-zinc-800/60 transition"
+                  >
+                    {item.poster_path ? (
+                      <img src={`https://image.tmdb.org/t/p/w92${item.poster_path}`} alt="" className="w-8 h-12 object-cover rounded" />
+                    ) : (
+                      <div className="w-8 h-12 bg-zinc-800 rounded" />
+                    )}
+                    <div>
+                      <div className="font-bold text-white">{item.title || item.name}</div>
+                      <div className="text-zinc-400 text-[10px]">
+                        {item.release_date?.slice(0, 4) || item.first_air_date?.slice(0, 4) || 'Année inconnue'}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
+
+          {/* Extracteur de lien automatique (Films) */}
+          {type === 'movie' && (
+            <div className="border border-zinc-800 bg-zinc-950/40 p-4 rounded-xl space-y-3">
+              <label className="block text-xs font-semibold text-blue-400 uppercase tracking-wider">Extraction auto du lien du film</label>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  value={scrapeTargetUrl}
+                  onChange={(e) => setScrapeTargetUrl(e.target.value)}
+                  placeholder="Colle l'URL de la page source..."
+                  className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleAutoScrape}
+                  disabled={loadingScrape}
+                  className="bg-blue-600 hover:bg-blue-500 text-xs font-bold px-4 py-2 rounded-lg transition cursor-pointer disabled:opacity-50"
+                >
+                  {loadingScrape ? 'Extraction...' : 'Extraire le lien'}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-semibold text-zinc-400 mb-1">Titre</label>
@@ -394,27 +550,64 @@ export default function AdminPage() {
               <h3 className="text-xs font-bold uppercase tracking-wider text-red-500">
                 Saisons & Épisodes ({seasons.length} saisons)
               </h3>
-              <div className="max-h-60 overflow-y-auto space-y-3 pr-2">
+              <div className="max-h-80 overflow-y-auto space-y-3 pr-2">
                 {seasons.map((season, sIndex) => (
                   <div key={sIndex} className="bg-zinc-900 p-3 rounded-lg border border-zinc-800 space-y-2">
                     <span className="text-xs font-bold text-white">Saison {season.seasonNumber}</span>
-                    <div className="space-y-1">
+                    <div className="space-y-2">
                       {season.episodes.map((ep, eIndex) => (
-                        <div key={eIndex} className="flex gap-2 items-center text-xs">
-                          <span className="text-zinc-500 w-10">E{ep.number}</span>
-                          <input
-                            type="text"
-                            value={ep.title}
-                            onChange={(e) => updateEpisodeField(sIndex, eIndex, 'title', e.target.value)}
-                            className="bg-zinc-950 border border-zinc-800 rounded p-1 text-white w-1/3 text-xs"
-                          />
-                          <input
-                            type="text"
-                            placeholder="Lien Iframe / Embed"
-                            value={ep.embedUrl}
-                            onChange={(e) => updateEpisodeField(sIndex, eIndex, 'embedUrl', e.target.value)}
-                            className="bg-zinc-950 border border-zinc-800 rounded p-1 text-white flex-1 text-xs"
-                          />
+                        <div key={eIndex} className="bg-zinc-950 p-2 rounded-lg border border-zinc-800 space-y-2 text-xs">
+                          <div className="flex gap-2 items-center">
+                            <span className="text-zinc-500 w-10">E{ep.number}</span>
+                            <input
+                              type="text"
+                              value={ep.title}
+                              onChange={(e) => updateEpisodeField(sIndex, eIndex, 'title', e.target.value)}
+                              className="bg-zinc-900 border border-zinc-800 rounded p-1 text-white w-1/3 text-xs"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Lien Iframe / Embed"
+                              value={ep.embedUrl}
+                              onChange={(e) => updateEpisodeField(sIndex, eIndex, 'embedUrl', e.target.value)}
+                              className="bg-zinc-900 border border-zinc-800 rounded p-1 text-white flex-1 text-xs"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (activeEpisodeTarget?.sIndex === sIndex && activeEpisodeTarget?.eIndex === eIndex) {
+                                  setActiveEpisodeTarget(null);
+                                } else {
+                                  setActiveEpisodeTarget({ sIndex, eIndex });
+                                  setEpisodeScrapeUrl('');
+                                }
+                              }}
+                              className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-500/30 px-2.5 py-1 rounded transition text-[10px]"
+                            >
+                              Auto-scrap
+                            </button>
+                          </div>
+
+                          {/* Champ d'extraction auto spécifique à cet épisode si ouvert */}
+                          {activeEpisodeTarget?.sIndex === sIndex && activeEpisodeTarget?.eIndex === eIndex && (
+                            <div className="flex gap-2 pt-1 border-t border-zinc-800/80">
+                              <input
+                                type="url"
+                                placeholder="Colle l'URL de la source pour cet épisode..."
+                                value={episodeScrapeUrl}
+                                onChange={(e) => setEpisodeScrapeUrl(e.target.value)}
+                                className="flex-1 bg-zinc-900 border border-blue-500/40 rounded p-1.5 text-white text-[11px]"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleEpisodeScrape(sIndex, eIndex)}
+                                disabled={loadingEpScrape}
+                                className="bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded text-white text-[11px] font-bold"
+                              >
+                                {loadingEpScrape ? '...' : 'Valider'}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
