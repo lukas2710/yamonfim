@@ -8,10 +8,8 @@ import { supabase } from '@/lib/supabase';
 /* À PERSONNALISER                                                     */
 /* ------------------------------------------------------------------ */
 
-// Crée un "Payment Link" Stripe PAR forfait (avec le bon prix) et colle-le dans stripeLink.
-// Pense à régler la redirection après paiement de chaque lien sur : https://tonsite.com/vip
-// Tant qu'un lien est vide, le bouton de ce forfait affiche "Bientôt disponible".
-// (Ton ancien lien était : https://buy.stripe.com/eVq6oGeqBbBvbYrbWOf3a0m — vérifie à quel prix il correspond.)
+// Un "Payment Link" Stripe par forfait.
+// Dans Stripe, règle la redirection après paiement de chaque lien sur : https://tonsite.com/vip
 
 type Plan = {
   id: string;
@@ -24,9 +22,9 @@ type Plan = {
 };
 
 const PLANS: Plan[] = [
-  { id: '2w', name: '2 semaines', price: 3.99, days: 14,  tagline: 'Idéal pour essayer',      stripeLink: '' },
-  { id: '3m', name: '3 mois',     price: 15,   days: 91,  tagline: 'Le bon équilibre',        stripeLink: '', badge: 'Populaire' },
-  { id: '1y', name: '1 an',       price: 50,   days: 365, tagline: 'Le plus économique',      stripeLink: '', badge: 'Meilleure offre' },
+  { id: '2w', name: '2 semaines', price: 3.99, days: 14,  tagline: 'Idéal pour essayer', stripeLink: 'https://buy.stripe.com/aFa7sK2HT9tnfaD3qif3a0n' },
+  { id: '3m', name: '3 mois',     price: 15,   days: 91,  tagline: 'Le bon équilibre',   stripeLink: 'https://buy.stripe.com/eVq6oGeqBbBvbYrbWOf3a0m', badge: 'Populaire' },
+  { id: '1y', name: '1 an',       price: 50,   days: 365, tagline: 'Le plus économique', stripeLink: 'https://buy.stripe.com/bJedR896h8pjbYrd0Sf3a0o', badge: 'Meilleure offre' },
 ];
 
 const DEFAULT_PLAN_ID = '3m';
@@ -589,7 +587,7 @@ export default function AbonnementPage() {
           </div>
 
           <div className={`mx-auto mt-10 grid gap-4 ${SUPPORT_EMAIL ? 'max-w-3xl md:grid-cols-2' : 'max-w-md'}`}>
-            {/* 2. Email */}
+            {/* Email */}
             {SUPPORT_EMAIL && (
               <div className="flex flex-col rounded-2xl bg-white/[0.03] p-6 ring-1 ring-white/10">
                 <span className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-white">
@@ -608,7 +606,7 @@ export default function AbonnementPage() {
               </div>
             )}
 
-            {/* 3. Demandes */}
+            {/* Demandes */}
             <div className="flex flex-col rounded-2xl bg-white/[0.03] p-6 ring-1 ring-white/10">
               <span className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-white">
                 <Icon name="request" className="h-5 w-5" />
@@ -628,7 +626,7 @@ export default function AbonnementPage() {
 
           {/* Infos à communiquer */}
           {userId && (
-            <div className="mx-auto mt-6 max-w-2xl rounded-2xl bg-white/[0.02] p-5 border border-dashed border-white/10">
+            <div className="mx-auto mt-6 max-w-2xl rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-5">
               <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">À indiquer dans ton message</p>
               <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
                 <div className="min-w-0">
