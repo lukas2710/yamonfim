@@ -52,7 +52,17 @@ export default function WatchPage() {
   const [selectedEpisodeIdx, setSelectedEpisodeIdx] = useState(0);
   const [audioLang, setAudioLang] = useState<'VF' | 'VO'>('VF');
 
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  // Sécurité anti-écran noir : recharge l'iframe automatiquement après 3.5s si elle reste figée
+  useEffect(() => {
+    if (isPlaying && !showAdPopup) {
+      const timer = setTimeout(() => {
+        if (iframeRef.current) {
+          setPlayerKey(prev => prev + 1);
+        }
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [isPlaying, showAdPopup, playerKey]);
 
   useEffect(() => {
     if (!id) return;
@@ -300,7 +310,6 @@ export default function WatchPage() {
         </span>
       </header>
 
-      {/* Lecteur Plein Écran Direct (Sans clic intermédiaire supplémentaire) */}
       {isPlaying && (
         <div className="fixed inset-0 z-50 bg-black/98 backdrop-blur-2xl flex flex-col items-center justify-center p-2 sm:p-6">
           {showAdPopup ? (
@@ -359,7 +368,6 @@ export default function WatchPage() {
                 </div>
               </div>
 
-              {/* Iframe directement active */}
               <div className="w-full aspect-video bg-black rounded-2xl overflow-hidden border border-zinc-800 shadow-2xl relative">
                 {finalEmbedUrl ? (
                   <iframe 
@@ -460,7 +468,7 @@ export default function WatchPage() {
 
                 <div className="space-y-1">
                   <span className="text-[10px] uppercase font-bold text-red-500 tracking-wider block">
-                    En lecture — Saison {currentSeason?.seasonNumber} • Épisode {currentEpisode?.number} {currentEpisode?.runtime ? `(${currentEpisode.runtime} min)` : ''}
+                    En lecture — Saison {currentSeason?.seasonNumber} Épisode {currentEpisode?.number} {currentEpisode?.runtime ? `(${currentEpisode.runtime} min)` : ''}
                   </span>
                   <h4 className="text-sm font-black text-white">{currentEpisode?.title || `Épisode ${currentEpisode?.number}`}</h4>
                 </div>
