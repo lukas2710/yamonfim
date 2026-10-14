@@ -34,7 +34,6 @@ const DEFAULT_GENRES = [
 
 const ADMIN_EMAIL = 'lukas.leclerc312@gmail.com';
 const MAX_FREE_LIMIT = 5;
-const VIP_URL = 'https://buy.stripe.com/eVq6oGeqBbBvbYrbWOf3a0m';
 
 /* ------------------------------------------------------------------ */
 /* Icônes SVG (aucune dépendance)                                      */
@@ -481,10 +480,10 @@ export default function Home() {
               </ul>
 
               <button
-                onClick={() => (window.location.href = VIP_URL)}
+                onClick={() => router.push('/abonnement')}
                 className="w-full cursor-pointer rounded-full bg-gradient-to-r from-amber-400 to-amber-500 py-3.5 text-sm font-bold text-zinc-950 shadow-lg shadow-amber-500/20 transition hover:from-amber-300 hover:to-amber-400 focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-400/50"
               >
-                Devenir membre VIP
+                Voir l'offre VIP
               </button>
               <button
                 onClick={() => setShowVipModal(false)}
@@ -577,12 +576,15 @@ export default function Home() {
 
             {/* Badge VIP */}
             {isVip ? (
-              <span className="hidden items-center gap-1.5 rounded-full bg-gradient-to-r from-amber-400/20 to-amber-600/20 px-3 py-1.5 text-xs font-bold text-amber-300 ring-1 ring-amber-500/30 sm:flex">
+              <button
+                onClick={() => router.push('/abonnement')}
+                className="hidden cursor-pointer items-center gap-1.5 rounded-full bg-gradient-to-r from-amber-400/20 to-amber-600/20 px-3 py-1.5 text-xs font-bold text-amber-300 ring-1 ring-amber-500/30 transition hover:from-amber-400/30 hover:to-amber-600/30 sm:flex"
+              >
                 <Icon name="crown" className="h-3.5 w-3.5" /> VIP
-              </span>
+              </button>
             ) : (
               <button
-                onClick={() => setShowVipModal(true)}
+                onClick={() => router.push('/abonnement')}
                 className="flex cursor-pointer items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1.5 text-xs font-bold text-amber-400 ring-1 ring-amber-500/30 transition hover:bg-amber-500/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
               >
                 <Icon name="crown" className="h-3.5 w-3.5" />
@@ -609,6 +611,12 @@ export default function Home() {
                     <p className="truncate text-sm font-medium text-white">{userEmail}</p>
                   </div>
                   <div className="p-1.5">
+                    <button
+                      onClick={() => router.push('/abonnement')}
+                      className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-amber-300 transition hover:bg-amber-500/10"
+                    >
+                      <Icon name="crown" /> {isVip ? 'Mon abonnement VIP' : 'Passer au VIP'}
+                    </button>
                     <button
                       onClick={() => router.push('/history')}
                       className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 transition hover:bg-white/5 hover:text-white"

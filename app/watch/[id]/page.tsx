@@ -36,7 +36,6 @@ interface MediaItem {
 }
 
 const MAX_FREE_LIMIT = 5;
-const VIP_URL = 'https://buy.stripe.com/eVq6oGeqBbBvbYrbWOf3a0m';
 
 /* ------------------------------------------------------------------ */
 /* Utilitaires                                                         */
@@ -503,10 +502,10 @@ export default function WatchPage() {
               </ul>
 
               <button
-                onClick={() => (window.location.href = VIP_URL)}
+                onClick={() => router.push('/abonnement')}
                 className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-zinc-950 font-bold py-3.5 rounded-full text-sm transition cursor-pointer shadow-lg shadow-amber-500/20"
               >
-                Devenir membre VIP
+                Voir l'offre VIP
               </button>
               <button
                 onClick={() => router.push('/')}
