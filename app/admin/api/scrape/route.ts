@@ -6,26 +6,38 @@ export async function POST(req: NextRequest) {
     const { url } = await req.json();
 
     if (!url || typeof url !== 'string') {
-      return NextResponse.json({ error: 'URL valide requise' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'URL valide requise' },
+        { status: 400 }
+      );
     }
 
     const res = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       },
     });
 
     if (!res.ok) {
-      return NextResponse.json({ error: 'Impossible de charger la page' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Impossible de charger la page' },
+        { status: 400 }
+      );
     }
 
     const html = await res.text();
     const $ = cheerio.load(html);
 
-    let rawSrc = iframe.first().attr('src') || video source.first().attr('src') \vert{}\vert{}video.first().attr('src');
+    let rawSrc =
+      $('iframe').first().attr('src') ||
+      $('video source').first().attr('src') \vert{}\vert{}$('video').first().attr('src');
 
     if (!rawSrc) {
-      return NextResponse.json({ error: 'Aucun lecteur vidéo trouvé' }, { status: 404 });
+      return NextResponse.json(
+        { error: 'Aucun lecteur vidéo trouvé' },
+        { status: 404 }
+      );
     }
 
     let embedUrl = rawSrc.trim();
@@ -33,11 +45,14 @@ export async function POST(req: NextRequest) {
       embedUrl = 'https:' + embedUrl;
     } else if (embedUrl.startsWith('/')) {
       const parsedUrl = new URL(url);
-      embedUrl = \\\\;
+      embedUrl = `${parsedUrl.origin}${embedUrl}`;
     }
 
     return NextResponse.json({ embedUrl });
   } catch (err: any) {
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Erreur serveur' },
+      { status: 500 }
+    );
   }
 }
