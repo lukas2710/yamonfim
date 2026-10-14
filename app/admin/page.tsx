@@ -41,7 +41,7 @@ export default function AdminPage() {
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [editingId, setEditingId] = useState<any>(null);
 
-  // Remplacement de l'ID TMDb par la recherche textuelle
+  // Recherche textuelle TMDb
   const [searchQuery, setSearchQuery] = useState('');
   const [tmdbSearchResults, setTmdbSearchResults] = useState<any[]>([]);
   const [selectedTmdbId, setSelectedTmdbId] = useState('');
@@ -55,11 +55,11 @@ export default function AdminPage() {
   const [description, setDescription] = useState('');
   const [genresInput, setGenresInput] = useState('');
 
-  // États pour l'extracteur de lien automatique par URL (Films)
+  // Scraping URL (si tu veux utiliser ton API de scrape pour un film)
   const [scrapeTargetUrl, setScrapeTargetUrl] = useState('');
   const [loadingScrape, setLoadingScrape] = useState(false);
 
-  // États pour l'extracteur de lien automatique par URL (Épisodes de séries)
+  // Scraping URL spécifique par épisode
   const [activeEpisodeTarget, setActiveEpisodeTarget] = useState<{ sIndex: number; eIndex: number } | null>(null);
   const [episodeScrapeUrl, setEpisodeScrapeUrl] = useState('');
   const [loadingEpScrape, setLoadingEpScrape] = useState(false);
@@ -96,7 +96,6 @@ export default function AdminPage() {
     }
   };
 
-  // 1. Recherche par nom sur TMDb (au lieu d'entrer l'ID manuellement)
   const handleSearchTmdbByName = async (query: string) => {
     setSearchQuery(query);
     if (query.length < 2) {
@@ -116,7 +115,6 @@ export default function AdminPage() {
     }
   };
 
-  // 2. Sélection d'un média depuis les résultats TMDb et chargement automatique des données
   const handleSelectTmdbItem = async (item: any) => {
     const tmdbId = item.id;
     setSelectedTmdbId(tmdbId);
@@ -155,6 +153,12 @@ export default function AdminPage() {
           setBackdrop(mainBackdrop);
         }
 
+        // Génération automatique du lien Embed Fluxora pour les films
+        if (type === 'movie') {
+          setUrl(`https://fluxora.sbs/embed/zenix?tmdb=${tmdbId}&type=movie&lang=vf`);
+        }
+
+        // Génération automatique des liens Embed Fluxora pour les séries et épisodes
         if (type === 'series' && data.number_of_seasons) {
           const fetchedSeasons: Season[] = [];
 
@@ -170,14 +174,13 @@ export default function AdminPage() {
                   ? `https://image.tmdb.org/t/p/w500${seasonData.poster_path}` 
                   : mainPoster;
 
-                const existingSeason = seasons.find(s => s.seasonNumber === sNum);
-
                 const episodesList = seasonData.episodes.map((ep: any) => {
-                  const existingEp = existingSeason?.episodes.find(e => e.number === ep.episode_number);
+                  const autoEmbed = `https://fluxora.sbs/embed/zenix?tmdb=${tmdbId}&type=tv&season=${sNum}&episode=${ep.episode_number}&lang=vf`;
+
                   return {
                     number: ep.episode_number,
                     title: ep.name || `Épisode ${ep.episode_number}`,
-                    embedUrl: existingEp ? existingEp.embedUrl : '',
+                    embedUrl: autoEmbed,
                     still_path: ep.still_path ? `https://image.tmdb.org/t/p/w500${ep.still_path}` : seasonPoster,
                     runtime: ep.runtime || data.episode_run_time?.[0] || 45
                   };
@@ -199,17 +202,18 @@ export default function AdminPage() {
           }
         }
 
-        setMessage('Informations TMDb chargées avec succès !');
+        setMessage('Informations TMDb et liens Embed Fluxora générés automatiquement !');
       } else {
         setErrorMsg("Impossible de récupérer les détails TMDb.");
       }
     } catch (err) {
+      console.error(err);
       setErrorMsg("Erreur lors de la récupération TMDb.");
     }
     setLoading(false);
   };
 
-  // 3. Extraction automatique du lien vidéo (Film)
+  // Utilisation de ton API de scrape pour un film si besoin d'une source externe
   const handleAutoScrape = async () => {
     if (!scrapeTargetUrl) return;
     setLoadingScrape(true);
@@ -222,20 +226,13 @@ export default function AdminPage() {
         body: JSON.stringify({ url: scrapeTargetUrl }),
       });
 
-      const rawText = await res.text();
-      let data;
-      try {
-        data = JSON.parse(rawText);
-      } catch {
-        throw new Error("Erreur serveur : la route n'a pas renvoyé de JSON valide.");
-      }
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Impossible d'extraire le lien.");
+      const data = await res.json();
+      if (!res.ok || !data.success || !data.videoUrl) {
+        throw new Error(data.error || "Impossible d'extraire l'iframe.");
       }
 
       setUrl(data.videoUrl);
-      setMessage('Lien vidéo du film extrait avec succès !');
+      setMessage('Iframe extraite avec succès via le scraper !');
     } catch (err: any) {
       setErrorMsg(err.message);
     } finally {
@@ -243,7 +240,7 @@ export default function AdminPage() {
     }
   };
 
-  // 4. Extraction automatique du lien vidéo (Épisode de série)
+  // Utilisation de ton API de scrape pour un épisode spécifique
   const handleEpisodeScrape = async (sIndex: number, eIndex: number) => {
     if (!episodeScrapeUrl) return;
     setLoadingEpScrape(true);
@@ -256,20 +253,13 @@ export default function AdminPage() {
         body: JSON.stringify({ url: episodeScrapeUrl }),
       });
 
-      const rawText = await res.text();
-      let data;
-      try {
-        data = JSON.parse(rawText);
-      } catch {
-        throw new Error("Erreur serveur : réponse non JSON.");
-      }
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Impossible d'extraire le lien de l'épisode.");
+      const data = await res.json();
+      if (!res.ok || !data.success || !data.videoUrl) {
+        throw new Error(data.error || "Impossible d'extraire l'iframe de l'épisode.");
       }
 
       updateEpisodeField(sIndex, eIndex, 'embedUrl', data.videoUrl);
-      setMessage(`Lien extrait pour S${sIndex + 1}E${eIndex + 1} !`);
+      setMessage(`Iframe extraite pour S${sIndex + 1}E${eIndex + 1} !`);
       setActiveEpisodeTarget(null);
       setEpisodeScrapeUrl('');
     } catch (err: any) {
@@ -377,7 +367,7 @@ export default function AdminPage() {
             .eq('tmdb_id', selectedTmdbId);
         }
 
-        setMessage('Média ajouté avec succès et demandes synchronisées !');
+        setMessage('Média ajouté avec succès au catalogue !');
         handleCancel();
         fetchMedia();
       }
@@ -397,9 +387,8 @@ export default function AdminPage() {
         </span>
 
         <div className="flex items-center gap-3">
-          {/* Bouton d'accès rapide à la page Banner */}
-          <a href="/admin/banner" className="text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-3 py-2 rounded-lg text-white transition">
-            Gérer la Banner
+          <a href="/admin/banners" className="text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-3 py-2 rounded-lg text-white transition">
+            Gérer les Bannières
           </a>
           <a href="/" className="text-xs bg-zinc-900 border border-zinc-800 px-3 py-2 rounded-lg hover:text-red-500 transition">
             Retour au site
@@ -409,7 +398,7 @@ export default function AdminPage() {
 
       <div className="max-w-2xl mx-auto bg-zinc-900/60 border border-zinc-800 rounded-2xl p-6 md:p-8 shadow-xl mb-12">
         <h1 className="text-xl font-bold mb-6">
-          {editingId !== null ? 'Modifier le média' : 'Ajouter un film ou une série'}
+          {editingId !== null ? 'Modifier le média' : 'Ajouter un film ou une série (Génération Embed Auto)'}
         </h1>
 
         {message && <div className="bg-green-600/20 border border-green-500/40 text-green-400 text-xs p-3 rounded-lg mb-4">{message}</div>}
@@ -432,9 +421,8 @@ export default function AdminPage() {
             </select>
           </div>
 
-          {/* Recherche TMDb par nom (sans ID) */}
           <div className="border border-zinc-800 bg-zinc-950/40 p-4 rounded-xl space-y-3 relative">
-            <label className="block text-xs font-semibold text-red-500 uppercase tracking-wider">Rechercher sur TMDb par nom</label>
+            <label className="block text-xs font-semibold text-red-500 uppercase tracking-wider">Rechercher sur TMDb (Remplit tout & Génère les liens Embed)</label>
             <input
               type="text"
               value={searchQuery}
@@ -467,16 +455,16 @@ export default function AdminPage() {
             )}
           </div>
 
-          {/* Extracteur de lien automatique (Films) */}
+          {/* Optionnel : Scraping de secours via ton API si tu as une URL externe précise */}
           {type === 'movie' && (
             <div className="border border-zinc-800 bg-zinc-950/40 p-4 rounded-xl space-y-3">
-              <label className="block text-xs font-semibold text-blue-400 uppercase tracking-wider">Extraction auto du lien du film</label>
+              <label className="block text-xs font-semibold text-blue-400 uppercase tracking-wider">Optionnel : Scraping Iframe externe (Colle une URL)</label>
               <div className="flex gap-2">
                 <input
                   type="url"
                   value={scrapeTargetUrl}
                   onChange={(e) => setScrapeTargetUrl(e.target.value)}
-                  placeholder="Colle l'URL de la page source..."
+                  placeholder="https://..."
                   className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
                 />
                 <button
@@ -485,7 +473,7 @@ export default function AdminPage() {
                   disabled={loadingScrape}
                   className="bg-blue-600 hover:bg-blue-500 text-xs font-bold px-4 py-2 rounded-lg transition cursor-pointer disabled:opacity-50"
                 >
-                  {loadingScrape ? 'Extraction...' : 'Extraire le lien'}
+                  {loadingScrape ? '...' : 'Scraper'}
                 </button>
               </div>
             </div>
@@ -535,11 +523,12 @@ export default function AdminPage() {
 
           {type === 'movie' && (
             <div>
-              <label className="block text-xs font-semibold text-zinc-400 mb-1">Lien de lecture (URL / M3U direct)</label>
+              <label className="block text-xs font-semibold text-zinc-400 mb-1">Lien Embed (URL Iframe du film)</label>
               <input
                 type="text"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://fluxora.sbs/embed/zenix?tmdb=..."
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
               />
             </div>
@@ -548,7 +537,7 @@ export default function AdminPage() {
           {type === 'series' && (
             <div className="border border-zinc-800 bg-zinc-950/60 p-4 rounded-xl space-y-4">
               <h3 className="text-xs font-bold uppercase tracking-wider text-red-500">
-                Saisons & Épisodes ({seasons.length} saisons)
+                Saisons & Épisodes ({seasons.length} saisons - Liens Embed générés auto)
               </h3>
               <div className="max-h-80 overflow-y-auto space-y-3 pr-2">
                 {seasons.map((season, sIndex) => (
@@ -567,7 +556,7 @@ export default function AdminPage() {
                             />
                             <input
                               type="text"
-                              placeholder="Lien Iframe / Embed"
+                              placeholder="Lien Embed de l'épisode"
                               value={ep.embedUrl}
                               onChange={(e) => updateEpisodeField(sIndex, eIndex, 'embedUrl', e.target.value)}
                               className="bg-zinc-900 border border-zinc-800 rounded p-1 text-white flex-1 text-xs"
@@ -584,16 +573,15 @@ export default function AdminPage() {
                               }}
                               className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-500/30 px-2.5 py-1 rounded transition text-[10px]"
                             >
-                              Auto-scrap
+                              Scraper
                             </button>
                           </div>
 
-                          {/* Champ d'extraction auto spécifique à cet épisode si ouvert */}
                           {activeEpisodeTarget?.sIndex === sIndex && activeEpisodeTarget?.eIndex === eIndex && (
                             <div className="flex gap-2 pt-1 border-t border-zinc-800/80">
                               <input
                                 type="url"
-                                placeholder="Colle l'URL de la source pour cet épisode..."
+                                placeholder="Colle l'URL source pour cet épisode..."
                                 value={episodeScrapeUrl}
                                 onChange={(e) => setEpisodeScrapeUrl(e.target.value)}
                                 className="flex-1 bg-zinc-900 border border-blue-500/40 rounded p-1.5 text-white text-[11px]"

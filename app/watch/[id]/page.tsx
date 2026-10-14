@@ -41,13 +41,16 @@ export default function WatchPage() {
   const [loading, setLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showAdPopup, setShowAdPopup] = useState(true);
+  
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const [playerKey, setPlayerKey] = useState(0);
 
   const [showVipModal, setShowVipModal] = useState(false);
   const MAX_FREE_LIMIT = 5;
 
-  const [activeTab, setActiveTab] = useState<'episodes' | 'synopsis'>('episodes');
   const [selectedSeasonIdx, setSelectedSeasonIdx] = useState(0);
   const [selectedEpisodeIdx, setSelectedEpisodeIdx] = useState(0);
+  const [audioLang, setAudioLang] = useState<'VF' | 'VO'>('VF');
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -117,17 +120,11 @@ export default function WatchPage() {
         updated_at: new Date().toISOString()
       };
 
-      const { error } = await supabase
+      await supabase
         .from('watch_history')
         .upsert(payload, { onConflict: 'user_id,media_id' });
-
-      if (error) {
-        console.error('Erreur Supabase watch_history:', error);
-      } else {
-        console.log('Progression enregistrée avec succès dans Supabase !');
-      }
     } catch (err) {
-      console.error('Erreur d\'exécution saveWatchHistory:', err);
+      console.error('Erreur saveWatchHistory:', err);
     }
   };
 
@@ -164,6 +161,7 @@ export default function WatchPage() {
     const canPlay = await checkAndIncrementWatch();
     if (!canPlay) return;
 
+    setPlayerKey(prev => prev + 1);
     await saveWatchHistory(sIdx, eIdx);
     setShowAdPopup(true);
     setIsPlaying(true);
@@ -181,6 +179,7 @@ export default function WatchPage() {
       setSelectedEpisodeIdx(nextEpIdx);
       markAsWatched(`s${selectedSeasonIdx}_e${nextEpIdx}`);
       await saveWatchHistory(selectedSeasonIdx, nextEpIdx);
+      setPlayerKey(prev => prev + 1);
       setShowAdPopup(true);
       setIsPlaying(true);
     } else if (selectedSeasonIdx < media.seasons.length - 1) {
@@ -189,33 +188,13 @@ export default function WatchPage() {
       setSelectedEpisodeIdx(0);
       markAsWatched(`s${nextSeasonIdx}_e0`);
       await saveWatchHistory(nextSeasonIdx, 0);
+      setPlayerKey(prev => prev + 1);
       setShowAdPopup(true);
       setIsPlaying(true);
     } else {
       setIsPlaying(false);
     }
   };
-
-  useEffect(() => {
-    if (isPlaying && !showAdPopup && media?.type === 'series' && media.seasons) {
-      const currentEp = media.seasons[selectedSeasonIdx]?.episodes[selectedEpisodeIdx];
-      const runtimeMinutes = currentEp?.runtime || 45;
-      const totalSecondsToPlay = (runtimeMinutes * 60) - 30;
-      const safeDuration = totalSecondsToPlay > 0 ? totalSecondsToPlay : 2670;
-
-      if (timerRef.current) clearInterval(timerRef.current);
-
-      timerRef.current = setInterval(() => {
-        handleAutoNextEpisode();
-      }, safeDuration * 1000);
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current);
-    }
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [isPlaying, showAdPopup, selectedSeasonIdx, selectedEpisodeIdx, media]);
 
   const markAsWatched = async (key: string) => {
     if (!media) return;
@@ -233,21 +212,27 @@ export default function WatchPage() {
 
   const getCleanEmbedUrl = (rawUrl?: string) => {
     if (!rawUrl) return '';
-    if (rawUrl.includes('<iframe')) {
+    let clean = rawUrl;
+    if (clean.includes('<iframe')) {
       try {
-        const doc = new DOMParser().parseFromString(rawUrl, 'text/html');
+        const doc = new DOMParser().parseFromString(clean, 'text/html');
         const iframe = doc.querySelector('iframe');
-        return iframe ? iframe.getAttribute('src') || '' : '';
+        clean = iframe ? iframe.getAttribute('src') || '' : '';
       } catch (e) {
-        return '';
+        clean = '';
       }
     }
-    return rawUrl.trim();
+    if (clean.includes('lang=')) {
+      clean = clean.replace(/lang=[a-z]+/i, `lang=${audioLang.toLowerCase()}`);
+    } else {
+      clean += (clean.includes('?') ? '&' : '?') + `lang=${audioLang.toLowerCase()}`;
+    }
+    return clean.trim();
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#141414] text-white flex items-center justify-center text-xs tracking-wider">
+      <div className="min-h-screen bg-[#121212] text-white flex items-center justify-center text-xs tracking-wider">
         Chargement...
       </div>
     );
@@ -255,7 +240,7 @@ export default function WatchPage() {
 
   if (!media) {
     return (
-      <div className="min-h-screen bg-[#141414] text-white flex flex-col items-center justify-center gap-3 p-4 text-center">
+      <div className="min-h-screen bg-[#121212] text-white flex flex-col items-center justify-center gap-3 p-4 text-center">
         <p className="text-zinc-400 text-xs font-medium">Média introuvable.</p>
         <button 
           onClick={() => router.push('/')} 
@@ -268,14 +253,13 @@ export default function WatchPage() {
   }
 
   let currentEmbedRaw = '';
-  let currentEpisodeTitle = '';
   let currentKey = media.type === 'movie' ? 'movie_main' : `s${selectedSeasonIdx}_e${selectedEpisodeIdx}`;
 
+  const currentSeason = media.seasons?.[selectedSeasonIdx] || media.seasons?.[0];
+  const currentEpisode = currentSeason?.episodes?.[selectedEpisodeIdx] || currentSeason?.episodes?.[0];
+
   if (media.type === 'series' && media.seasons && media.seasons.length > 0) {
-    const currentSeason = media.seasons[selectedSeasonIdx] || media.seasons[0];
-    const currentEpisode = currentSeason?.episodes[selectedEpisodeIdx] || currentSeason?.episodes[0];
     currentEmbedRaw = currentEpisode?.embedUrl || '';
-    currentEpisodeTitle = currentEpisode ? `S${currentSeason.seasonNumber} Ép. ${currentEpisode.number} : ${currentEpisode.title}` : '';
   } else {
     currentEmbedRaw = media.embedUrl || media.url || '';
   }
@@ -283,51 +267,31 @@ export default function WatchPage() {
   const finalEmbedUrl = getCleanEmbedUrl(currentEmbedRaw);
   const bgImage = (media.backdrop && media.backdrop.trim() !== '') ? media.backdrop : media.poster;
   const isCurrentWatched = media.watched ? !!media.watched[currentKey] : false;
-  const totalEpisodesCount = media.seasons ? media.seasons.reduce((acc, s) => acc + s.episodes.length, 0) : 0;
 
   return (
-    <main className="min-h-screen bg-[#141414] text-white font-sans pb-24 selection:bg-red-600 selection:text-white">
+    <main className="min-h-screen bg-[#121212] text-white font-sans pb-24 selection:bg-red-600 selection:text-white">
       
       {showVipModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#0f172a] border border-slate-800 rounded-2xl max-w-md w-full p-6 sm:p-8 text-center shadow-2xl relative animate-in fade-in zoom-in duration-200">
-            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto mb-4 text-2xl shadow-lg shadow-amber-500/10">
-              🔒
-            </div>
-
-            <span className="text-[10px] uppercase font-bold tracking-widest text-amber-400 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20">
-              Accès Limité
-            </span>
-
-            <h3 className="text-xl font-black text-white mt-3 mb-2">
-              Passez à l'expérience VIP
-            </h3>
-
-            <p className="text-xs text-slate-300 leading-relaxed mb-6">
-              Vous avez atteint votre quota gratuit de <strong className="text-white">{MAX_FREE_LIMIT} visions</strong> ce mois-ci. Débloquez un accès illimité, sans publicité et en haute définition.
-            </p>
-
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#18181b] border border-zinc-800 rounded-3xl max-w-md w-full p-6 text-center shadow-2xl">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto mb-4 text-xl">👑</div>
+            <h3 className="text-lg font-black text-white mb-2">Accès VIP Requis</h3>
+            <p className="text-xs text-zinc-400 mb-6">Vous avez atteint votre quota gratuit de {MAX_FREE_LIMIT} visions. Passez au VIP pour un accès illimité.</p>
             <button
               onClick={() => window.location.href = 'https://buy.stripe.com/eVq6oGeqBbBvbYrbWOf3a0m'}
-              className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-extrabold py-3.5 px-4 rounded-xl text-xs transition shadow-xl shadow-amber-500/20 cursor-pointer mb-3"
+              className="w-full bg-gradient-to-r from-amber-500 to-amber-600 text-zinc-950 font-black py-3 rounded-2xl text-xs mb-3 cursor-pointer"
             >
               Devenir Membre VIP 👑
             </button>
-
-            <button
-              onClick={() => router.push('/')}
-              className="text-xs text-slate-400 hover:text-white transition cursor-pointer py-1"
-            >
-              Retour à l'accueil
-            </button>
+            <button onClick={() => router.push('/')} className="text-xs text-zinc-400 hover:text-white">Retour à l'accueil</button>
           </div>
         </div>
       )}
 
-      <header className="flex items-center justify-between px-4 sm:px-6 py-3.5 bg-[#141414]/90 backdrop-blur-md sticky top-0 z-50 border-b border-zinc-800/60">
+      <header className="flex items-center justify-between px-6 py-4 bg-[#121212]/90 backdrop-blur-md sticky top-0 z-40 border-b border-zinc-900">
         <button 
           onClick={() => router.push('/')}
-          className="flex items-center gap-2 text-xs font-semibold text-zinc-300 hover:text-white bg-zinc-900/80 border border-zinc-800 px-3 py-1.5 rounded-xl transition cursor-pointer"
+          className="flex items-center gap-2 text-xs font-bold text-zinc-300 hover:text-white bg-zinc-900 border border-zinc-800 px-3.5 py-2 rounded-xl transition cursor-pointer"
         >
           <span>←</span> Retour
         </button>
@@ -336,45 +300,49 @@ export default function WatchPage() {
         </span>
       </header>
 
+      {/* Lecteur Plein Écran Direct (Sans clic intermédiaire supplémentaire) */}
       {isPlaying && (
-        <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-3 sm:p-6">
-          
+        <div className="fixed inset-0 z-50 bg-black/98 backdrop-blur-2xl flex flex-col items-center justify-center p-2 sm:p-6">
           {showAdPopup ? (
-            <div className="w-full max-w-sm bg-[#0f172a] border border-zinc-800/80 rounded-2xl p-6 text-center shadow-2xl relative z-10 animate-in fade-in zoom-in duration-200">
-              
-              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto mb-4 text-xl">
-                ⚠️
-              </div>
-
-              <h3 className="text-base font-bold text-white mb-2">
-                Information importante
-              </h3>
-
-              <p className="text-xs text-slate-300 leading-relaxed mb-6">
-                Si une page de publicité s'ouvre au moment de lancer la vidéo, <strong className="text-white">refermez-la immédiatement sans cliquer sur quoi que ce soit dessus</strong>.
+            <div className="w-full max-w-sm bg-[#18181b] border border-zinc-800 rounded-3xl p-6 text-center shadow-2xl relative z-10">
+              <div className="w-12 h-12 rounded-2xl bg-red-600/10 border border-red-500/30 text-red-500 flex items-center justify-center mx-auto mb-4 text-xl">⚠️</div>
+              <h3 className="text-sm font-black text-white mb-2">Déverrouiller la lecture</h3>
+              <p className="text-xs text-zinc-400 leading-relaxed mb-6">
+                Si une page publicitaire s'ouvre dans un nouvel onglet, <strong className="text-white">fermez-la immédiatement</strong> et revenez ici.
               </p>
-
               <button
                 onClick={() => setShowAdPopup(false)}
-                className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-4 rounded-xl text-xs transition shadow-lg shadow-red-600/30 cursor-pointer"
+                className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-4 rounded-2xl text-xs transition shadow-lg shadow-red-600/30 cursor-pointer"
               >
-                J'ai compris
+                Lancer la vidéo
               </button>
-
             </div>
           ) : (
-            <div className="w-full max-w-5xl flex flex-col h-full justify-center">
-              <div className="w-full flex justify-between items-center mb-3 px-2">
-                <div>
-                  <h2 className="text-xs sm:text-sm font-bold text-white">{media.title}</h2>
-                  {currentEpisodeTitle && <p className="text-[10px] text-red-500 font-semibold">{currentEpisodeTitle}</p>}
+            <div className="w-full max-w-6xl flex flex-col h-full justify-center space-y-3">
+              
+              <div className="w-full flex justify-between items-center px-1">
+                <div className="flex items-center gap-3">
+                  <div className="flex bg-zinc-900 border border-zinc-800 rounded-xl p-1 gap-1">
+                    <button 
+                      onClick={() => { setAudioLang('VF'); setPlayerKey(prev => prev + 1); }} 
+                      className={`px-3 py-1 rounded-lg text-xs font-black transition cursor-pointer ${audioLang === 'VF' ? 'bg-red-600 text-white shadow-md' : 'text-zinc-400 hover:text-white'}`}
+                    >
+                      VF
+                    </button>
+                    <button 
+                      onClick={() => { setAudioLang('VO'); setPlayerKey(prev => prev + 1); }} 
+                      className={`px-3 py-1 rounded-lg text-xs font-black transition cursor-pointer ${audioLang === 'VO' ? 'bg-red-600 text-white shadow-md' : 'text-zinc-400 hover:text-white'}`}
+                    >
+                      VO
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2">
                   {media.type === 'series' && (
                     <button
                       onClick={handleAutoNextEpisode}
-                      className="bg-zinc-800 hover:bg-zinc-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer border border-zinc-700"
+                      className="bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer"
                     >
                       Épisode suivant ⏭
                     </button>
@@ -391,9 +359,12 @@ export default function WatchPage() {
                 </div>
               </div>
 
-              <div className="w-full aspect-video bg-black rounded-2xl overflow-hidden border border-zinc-800 shadow-2xl flex items-center justify-center relative">
+              {/* Iframe directement active */}
+              <div className="w-full aspect-video bg-black rounded-2xl overflow-hidden border border-zinc-800 shadow-2xl relative">
                 {finalEmbedUrl ? (
                   <iframe 
+                    ref={iframeRef}
+                    key={`player-${playerKey}-${audioLang}`}
                     src={finalEmbedUrl} 
                     className="w-full h-full border-0" 
                     allow="fullscreen; accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -401,38 +372,38 @@ export default function WatchPage() {
                     title={media.title}
                   />
                 ) : (
-                  <div className="text-zinc-500 text-xs">Aucun flux disponible pour ce contenu.</div>
+                  <div className="w-full h-full flex items-center justify-center text-zinc-500 text-xs">Aucun flux vidéo disponible.</div>
                 )}
               </div>
             </div>
           )}
-
         </div>
       )}
 
       <div className="relative w-full">
         {bgImage && (
           <div className="relative h-[45vh] sm:h-[55vh] w-full overflow-hidden">
-            <img src={bgImage} alt={media.title} className="w-full h-full object-cover object-center opacity-60" />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-[#141414]/30 to-transparent" />
+            <img src={bgImage} alt={media.title} className="w-full h-full object-cover object-center brightness-75" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-[#121212]/40 to-transparent" />
           </div>
         )}
 
-        <div className="px-4 sm:px-6 -mt-20 relative z-10 space-y-3">
+        <div className="px-6 sm:px-12 -mt-24 relative z-10 space-y-3 max-w-7xl mx-auto">
           <div className="flex items-center gap-2">
-            <span className="inline-block text-[10px] uppercase font-bold text-red-500 bg-red-600/20 px-2.5 py-1 rounded-md border border-red-500/30">
+            <span className="text-[10px] uppercase font-bold text-red-500 bg-red-600/20 px-2.5 py-1 rounded-md border border-red-500/30">
               {media.type === 'movie' ? 'Film' : 'Série'}
             </span>
             {isCurrentWatched && (
-              <span className="inline-block text-[10px] uppercase font-bold text-green-400 bg-green-500/20 px-2 py-0.5 rounded border border-green-500/30">
+              <span className="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/30">
                 ✓ Vu
               </span>
             )}
           </div>
           
-          <h1 className="text-2xl sm:text-4xl font-black tracking-tight">{media.title}</h1>
+          <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-white">{media.title}</h1>
+          <p className="text-xs sm:text-sm text-zinc-300 max-w-2xl line-clamp-3 leading-relaxed">{media.description}</p>
 
-          <div className="flex items-center gap-2.5 pt-1">
+          <div className="flex items-center gap-3 pt-3">
             <button 
               onClick={() => {
                 if (media.type === 'series') {
@@ -443,135 +414,107 @@ export default function WatchPage() {
                   startPlaying();
                 }
               }}
-              className="bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 px-6 rounded-xl text-xs transition shadow-lg shadow-red-600/20 flex items-center gap-2 cursor-pointer"
+              className="bg-red-600 hover:bg-red-500 text-white font-extrabold py-3.5 px-8 rounded-2xl text-xs transition shadow-lg shadow-red-600/30 flex items-center gap-2 cursor-pointer active:scale-95"
             >
-              <span>▶</span> {media.type === 'series' ? `Lecture S${media.seasons?.[selectedSeasonIdx]?.seasonNumber || 1} Ép. ${(media.seasons?.[selectedSeasonIdx]?.episodes[selectedEpisodeIdx]?.number) || 1}` : 'Lecture'}
+              <span className="text-sm">▶</span> 
+              <span>{media.type === 'series' ? `Lecture S${currentSeason?.seasonNumber || 1} Ép. ${currentEpisode?.number || 1}` : 'Regarder'}</span>
             </button>
           </div>
         </div>
       </div>
 
       {media.type === 'series' && media.seasons && (
-        <div className="px-4 sm:px-6 mt-6 grid grid-cols-2 gap-3 max-w-sm">
-          <div className="bg-zinc-900/60 border border-zinc-800 p-3 rounded-xl">
-            <span className="text-[10px] uppercase tracking-wider text-zinc-400 block font-semibold">Saisons</span>
-            <span className="text-lg font-black text-white">{media.seasons.length}</span>
+        <div className="px-6 sm:px-12 mt-10 max-w-7xl mx-auto space-y-6">
+          
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Saisons</h3>
+            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
+              {media.seasons.map((season, sIdx) => {
+                const isSelected = selectedSeasonIdx === sIdx;
+                return (
+                  <button
+                    key={sIdx}
+                    onClick={() => {
+                      setSelectedSeasonIdx(sIdx);
+                      setSelectedEpisodeIdx(0);
+                    }}
+                    className={`px-5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer shrink-0 ${isSelected ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'}`}
+                  >
+                    Saison {season.seasonNumber}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <div className="bg-zinc-900/60 border border-zinc-800 p-3 rounded-xl">
-            <span className="text-[10px] uppercase tracking-wider text-zinc-400 block font-semibold">Épisodes</span>
-            <span className="text-lg font-black text-white">{totalEpisodesCount}</span>
-          </div>
-        </div>
-      )}
 
-      {media.type === 'series' && (
-        <div className="px-4 sm:px-6 mt-6 border-b border-zinc-800/80 flex gap-6 text-xs font-bold">
-          <button onClick={() => setActiveTab('episodes')} className={`pb-3 transition cursor-pointer ${activeTab === 'episodes' ? 'text-white border-b-2 border-red-600' : 'text-zinc-500'}`}>Épisodes</button>
-          <button onClick={() => setActiveTab('synopsis')} className={`pb-3 transition cursor-pointer ${activeTab === 'synopsis' ? 'text-white border-b-2 border-red-600' : 'text-zinc-500'}`}>Synopsis</button>
-        </div>
-      )}
+          <div className="bg-zinc-900/60 border border-zinc-800 rounded-3xl p-4 sm:p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              
+              <div className="flex items-center gap-4 overflow-hidden">
+                <div className="w-36 aspect-video bg-zinc-950 rounded-xl overflow-hidden shrink-0 relative border border-zinc-800 flex items-center justify-center">
+                  {currentEpisode?.still_path || currentSeason?.poster_path || media.poster ? (
+                    <img src={currentEpisode?.still_path || currentSeason?.poster_path || media.poster} alt="" className="w-full h-full object-cover" />
+                  ) : null}
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white text-xs">▶</div>
+                </div>
 
-      <div className="px-4 sm:px-6 mt-6 space-y-4">
-        {media.type === 'movie' && (
-          <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-5 space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Synopsis</h3>
-            <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed">{media.description}</p>
-          </div>
-        )}
-
-        {media.type === 'series' && activeTab === 'episodes' && media.seasons && (
-          <div className="space-y-6">
-            
-            <div className="space-y-3">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-400">Saisons</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                {media.seasons.map((season, sIdx) => {
-                  const isSelected = selectedSeasonIdx === sIdx;
-                  const seasonPoster = season.poster_path || media.poster;
-
-                  return (
-                    <div
-                      key={sIdx}
-                      onClick={() => setSelectedSeasonIdx(sIdx)}
-                      className={`group cursor-pointer bg-zinc-900 border rounded-xl overflow-hidden transition relative ${isSelected ? 'border-red-600 ring-2 ring-red-600/30' : 'border-zinc-800 hover:border-zinc-600'}`}
-                    >
-                      <div className="aspect-[2/3] relative bg-zinc-950 overflow-hidden">
-                        <img src={seasonPoster} alt="" className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent" />
-                        <div className="absolute bottom-3 left-3 right-3">
-                          <h4 className="font-bold text-sm text-white">Saison {season.seasonNumber}</h4>
-                          <p className="text-[11px] text-zinc-400">{season.episodes.length} épisodes</p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                <div className="space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-red-500 tracking-wider block">
+                    En lecture — Saison {currentSeason?.seasonNumber} • Épisode {currentEpisode?.number} {currentEpisode?.runtime ? `(${currentEpisode.runtime} min)` : ''}
+                  </span>
+                  <h4 className="text-sm font-black text-white">{currentEpisode?.title || `Épisode ${currentEpisode?.number}`}</h4>
+                </div>
               </div>
+
+              <div className="w-full sm:w-auto flex items-center gap-2">
+                <select
+                  value={selectedEpisodeIdx}
+                  onChange={(e) => {
+                    const idx = parseInt(e.target.value, 10);
+                    setSelectedEpisodeIdx(idx);
+                    markAsWatched(`s${selectedSeasonIdx}_e${idx}`);
+                  }}
+                  className="w-full sm:w-64 bg-zinc-950 border border-zinc-800 text-xs text-white p-3 rounded-xl focus:outline-none focus:border-red-600 font-medium cursor-pointer"
+                >
+                  {currentSeason?.episodes.map((ep, eIdx) => (
+                    <option key={eIdx} value={eIdx}>
+                      Épisode {ep.number} — {ep.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
             </div>
 
-            <div className="space-y-3 pt-4">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-400">
-                Épisodes — Saison {media.seasons[selectedSeasonIdx]?.seasonNumber || 1}
-              </h3>
+            <div className="flex items-center justify-between pt-2 border-t border-zinc-800/80">
+              <button
+                onClick={() => {
+                  if (selectedEpisodeIdx > 0) {
+                    setSelectedEpisodeIdx(selectedEpisodeIdx - 1);
+                  }
+                }}
+                disabled={selectedEpisodeIdx === 0}
+                className="text-xs text-zinc-400 hover:text-white disabled:opacity-30 font-bold transition cursor-pointer"
+              >
+                ← Épisode précédent
+              </button>
 
-              <div className="space-y-3">
-                {media.seasons[selectedSeasonIdx]?.episodes.map((ep, eIdx) => {
-                  const epKey = `s${selectedSeasonIdx}_e${eIdx}`;
-                  const isEpWatched = media.watched ? !!media.watched[epKey] : false;
-                  const epThumb = ep.still_path || media.seasons?.[selectedSeasonIdx]?.poster_path || media.poster;
-
-                  return (
-                    <div
-                      key={eIdx}
-                      onClick={async () => {
-                        setSelectedEpisodeIdx(eIdx);
-                        markAsWatched(epKey);
-                        await startPlaying(selectedSeasonIdx, eIdx);
-                      }}
-                      className="group bg-zinc-900/60 border border-zinc-800 hover:border-zinc-700 rounded-xl p-3 flex items-center justify-between gap-4 transition cursor-pointer"
-                    >
-                      <div className="flex items-center gap-3.5 overflow-hidden">
-                        <div className="w-32 aspect-video bg-zinc-800 rounded-lg overflow-hidden shrink-0 relative flex items-center justify-center border border-zinc-700/50">
-                          {epThumb ? (
-                            <img src={epThumb} alt="" className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
-                          ) : null}
-                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white text-xs">
-                            ▶
-                          </div>
-                        </div>
-
-                        <div className="truncate">
-                          <span className="text-[10px] text-red-500 font-bold uppercase tracking-wider block">
-                            Épisode {ep.number} {ep.runtime ? `• ${ep.runtime} min` : ''}
-                          </span>
-                          <h4 className="text-xs font-bold text-white truncate">{ep.title}</h4>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3 shrink-0">
-                        {isEpWatched && (
-                          <span className="text-[10px] bg-green-500/20 text-green-400 border border-green-500/30 px-2 py-0.5 rounded font-bold">
-                            VU
-                          </span>
-                        )}
-                        <span className="text-xs text-zinc-500">▶</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <button
+                onClick={() => {
+                  if (currentSeason && selectedEpisodeIdx < currentSeason.episodes.length - 1) {
+                    setSelectedEpisodeIdx(selectedEpisodeIdx + 1);
+                  }
+                }}
+                disabled={!currentSeason || selectedEpisodeIdx >= currentSeason.episodes.length - 1}
+                className="text-xs text-zinc-400 hover:text-white disabled:opacity-30 font-bold transition cursor-pointer"
+              >
+                Épisode suivant →
+              </button>
             </div>
-
           </div>
-        )}
 
-        {media.type === 'series' && activeTab === 'synopsis' && (
-          <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-5 space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Synopsis</h3>
-            <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed">{media.description}</p>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </main>
   );
 }
