@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+ï»¿import { NextRequest, NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
 
 export async function POST(req: NextRequest) {
@@ -16,19 +16,16 @@ export async function POST(req: NextRequest) {
     });
 
     if (!res.ok) {
-      return NextResponse.json({ error: \Impossible de charger la page (Statut: \)\ }, { status: 400 });
+      return NextResponse.json({ error: 'Impossible de charger la page' }, { status: 400 });
     }
 
     const html = await res.text();
     const $ = cheerio.load(html);
 
-    let rawSrc =
-      iframe.first().attr('src') ||
-      video source.first().attr('src') ||
-      video.first().attr('src');
+    let rawSrc = iframe.first().attr('src') || video source.first().attr('src') \vert{}\vert{}video.first().attr('src');
 
     if (!rawSrc) {
-      return NextResponse.json({ error: 'Aucun lecteur vidéo trouvé sur la page source' }, { status: 404 });
+      return NextResponse.json({ error: 'Aucun lecteur vidÃ©o trouvÃ©' }, { status: 404 });
     }
 
     let embedUrl = rawSrc.trim();
@@ -41,7 +38,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ embedUrl });
   } catch (err: any) {
-    console.error('Erreur Scrape:', err);
-    return NextResponse.json({ error: err.message || 'Erreur lors du scraping de la page' }, { status: 500 });
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
   }
 }
