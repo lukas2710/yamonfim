@@ -2,24 +2,50 @@ import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    // Remplace par l'URL brute de ta playlist .m3u ou .m3u8 hébergée (sur GitHub ou ailleurs)
-    const externalPlaylistUrl = 'https://raw.githubusercontent.com/.../playlist_france.m3u8';
-
-    const response = await fetch(externalPlaylistUrl);
-    const m3uText = await response.text();
-
-    return new NextResponse(m3uText, {
-      status: 200,
+    const res = await fetch('https://raw.githubusercontent.com/ZeroxarZ/iptv-fr/main/playlist_fr.m3u8', {
       headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Access-Control-Allow-Origin': '*',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       },
+      cache: 'no-store'
     });
-  } catch (err) {
-    console.error(err);
-    return new NextResponse('#EXTM3U\n', {
-      status: 200,
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-    });
+
+    if (!res.ok) {
+      throw new Error(`Erreur GitHub: ${res.status}`);
+    }
+
+    const text = await res.text();
+    const lines = text.split('\n');
+    const channels = [];
+    let currentChannel: any = {};
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+
+      if (line.startsWith('#EXTINF:')) {
+        const parts = line.split(',');
+        const rawName = parts.length > 1 ? parts[parts.length - 1].trim() : 'Chaîne Inconnue';
+        const cleanName = rawName.replace(/[ⒼⓎⒹ]/g, '').trim();
+        
+        const logoMatch = line.match(/tvg-logo="([^"]*)"/);
+        const groupMatch = line.match(/group-title="([^"]*)"/);
+
+        currentChannel = {
+          id: `channel-${channels.length + 1}`,
+          name: cleanName,
+          logo: logoMatch ? logoMatch[1] : '',
+          category: groupMatch ? groupMatch[1] : 'France'
+        };
+      } else if (line.startsWith('http://') || line.startsWith('https://')) {
+        currentChannel.streamUrl = line;
+        if (currentChannel.name && currentChannel.streamUrl) {
+          channels.push(currentChannel);
+        }
+        currentChannel = {};
+      }
+    }
+
+    return NextResponse.json({ success: true, count: channels.length, channels });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

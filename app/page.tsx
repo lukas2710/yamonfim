@@ -381,7 +381,11 @@ export default function Home() {
   const recentMovies = filteredMedia.filter(item => item.type === 'movie');
   const recentSeries = filteredMedia.filter(item => item.type === 'series');
 
-  const getHeroImage = (m: MediaItem) => (m.backdrop && m.backdrop.trim() !== '' ? m.backdrop : m.poster);
+  const hasText = (v?: string) => !!v && v.trim() !== '';
+  // Ordinateur / tablette : image paysage (backdrop), sinon l'affiche
+  const getHeroImage = (m: MediaItem) => (hasText(m.backdrop) ? m.backdrop! : m.poster);
+  // Mobile (écran vertical) : l'affiche portrait remplit le fond sans être coupée, sinon l'image paysage
+  const getMobileHeroImage = (m: MediaItem) => (hasText(m.poster) ? m.poster : m.backdrop || '');
 
   const userLimitReached = !isVip && watchCount >= MAX_FREE_LIMIT;
   const isAdmin = userEmail === ADMIN_EMAIL;
@@ -394,7 +398,7 @@ export default function Home() {
     return (
       <main className="min-h-screen bg-[#0a0a0b] text-white">
         <div className="h-16 border-b border-white/5" />
-        <div className="h-[55vh] w-full animate-pulse bg-gradient-to-b from-zinc-900 to-[#0a0a0b]" />
+        <div className="h-[72svh] w-full animate-pulse bg-gradient-to-b from-zinc-900 to-[#0a0a0b] sm:h-[55vh]" />
         <div className="space-y-10 px-4 sm:px-10 -mt-10">
           {[0, 1].map(r => (
             <div key={r} className="space-y-3">
@@ -655,30 +659,55 @@ export default function Home() {
 
       {/* ================= Hero (carrousel) ================= */}
       {showHero ? (
-        <section className="relative h-[62vh] min-h-[440px] w-full overflow-hidden bg-zinc-950 sm:h-[78vh]">
-          {/* Images en fondu enchaîné */}
+        <section className="relative h-[72svh] min-h-[480px] w-full overflow-hidden bg-zinc-950 sm:h-[78vh] sm:min-h-[440px]">
+          {/* Images en fondu enchaîné :
+              - mobile : affiche portrait (pas de zoom ni de coupure)
+              - tablette / ordinateur : image paysage */}
           {(carouselItems.length > 0 ? carouselItems : [featured]).map((m, i) => {
-            const img = getHeroImage(m);
+            const desktopImg = getHeroImage(m);
+            const mobileImg = getMobileHeroImage(m);
+            const mobileIsPoster = hasText(m.poster);
             const active = carouselItems.length === 0 || i === currentIndex;
-            return img ? (
-              <img
-                key={String(m.id ?? 'default') + i}
-                src={img}
-                alt=""
-                className={`absolute inset-0 h-full w-full object-cover object-center transition-all duration-[1200ms] ease-out ${
-                  active ? 'scale-100 opacity-100' : 'scale-105 opacity-0'
-                }`}
-              />
-            ) : (
-              <div key={i} className="absolute inset-0 bg-gradient-to-br from-zinc-900 to-zinc-950" />
+            const fade = active ? 'scale-100 opacity-100' : 'scale-105 opacity-0';
+
+            if (!desktopImg && !mobileImg) {
+              return <div key={i} className="absolute inset-0 bg-gradient-to-br from-zinc-900 to-zinc-950" />;
+            }
+
+            return (
+              <React.Fragment key={String(m.id ?? 'default') + i}>
+                {/* Mobile */}
+                {mobileImg && (
+                  <img
+                    src={mobileImg}
+                    alt=""
+                    loading={i === 0 ? 'eager' : 'lazy'}
+                    className={`absolute inset-0 h-full w-full object-cover transition-all duration-[1200ms] ease-out sm:hidden ${
+                      mobileIsPoster ? 'object-[center_15%]' : 'object-center'
+                    } ${fade}`}
+                  />
+                )}
+                {/* Tablette / ordinateur */}
+                {desktopImg && (
+                  <img
+                    src={desktopImg}
+                    alt=""
+                    loading={i === 0 ? 'eager' : 'lazy'}
+                    className={`absolute inset-0 hidden h-full w-full object-cover object-center transition-all duration-[1200ms] ease-out sm:block ${fade}`}
+                  />
+                )}
+              </React.Fragment>
             );
           })}
-          <div className="absolute inset-0 bg-gradient-to-r from-[#0a0a0b] via-[#0a0a0b]/60 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0b] via-transparent to-black/30" />
 
-          <div className="absolute inset-x-0 bottom-0 px-4 pb-14 sm:px-10 sm:pb-20">
-            <div key={String(featured.id ?? 'default')} className="max-w-2xl animate-[fadeUp_.6s_ease-out]">
-              <div className="mb-3 flex items-center gap-2">
+          {/* Dégradés : sur mobile uniquement par le bas (avant, le dégradé de gauche cachait toute l'image) */}
+          <div className="absolute inset-0 hidden bg-gradient-to-r from-[#0a0a0b] via-[#0a0a0b]/60 to-transparent sm:block" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0b] via-[#0a0a0b]/20 to-black/40 sm:via-transparent sm:to-black/30" />
+          <div className="absolute inset-x-0 bottom-0 h-3/5 bg-gradient-to-t from-[#0a0a0b] via-[#0a0a0b]/70 to-transparent sm:hidden" />
+
+          <div className="absolute inset-x-0 bottom-0 px-4 pb-12 text-center sm:px-10 sm:pb-20 sm:text-left">
+            <div key={String(featured.id ?? 'default')} className="mx-auto max-w-2xl animate-[fadeUp_.6s_ease-out] sm:mx-0">
+              <div className="mb-3 flex items-center justify-center gap-2 sm:justify-start">
                 <span className="rounded-md bg-red-600 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-white">
                   {featured.type === 'movie' ? 'Film' : 'Série'}
                 </span>
@@ -688,13 +717,13 @@ export default function Home() {
                 {featured.title}
               </h1>
               {featured.description && (
-                <p className="mb-6 line-clamp-3 max-w-xl text-sm leading-relaxed text-zinc-300 sm:text-base">
+                <p className="mx-auto mb-6 line-clamp-2 max-w-xl text-sm leading-relaxed text-zinc-300 sm:mx-0 sm:line-clamp-3 sm:text-base">
                   {featured.description}
                 </p>
               )}
 
               {featured.id !== null && featured.id !== undefined && (
-                <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center gap-3 sm:justify-start">
                   <button
                     onClick={() => handleMediaClick(featured)}
                     className="flex cursor-pointer items-center gap-2.5 rounded-full bg-white py-3 pl-5 pr-6 text-sm font-bold text-black shadow-xl shadow-black/40 transition hover:bg-zinc-200 active:scale-[0.97] focus:outline-none focus-visible:ring-4 focus-visible:ring-red-600 sm:py-3.5"
@@ -713,9 +742,9 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Points du carrousel */}
+          {/* Points du carrousel (centrés sur mobile) */}
           {carouselItems.length > 1 && (
-            <div className="absolute bottom-6 right-4 flex items-center gap-1.5 sm:bottom-8 sm:right-10">
+            <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1.5 sm:bottom-8 sm:left-auto sm:right-10 sm:translate-x-0">
               {carouselItems.map((m, i) => (
                 <button
                   key={String(m.id) + i}
@@ -761,7 +790,7 @@ export default function Home() {
       )}
 
       {/* ================= Catalogue ================= */}
-      <div className={`relative z-10 space-y-10 px-4 sm:px-10 ${showHero ? '-mt-6 sm:-mt-10' : 'mt-6'}`}>
+      <div className={`relative z-10 space-y-10 px-4 sm:px-10 ${showHero ? '-mt-4 sm:-mt-10' : 'mt-6'}`}>
         {isFiltered ? (
           <section>
             <div className="mb-5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -821,7 +850,9 @@ export default function Home() {
                         src={item.backdrop || item.poster}
                         alt={item.title}
                         loading="lazy"
-                        className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                        className={`absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105 ${
+                          item.backdrop ? 'object-center' : 'object-[center_20%]'
+                        }`}
                       />
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
@@ -859,11 +890,18 @@ export default function Home() {
                   key={banner.id}
                   className="relative -mx-4 overflow-hidden px-4 py-6 sm:mx-0 sm:rounded-3xl sm:px-8 sm:py-8 sm:ring-1 sm:ring-white/10"
                 >
-                  <div className="absolute inset-0 -z-0">
+                  <div className="absolute inset-0">
                     {banner.backdrop && (
-                      <img src={banner.backdrop} alt="" className="h-full w-full object-cover opacity-30" />
+                      <img
+                        src={banner.backdrop}
+                        alt=""
+                        loading="lazy"
+                        className="h-full w-full object-cover object-center opacity-40 sm:opacity-30"
+                      />
                     )}
-                    <div className="absolute inset-0 bg-gradient-to-r from-[#0a0a0b] via-[#0a0a0b]/85 to-[#0a0a0b]/40" />
+                    {/* Mobile : voile uniforme (le dégradé de gauche cachait l'image) — ordinateur : dégradé latéral */}
+                    <div className="absolute inset-0 bg-[#0a0a0b]/55 sm:hidden" />
+                    <div className="absolute inset-0 hidden bg-gradient-to-r from-[#0a0a0b] via-[#0a0a0b]/85 to-[#0a0a0b]/40 sm:block" />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0b]/80 to-transparent" />
                   </div>
                   <div className="relative">
