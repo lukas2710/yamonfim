@@ -118,9 +118,8 @@ export default function AdminPage() {
 
     const moviezParams = new URLSearchParams({
       autoplay: '1',
-      next: '1',
       color: 'e8213f',
-      info: 'title,year,rating,duration,synopsis'
+      info: 'title,year,rating,genres,duration'
     }).toString();
 
     try {
@@ -151,9 +150,9 @@ export default function AdminPage() {
         }
 
         if (type === 'movie') {
-          const movieUrl = `https://api.moviez.ac/movie/${tmdbId}?${moviezParams}`;
-          setUrl(movieUrl);
-          setEmbedUrl(movieUrl);
+          const iframeCode = `<iframe src="https://api.moviez.ac/${tmdbId}?${moviezParams}" width="100%" height="100%" frameborder="0" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" referrerpolicy="origin" allowfullscreen></iframe>`;
+          setUrl(iframeCode);
+          setEmbedUrl(iframeCode);
         }
 
         if (type === 'series' && data.number_of_seasons) {
@@ -172,7 +171,13 @@ export default function AdminPage() {
                   : mainPoster;
 
                 const episodesList = seasonData.episodes.map((ep: any) => {
-                  const autoEmbed = `https://api.moviez.ac/serie/${tmdbId}/${sNum}/${ep.episode_number}?${moviezParams}`;
+                  const seriesParams = new URLSearchParams({
+                    autoplay: '1',
+                    next: '1',
+                    color: 'e8213f',
+                    info: 'title,year,rating,duration,synopsis'
+                  }).toString();
+                  const autoEmbed = `https://api.moviez.ac/serie/${tmdbId}/${sNum}/${ep.episode_number}?${seriesParams}`;
 
                   return {
                     number: ep.episode_number,
@@ -199,7 +204,7 @@ export default function AdminPage() {
           }
         }
 
-        setMessage('Informations TMDb et liens Embed moviez.ac générés avec succès !');
+        setMessage('Informations TMDb et liens Embed générés avec succès !');
       } else {
         setErrorMsg("Impossible de récupérer les détails TMDb.");
       }
@@ -225,12 +230,12 @@ export default function AdminPage() {
   };
 
   const handleCancel = () => {
-    const currentType = type; // On conserve le type actuel (film ou série)
+    const currentType = type;
     setEditingId(null);
     setSelectedTmdbId('');
     setSearchQuery('');
     setTitle('');
-    setType(currentType); // On réapplique le type mémorisé
+    setType(currentType);
     setPoster('');
     setBackdrop('');
     setUrl('');
@@ -279,7 +284,7 @@ export default function AdminPage() {
       poster,
       backdrop,
       url,
-      embedUrl: type === 'movie' ? embedUrl : '',
+      embedUrl: type === 'movie' ? url : '',
       description,
       genres: genresArray,
       seasons: type === 'series' ? seasons : null
@@ -337,7 +342,7 @@ export default function AdminPage() {
 
       <div className="max-w-2xl mx-auto bg-zinc-900/60 border border-zinc-800 rounded-2xl p-6 md:p-8 shadow-xl mb-12">
         <h1 className="text-xl font-bold mb-6">
-          {editingId !== null ? 'Modifier le média' : 'Ajouter un film ou une série (Génération Embed Auto api.moviez.ac)'}
+          {editingId !== null ? 'Modifier le média' : 'Ajouter un film ou une série'}
         </h1>
 
         {message && <div className="bg-green-600/20 border border-green-500/40 text-green-400 text-xs p-3 rounded-lg mb-4">{message}</div>}
@@ -361,7 +366,7 @@ export default function AdminPage() {
           </div>
 
           <div className="border border-zinc-800 bg-zinc-950/40 p-4 rounded-xl space-y-3 relative">
-            <label className="block text-xs font-semibold text-red-500 uppercase tracking-wider">Rechercher sur TMDb (Remplit tout & Génère les liens api.moviez.ac)</label>
+            <label className="block text-xs font-semibold text-red-500 uppercase tracking-wider">Rechercher sur TMDb (Remplit tout & Génère le code)</label>
             <input
               type="text"
               value={searchQuery}
@@ -438,13 +443,13 @@ export default function AdminPage() {
 
           {type === 'movie' && (
             <div>
-              <label className="block text-xs font-semibold text-zinc-400 mb-1">Lien Embed (URL Iframe du film)</label>
-              <input
-                type="text"
+              <label className="block text-xs font-semibold text-zinc-400 mb-1">Code Iframe / Lien du film</label>
+              <textarea
+                rows={3}
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://api.moviez.ac/..."
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
+                placeholder='<iframe src="https://api.moviez.ac/..." ...></iframe>'
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600 font-mono resize-none"
               />
             </div>
           )}
@@ -452,7 +457,7 @@ export default function AdminPage() {
           {type === 'series' && (
             <div className="border border-zinc-800 bg-zinc-950/60 p-4 rounded-xl space-y-4">
               <h3 className="text-xs font-bold uppercase tracking-wider text-red-500">
-                Saisons & Épisodes ({seasons.length} saisons - Liens api.moviez.ac générés auto)
+                Saisons & Épisodes ({seasons.length} saisons)
               </h3>
               <div className="max-h-80 overflow-y-auto space-y-3 pr-2">
                 {seasons.map((season, sIndex) => (

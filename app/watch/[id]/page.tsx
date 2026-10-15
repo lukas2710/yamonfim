@@ -193,7 +193,8 @@ export default function WatchPage() {
             .from('profiles')
             .select('is_vip, watch_count')
             .eq('id', user.id)
-            .single();
+            .maybeSingle();
+
           if (cancelled) return;
           const vip = user.email === ADMIN_EMAIL || !!profile?.is_vip;
           setIsVipUser(vip);
@@ -300,7 +301,7 @@ export default function WatchPage() {
       .from('profiles')
       .select('is_vip, watch_count')
       .eq('id', user.id)
-      .single();
+      .maybeSingle();
 
     if (profile) {
       if (!profile.is_vip && (profile.watch_count || 0) >= MAX_FREE_LIMIT) {
@@ -322,7 +323,7 @@ export default function WatchPage() {
       .from('profiles')
       .select('is_vip, watch_count')
       .eq('id', user.id)
-      .single();
+      .maybeSingle();
 
     if (profile && !profile.is_vip) {
       const newCount = (profile.watch_count || 0) + 1;
@@ -417,7 +418,6 @@ export default function WatchPage() {
       setShowAdPopup(false);
       setIsPlaying(true);
 
-      // Validation des 1 minute pour le nouvel épisode
       if (watchValidationTimerRef.current) clearTimeout(watchValidationTimerRef.current);
       watchValidationTimerRef.current = setTimeout(() => {
         performValidatedWatchAction(next.s, next.e);
@@ -443,7 +443,6 @@ export default function WatchPage() {
   const handleLaunchClick = () => {
     setShowAdPopup(false);
 
-    // Lancer le timer de validation de 1 minute (60 000 ms) après fermeture de l'avertissement
     if (watchValidationTimerRef.current) clearTimeout(watchValidationTimerRef.current);
     watchValidationTimerRef.current = setTimeout(() => {
       performValidatedWatchAction(selectedSeasonIdx, selectedEpisodeIdx);
@@ -478,6 +477,40 @@ export default function WatchPage() {
   };
 
   const getCleanEmbedUrl = (rawUrl?: string) => {
+    if (media?.type === 'movie') {
+      const target = rawUrl || media.embedUrl || media.url || '';
+      let clean = target.trim();
+
+      if (clean.includes('<iframe')) {
+        try {
+          const doc = new DOMParser().parseFromString(clean, 'text/html');
+          const iframe = doc.querySelector('iframe');
+          clean = iframe ? iframe.getAttribute('src') || '' : '';
+        } catch {
+          clean = '';
+        }
+      }
+
+      if (!clean) {
+        clean = `https://api.moviez.ac/${media.id}`;
+      }
+
+      try {
+        const url = new URL(clean, window.location.origin);
+        url.searchParams.set('autoplay', '1');
+        url.searchParams.set('color', 'e8213f');
+        url.searchParams.set('info', 'title,year,rating,genres,duration');
+        return url.toString();
+      } catch {
+        let out = clean;
+        if (!/[?&]autoplay=/.test(out)) out += (out.includes('?') ? '&' : '?') + 'autoplay=1';
+        if (!/[?&]color=/.test(out)) out += '&color=e8213f';
+        if (!/[?&]info=/.test(out)) out += '&info=title,year,rating,genres,duration';
+        return out;
+      }
+    }
+
+    // Gestion des séries (inchangée)
     if (!rawUrl) return '';
     let clean = rawUrl.trim();
 
@@ -491,19 +524,6 @@ export default function WatchPage() {
       }
     }
     if (!clean) return '';
-
-    const currentSeasonNum = media?.seasons?.[selectedSeasonIdx]?.seasonNumber || 1;
-    const currentEpNum = media?.seasons?.[selectedSeasonIdx]?.episodes?.[selectedEpisodeIdx]?.number || 1;
-
-    if (clean.includes('api.moviez.ac/serie/')) {
-      const parts = clean.split('?');
-      const baseUrlParts = parts[0].split('/');
-      if (baseUrlParts.length >= 7) {
-        baseUrlParts[5] = String(currentSeasonNum);
-        baseUrlParts[6] = String(currentEpNum);
-        clean = baseUrlParts.join('/');
-      }
-    }
 
     try {
       const url = new URL(clean, window.location.origin);
