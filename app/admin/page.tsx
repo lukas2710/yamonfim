@@ -54,13 +54,6 @@ export default function AdminPage() {
   const [description, setDescription] = useState('');
   const [genresInput, setGenresInput] = useState('');
 
-  const [scrapeTargetUrl, setScrapeTargetUrl] = useState('');
-  const [loadingScrape, setLoadingScrape] = useState(false);
-
-  const [activeEpisodeTarget, setActiveEpisodeTarget] = useState<{ sIndex: number; eIndex: number } | null>(null);
-  const [episodeScrapeUrl, setEpisodeScrapeUrl] = useState('');
-  const [loadingEpScrape, setLoadingEpScrape] = useState(false);
-
   const [seasons, setSeasons] = useState<Season[]>([
     { seasonNumber: 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '', runtime: 45 }] }
   ]);
@@ -123,6 +116,14 @@ export default function AdminPage() {
     setErrorMsg('');
     setMessage('');
 
+    // Paramètres exacts demandés pour l'iframe api.moviez.ac
+    const moviezParams = new URLSearchParams({
+      autoplay: '1',
+      next: '1',
+      color: 'e8213f',
+      info: 'title,year,rating,duration,synopsis'
+    }).toString();
+
     try {
       const endpoint = type === 'movie' ? 'movie' : 'tv';
       const res = await fetch(
@@ -151,7 +152,9 @@ export default function AdminPage() {
         }
 
         if (type === 'movie') {
-          setUrl(`https://api.moviez.ac/${tmdbId}`);
+          const movieUrl = `https://api.moviez.ac/movie/${tmdbId}?${moviezParams}`;
+          setUrl(movieUrl);
+          setEmbedUrl(movieUrl);
         }
 
         if (type === 'series' && data.number_of_seasons) {
@@ -170,7 +173,7 @@ export default function AdminPage() {
                   : mainPoster;
 
                 const episodesList = seasonData.episodes.map((ep: any) => {
-                  const autoEmbed = `https://api.moviez.ac/serie/${tmdbId}/${sNum}/${ep.episode_number}`;
+                  const autoEmbed = `https://api.moviez.ac/serie/${tmdbId}/${sNum}/${ep.episode_number}?${moviezParams}`;
 
                   return {
                     number: ep.episode_number,
@@ -208,60 +211,6 @@ export default function AdminPage() {
     setLoading(false);
   };
 
-  const handleAutoScrape = async () => {
-    if (!scrapeTargetUrl) return;
-    setLoadingScrape(true);
-    setErrorMsg('');
-
-    try {
-      const res = await fetch('/api/scrape', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: scrapeTargetUrl }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data.success || !data.videoUrl) {
-        throw new Error(data.error || "Impossible d'extraire l'iframe.");
-      }
-
-      setUrl(data.videoUrl);
-      setMessage('Iframe extraite avec succès via le scraper !');
-    } catch (err: any) {
-      setErrorMsg(err.message);
-    } finally {
-      setLoadingScrape(false);
-    }
-  };
-
-  const handleEpisodeScrape = async (sIndex: number, eIndex: number) => {
-    if (!episodeScrapeUrl) return;
-    setLoadingEpScrape(true);
-    setErrorMsg('');
-
-    try {
-      const res = await fetch('/api/scrape', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: episodeScrapeUrl }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data.success || !data.videoUrl) {
-        throw new Error(data.error || "Impossible d'extraire l'iframe de l'épisode.");
-      }
-
-      updateEpisodeField(sIndex, eIndex, 'embedUrl', data.videoUrl);
-      setMessage(`Iframe extraite pour S${sIndex + 1}E${eIndex + 1} !`);
-      setActiveEpisodeTarget(null);
-      setEpisodeScrapeUrl('');
-    } catch (err: any) {
-      setErrorMsg(err.message);
-    } finally {
-      setLoadingEpScrape(false);
-    }
-  };
-
   const handleEdit = (item: MediaItem) => {
     setEditingId(item.id);
     setTitle(item.title || '');
@@ -288,9 +237,6 @@ export default function AdminPage() {
     setEmbedUrl('');
     setDescription('');
     setGenresInput('');
-    setScrapeTargetUrl('');
-    setActiveEpisodeTarget(null);
-    setEpisodeScrapeUrl('');
     setSeasons([{ seasonNumber: 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '', runtime: 45 }] }]);
   };
 

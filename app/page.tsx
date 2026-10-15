@@ -78,7 +78,6 @@ function Icon({ name, className = 'w-4 h-4' }: { name: IconName; className?: str
 /* Composants d'affichage                                              */
 /* ------------------------------------------------------------------ */
 
-// Clic + touche Entrée/Espace (télécommande TV, clavier)
 const activateProps = (onActivate: () => void) => ({
   role: 'button' as const,
   tabIndex: 0,
@@ -199,14 +198,11 @@ export default function Home() {
   const [watchCount, setWatchCount] = useState(0);
   const [showVipModal, setShowVipModal] = useState(false);
 
-  // UI uniquement
   const [scrolled, setScrolled] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  /* ---------------- Chargement (logique inchangée) ---------------- */
 
   useEffect(() => {
     async function checkUserAndFetch() {
@@ -232,7 +228,6 @@ export default function Home() {
         setIsVip(userIsVip);
         setWatchCount(userWatchCount);
 
-        // Les 3 requêtes partent en même temps (même résultat, plus rapide)
         const [mediaRes, historyRes, bannerRes] = await Promise.all([
           supabase.from('media').select('*').order('created_at', { ascending: false }),
           supabase.from('watch_history').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }),
@@ -278,10 +273,8 @@ export default function Home() {
     checkUserAndFetch();
   }, [router]);
 
-  /* ---------------- Actions (logique inchangée) ---------------- */
-
   const handleMediaClick = (item: MediaItem) => {
-    if (item.id === undefined || item.id === null) return; // bannière par défaut : pas de lien
+    if (item.id === undefined || item.id === null) return;
     if (!isVip && watchCount >= MAX_FREE_LIMIT) {
       setShowVipModal(true);
       return;
@@ -306,8 +299,6 @@ export default function Home() {
     setSearchOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-
-  /* ---------------- Effets UI ---------------- */
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -339,8 +330,6 @@ export default function Home() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  /* ---------------- Données dérivées ---------------- */
-
   const dbGenres = mediaList
     .filter(item => selectedType !== 'all' && item.type === selectedType)
     .flatMap(item => item.genres || []);
@@ -355,7 +344,7 @@ export default function Home() {
       setCurrentIndex(prev => (prev + 1) % carouselItems.length);
     }, 5000);
     return () => clearInterval(interval);
-  }, [carouselItems.length, currentIndex]); // currentIndex : le minuteur repart quand on clique un point
+  }, [carouselItems.length, currentIndex]);
 
   const featured: MediaItem = carouselItems[currentIndex] || {
     id: null,
@@ -382,17 +371,13 @@ export default function Home() {
   const recentSeries = filteredMedia.filter(item => item.type === 'series');
 
   const hasText = (v?: string) => !!v && v.trim() !== '';
-  // Ordinateur / tablette : image paysage (backdrop), sinon l'affiche
   const getHeroImage = (m: MediaItem) => (hasText(m.backdrop) ? m.backdrop! : m.poster);
-  // Mobile (écran vertical) : l'affiche portrait remplit le fond sans être coupée, sinon l'image paysage
   const getMobileHeroImage = (m: MediaItem) => (hasText(m.poster) ? m.poster : m.backdrop || '');
 
   const userLimitReached = !isVip && watchCount >= MAX_FREE_LIMIT;
   const isAdmin = userEmail === ADMIN_EMAIL;
   const isFiltered = !!searchQuery || selectedGenre !== 'all' || selectedType !== 'all';
   const showHero = !searchQuery && selectedType === 'all';
-
-  /* ---------------- Chargement ---------------- */
 
   if (loading) {
     return (
@@ -415,8 +400,6 @@ export default function Home() {
     );
   }
 
-  /* ---------------- Rendu ---------------- */
-
   const navItems: { key: 'all' | 'movie' | 'series'; label: string }[] = [
     { key: 'all', label: 'Accueil' },
     { key: 'movie', label: 'Films' },
@@ -426,7 +409,6 @@ export default function Home() {
   return (
     <main className="min-h-screen max-w-[100vw] overflow-x-hidden bg-[#0a0a0b] pb-28 font-sans text-white antialiased selection:bg-red-600 selection:text-white sm:pb-16">
 
-      {/* ================= Modal VIP ================= */}
       {showVipModal && (
         <div
           className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
@@ -459,7 +441,6 @@ export default function Home() {
                 Débloquez un accès illimité.
               </p>
 
-              {/* Jauge du quota */}
               <div className="mb-6">
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
                   <div
@@ -500,7 +481,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* ================= Header ================= */}
       <header
         className={`fixed inset-x-0 top-0 z-50 transition-colors duration-300 ${
           scrolled || !showHero
@@ -543,7 +523,6 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Recherche */}
             <div
               className={`flex items-center overflow-hidden rounded-full border transition-all duration-300 ${
                 searchOpen || searchQuery
@@ -578,7 +557,6 @@ export default function Home() {
               )}
             </div>
 
-            {/* Badge VIP */}
             {isVip ? (
               <button
                 onClick={() => router.push('/abonnement')}
@@ -597,7 +575,6 @@ export default function Home() {
               </button>
             )}
 
-            {/* Menu profil */}
             <div className="relative" ref={menuRef}>
               <button
                 onClick={() => setMenuOpen(o => !o)}
@@ -657,12 +634,8 @@ export default function Home() {
         </div>
       </header>
 
-      {/* ================= Hero (carrousel) ================= */}
       {showHero ? (
         <section className="relative h-[72svh] min-h-[480px] w-full overflow-hidden bg-zinc-950 sm:h-[78vh] sm:min-h-[440px]">
-          {/* Images en fondu enchaîné :
-              - mobile : affiche portrait (pas de zoom ni de coupure)
-              - tablette / ordinateur : image paysage */}
           {(carouselItems.length > 0 ? carouselItems : [featured]).map((m, i) => {
             const desktopImg = getHeroImage(m);
             const mobileImg = getMobileHeroImage(m);
@@ -676,7 +649,6 @@ export default function Home() {
 
             return (
               <React.Fragment key={String(m.id ?? 'default') + i}>
-                {/* Mobile */}
                 {mobileImg && (
                   <img
                     src={mobileImg}
@@ -687,7 +659,6 @@ export default function Home() {
                     } ${fade}`}
                   />
                 )}
-                {/* Tablette / ordinateur */}
                 {desktopImg && (
                   <img
                     src={desktopImg}
@@ -700,7 +671,6 @@ export default function Home() {
             );
           })}
 
-          {/* Dégradés : sur mobile uniquement par le bas (avant, le dégradé de gauche cachait toute l'image) */}
           <div className="absolute inset-0 hidden bg-gradient-to-r from-[#0a0a0b] via-[#0a0a0b]/60 to-transparent sm:block" />
           <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0b] via-[#0a0a0b]/20 to-black/40 sm:via-transparent sm:to-black/30" />
           <div className="absolute inset-x-0 bottom-0 h-3/5 bg-gradient-to-t from-[#0a0a0b] via-[#0a0a0b]/70 to-transparent sm:hidden" />
@@ -742,7 +712,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Points du carrousel (centrés sur mobile) */}
           {carouselItems.length > 1 && (
             <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1.5 sm:bottom-8 sm:left-auto sm:right-10 sm:translate-x-0">
               {carouselItems.map((m, i) => (
@@ -762,7 +731,6 @@ export default function Home() {
         <div className="h-16" />
       )}
 
-      {/* ================= Barre des genres ================= */}
       {selectedType !== 'all' && (
         <div className="px-4 pt-8 sm:px-10">
           <h1 className="mb-4 text-3xl font-black tracking-tight sm:text-4xl">
@@ -789,7 +757,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* ================= Catalogue ================= */}
       <div className={`relative z-10 space-y-10 px-4 sm:px-10 ${showHero ? '-mt-4 sm:-mt-10' : 'mt-6'}`}>
         {isFiltered ? (
           <section>
@@ -835,7 +802,6 @@ export default function Home() {
           </section>
         ) : (
           <>
-            {/* Reprendre la lecture */}
             {continueWatchingList.length > 0 && (
               <Row title="Reprendre la lecture" icon={<Icon name="play" className="h-4 w-4 text-red-600" />}>
                 {continueWatchingList.map(item => (
@@ -876,7 +842,6 @@ export default function Home() {
               </Row>
             )}
 
-            {/* Bannières thématiques */}
             {customBanners.map(banner => {
               const bannerMedia = mediaList.filter(m =>
                 banner.media_ids &&
@@ -899,7 +864,6 @@ export default function Home() {
                         className="h-full w-full object-cover object-center opacity-40 sm:opacity-30"
                       />
                     )}
-                    {/* Mobile : voile uniforme (le dégradé de gauche cachait l'image) — ordinateur : dégradé latéral */}
                     <div className="absolute inset-0 bg-[#0a0a0b]/55 sm:hidden" />
                     <div className="absolute inset-0 hidden bg-gradient-to-r from-[#0a0a0b] via-[#0a0a0b]/85 to-[#0a0a0b]/40 sm:block" />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0b]/80 to-transparent" />
@@ -925,7 +889,6 @@ export default function Home() {
               );
             })}
 
-            {/* Films récents */}
             <Row title="Films récents" icon={<Icon name="film" className="h-5 w-5 text-zinc-500" />}>
               {recentMovies.length === 0 ? (
                 <p className="py-6 text-sm text-zinc-500">Aucun film pour le moment.</p>
@@ -942,7 +905,6 @@ export default function Home() {
               )}
             </Row>
 
-            {/* Séries récentes */}
             <Row title="Séries récentes" icon={<Icon name="tv" className="h-5 w-5 text-zinc-500" />}>
               {recentSeries.length === 0 ? (
                 <p className="py-6 text-sm text-zinc-500">Aucune série pour le moment.</p>
@@ -962,7 +924,6 @@ export default function Home() {
         )}
       </div>
 
-      {/* ================= Navigation mobile ================= */}
       <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-white/5 bg-[#0a0a0b]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden">
         <div className="flex items-stretch justify-around px-2">
           {([
@@ -987,7 +948,6 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* Animation du texte du hero */}
       <style jsx global>{`
         @keyframes fadeUp {
           from { opacity: 0; transform: translateY(12px); }
