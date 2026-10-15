@@ -116,7 +116,6 @@ export default function AdminPage() {
     setErrorMsg('');
     setMessage('');
 
-    // Paramètres exacts demandés pour l'iframe api.moviez.ac
     const moviezParams = new URLSearchParams({
       autoplay: '1',
       next: '1',
@@ -226,11 +225,12 @@ export default function AdminPage() {
   };
 
   const handleCancel = () => {
+    const currentType = type; // On conserve le type actuel (film ou série)
     setEditingId(null);
     setSelectedTmdbId('');
     setSearchQuery('');
     setTitle('');
-    setType('movie');
+    setType(currentType); // On réapplique le type mémorisé
     setPoster('');
     setBackdrop('');
     setUrl('');
