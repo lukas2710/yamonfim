@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 /* ------------------------------------------------------------------ */
-/* Types & constantes (inchangés)                                      */
+/* Types & constantes                                                  */
 /* ------------------------------------------------------------------ */
 
 interface MediaItem {
@@ -18,11 +18,14 @@ interface MediaItem {
   description: string;
   genres?: string[];
   seasons?: any[];
+  runtime?: number;
   progress?: {
     seasonIdx: number;
     episodeIdx: number;
     seasonNumber: number;
     episodeNumber: number;
+    currentTime?: number;
+    duration?: number;
   };
 }
 
@@ -36,13 +39,13 @@ const ADMIN_EMAIL = 'lukas.leclerc312@gmail.com';
 const MAX_FREE_LIMIT = 5;
 
 /* ------------------------------------------------------------------ */
-/* Icônes SVG (aucune dépendance)                                      */
+/* Icônes SVG                                                          */
 /* ------------------------------------------------------------------ */
 
 type IconName =
   | 'play' | 'info' | 'search' | 'close' | 'home' | 'film' | 'tv'
   | 'request' | 'history' | 'crown' | 'lock' | 'logout' | 'shield'
-  | 'chevronLeft' | 'chevronRight' | 'check' | 'user' | 'flame';
+  | 'chevronLeft' | 'chevronRight' | 'check' | 'user' | 'flame' | 'trash' | 'alert';
 
 const ICONS: Record<IconName, React.ReactNode> = {
   play: <path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5Z" fill="currentColor" stroke="none" />,
@@ -63,6 +66,8 @@ const ICONS: Record<IconName, React.ReactNode> = {
   check: <path d="m5 12.5 4.5 4.5L19 7.5" />,
   user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
   flame: <path d="M12 22c4 0 7-2.8 7-7 0-3.5-2.5-6-4-8-.5 2-1.5 3-3 3 0-3-1-6-4-8 0 4-5 6.5-5 13 0 4.2 3 7 9 7Z" />,
+  trash: <><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /></>,
+  alert: <><circle cx="12" cy="12" r="9" /><path d="M12 8v4m0 4h.01" /></>,
 };
 
 function Icon({ name, className = 'w-4 h-4' }: { name: IconName; className?: string }) {
@@ -193,6 +198,7 @@ export default function Home() {
   const [selectedGenre, setSelectedGenre] = useState<string>('all');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const [isVip, setIsVip] = useState(false);
   const [watchCount, setWatchCount] = useState(0);
@@ -215,6 +221,7 @@ export default function Home() {
 
         const user = session.user;
         setUserEmail(user.email || null);
+        setCurrentUserId(user.id);
 
         const { data: profile } = await supabase
           .from('profiles')
@@ -246,18 +253,29 @@ export default function Home() {
 
           if (historyData && historyData.length > 0) {
             const continueList: MediaItem[] = [];
+            
             historyData.forEach((historyItem) => {
               const foundMedia = mediaData.find((m) => String(m.id) === String(historyItem.media_id));
               if (foundMedia) {
-                continueList.push({
-                  ...foundMedia,
-                  progress: {
-                    seasonIdx: historyItem.season_idx ?? 0,
-                    episodeIdx: historyItem.episode_idx ?? 0,
-                    seasonNumber: historyItem.season_number ?? 1,
-                    episodeNumber: historyItem.episode_number ?? 1,
-                  },
-                });
+                const currentTime = historyItem.current_time || 0;
+                const duration = historyItem.duration || foundMedia.runtime || 0;
+
+                const progressPercent = duration > 0 ? (currentTime / duration) : 0;
+                const isCompleted = progressPercent >= 0.9;
+
+                if (!isCompleted) {
+                  continueList.push({
+                    ...foundMedia,
+                    progress: {
+                      seasonIdx: historyItem.season_idx ?? 0,
+                      episodeIdx: historyItem.episode_idx ?? 0,
+                      seasonNumber: historyItem.season_number ?? 1,
+                      episodeNumber: historyItem.episode_number ?? 1,
+                      currentTime,
+                      duration,
+                    },
+                  });
+                }
               }
             });
             setContinueWatchingList(continueList);
@@ -284,6 +302,25 @@ export default function Home() {
       router.push(`/watch/${item.id}?s=${item.progress.seasonIdx}&e=${item.progress.episodeIdx}`);
     } else {
       router.push(`/watch/${item.id}`);
+    }
+  };
+
+  const handleRemoveFromContinue = async (e: React.MouseEvent, mediaId: any) => {
+    e.stopPropagation();
+    if (!currentUserId) return;
+
+    try {
+      const { error } = await supabase
+        .from('watch_history')
+        .delete()
+        .eq('user_id', currentUserId)
+        .eq('media_id', String(mediaId));
+
+      if (!error) {
+        setContinueWatchingList(prev => prev.filter(item => String(item.id) !== String(mediaId)));
+      }
+    } catch (err) {
+      console.error('Erreur lors de la suppression de l\'historique :', err);
     }
   };
 
@@ -586,7 +623,7 @@ export default function Home() {
               </button>
 
               {menuOpen && (
-                <div className="absolute right-0 mt-2 w-60 overflow-hidden rounded-2xl border border-white/10 bg-[#141416]/95 shadow-2xl backdrop-blur-xl">
+                <div className="absolute right-0 mt-2 w-64 overflow-hidden rounded-2xl border border-white/10 bg-[#141416]/95 shadow-2xl backdrop-blur-xl">
                   <div className="border-b border-white/5 px-4 py-3">
                     <p className="text-[11px] uppercase tracking-wider text-zinc-500">Connecté</p>
                     <p className="truncate text-sm font-medium text-white">{userEmail}</p>
@@ -609,6 +646,12 @@ export default function Home() {
                       className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 transition hover:bg-white/5 hover:text-white"
                     >
                       <Icon name="request" /> Demandes
+                    </button>
+                    <button
+                      onClick={() => router.push('/report')}
+                      className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 transition hover:bg-white/5 hover:text-white"
+                    >
+                      <Icon name="alert" /> Signaler un problème / Idée
                     </button>
                     {isAdmin && (
                       <a
@@ -823,6 +866,14 @@ export default function Home() {
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
 
+                    <button
+                      onClick={(e) => handleRemoveFromContinue(e, item.id)}
+                      aria-label="Supprimer de l'historique"
+                      className="absolute right-2 top-2 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-zinc-300 opacity-0 backdrop-blur-md transition hover:bg-red-600 hover:text-white group-hover:opacity-100"
+                    >
+                      <Icon name="trash" className="h-4 w-4" />
+                    </button>
+
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 transition duration-300 group-hover:opacity-100">
                       <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-black shadow-xl">
                         {userLimitReached ? <Icon name="lock" className="h-5 w-5" /> : <Icon name="play" className="h-5 w-5 translate-x-[1px]" />}
@@ -931,7 +982,7 @@ export default function Home() {
             { label: 'Films', icon: 'film', active: selectedType === 'movie', onClick: () => selectType('movie') },
             { label: 'Séries', icon: 'tv', active: selectedType === 'series', onClick: () => selectType('series') },
             { label: 'Demandes', icon: 'request', active: false, onClick: () => router.push('/requests') },
-            { label: 'Historique', icon: 'history', active: false, onClick: () => router.push('/history') },
+            { label: 'Signal', icon: 'alert', active: false, onClick: () => router.push('/report') },
           ] as { label: string; icon: IconName; active: boolean; onClick: () => void }[]).map(tab => (
             <button
               key={tab.label}

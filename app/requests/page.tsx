@@ -4,10 +4,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
-/* ------------------------------------------------------------------ */
-/* Types & constantes (inchangés)                                      */
-/* ------------------------------------------------------------------ */
-
 interface RequestItem {
   id: string;
   user_email: string;
@@ -18,6 +14,12 @@ interface RequestItem {
   note?: string;
   status: 'en_attente' | 'en_cours' | 'ajoute' | 'refuse';
   created_at: string;
+}
+
+interface MediaItem {
+  id: any;
+  title: string;
+  type: 'movie' | 'series';
 }
 
 interface TmdbResult {
@@ -42,11 +44,6 @@ const STATUS: Record<Status, { label: string; short: string; className: string; 
   refuse: { label: 'Non disponible', short: 'Non dispo', className: 'bg-red-500/10 text-red-300 ring-red-500/30', dot: 'bg-red-400' },
 };
 
-/* ------------------------------------------------------------------ */
-/* Utilitaires d'affichage                                             */
-/* ------------------------------------------------------------------ */
-
-// Masque l'email des autres membres (ex : lu***@gmail.com)
 const maskEmail = (email?: string) => {
   if (!email || !email.includes('@')) return email || 'Visiteur';
   const [name, domain] = email.split('@');
@@ -64,10 +61,6 @@ const timeAgo = (iso: string) => {
 };
 
 const yearOf = (m: TmdbResult) => (m.release_date || m.first_air_date || '').slice(0, 4);
-
-/* ------------------------------------------------------------------ */
-/* Icônes                                                              */
-/* ------------------------------------------------------------------ */
 
 type IconName =
   | 'back' | 'search' | 'film' | 'tv' | 'close' | 'check' | 'alert' | 'send'
@@ -109,9 +102,8 @@ function StatusBadge({ status }: { status: Status }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Page                                                                */
-/* ------------------------------------------------------------------ */
+const normalize = (s: string) =>
+  s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 export default function RequestsPage() {
   const router = useRouter();
@@ -119,8 +111,8 @@ export default function RequestsPage() {
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [requests, setRequests] = useState<RequestItem[]>([]);
+  const [catalogMedia, setCatalogMedia] = useState<MediaItem[]>([]);
 
-  // Formulaire & recherche TMDb
   const [searchQuery, setSearchQuery] = useState('');
   const [type, setType] = useState<'movie' | 'series'>('movie');
   const [tmdbResults, setTmdbResults] = useState<TmdbResult[]>([]);
@@ -135,32 +127,28 @@ export default function RequestsPage() {
   const [msg, setMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Liste
   const [filter, setFilter] = useState<'all' | 'mine' | Status>('all');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  /* ---------------- Chargement (logique inchangée) ---------------- */
+  const fetchData = async () => {
+    const [reqRes, catRes] = await Promise.all([
+      supabase.from('requests').select('*').order('created_at', { ascending: false }),
+      supabase.from('media').select('id, title, type')
+    ]);
 
-  const fetchRequests = async () => {
-    const { data, error } = await supabase
-      .from('requests')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (!error && data) setRequests(data);
+    if (!reqRes.error && reqRes.data) setRequests(reqRes.data);
+    if (!catRes.error && catRes.data) setCatalogMedia(catRes.data);
   };
 
   useEffect(() => {
     async function init() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) setCurrentUser(session.user);
-      await fetchRequests();
+      await fetchData();
       setLoading(false);
     }
     init();
   }, []);
-
-  /* ---------------- Recherche TMDb ---------------- */
 
   useEffect(() => {
     if (!searchQuery.trim() || searchQuery.trim().length < 2) {
@@ -169,7 +157,6 @@ export default function RequestsPage() {
       return;
     }
 
-    // Bug corrigé : une ancienne recherche plus lente ne remplace plus les résultats récents
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       setSearchingTmdb(true);
@@ -198,7 +185,6 @@ export default function RequestsPage() {
     };
   }, [searchQuery, type]);
 
-  // Ferme la liste de suggestions au clic à l'extérieur
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
       if (searchBoxRef.current && !searchBoxRef.current.contains(e.target as Node)) setDropdownOpen(false);
@@ -207,7 +193,6 @@ export default function RequestsPage() {
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
 
-  // Les messages disparaissent tout seuls
   useEffect(() => {
     if (!msg) return;
     const t = setTimeout(() => setMsg(''), 5000);
@@ -237,21 +222,50 @@ export default function RequestsPage() {
     }
   };
 
-  /* ---------------- Doublons (affichage uniquement) ---------------- */
+  // Vérifie si le média est déjà dans le catalogue (base media) ou déjà demandé
+  const duplicateInfo = useMemo(() => {
+    let titleToCheck = '';
+    let tmdbIdToCheck = '';
 
-  const duplicate = useMemo(() => {
-    if (!selectedMedia) return null;
-    return requests.find(
-      r => r.tmdb_id === String(selectedMedia.id) && r.type === type && r.status !== 'refuse'
-    ) || null;
-  }, [selectedMedia, requests, type]);
+    if (selectedMedia) {
+      titleToCheck = selectedMedia.title || selectedMedia.name || '';
+      tmdbIdToCheck = String(selectedMedia.id);
+    } else if (searchQuery.trim()) {
+      titleToCheck = searchQuery.trim();
+    }
 
-  /* ---------------- Envoi (logique inchangée) ---------------- */
+    if (!titleToCheck) return null;
+    const q = normalize(titleToCheck);
+
+    // 1. Vérification dans le catalogue général (table media)
+    const inCatalog = catalogMedia.find(
+      m => m.type === type && normalize(m.title || '') === q
+    );
+    if (inCatalog) {
+      return { type: 'catalog', label: 'déjà présent dans le catalogue' };
+    }
+
+    // 2. Vérification dans les demandes en cours / acceptées
+    const inRequests = requests.find(r => {
+      if (r.type !== type || r.status === 'refuse') return false;
+      if (tmdbIdToCheck && r.tmdb_id === tmdbIdToCheck) return true;
+      return normalize(r.title) === q;
+    });
+
+    if (inRequests) {
+      if (inRequests.status === 'ajoute') {
+        return { type: 'catalog', label: 'déjà ajouté au catalogue' };
+      }
+      return { type: 'request', label: `déjà demandé (${STATUS[inRequests.status].label.toLowerCase()})` };
+    }
+
+    return null;
+  }, [selectedMedia, searchQuery, catalogMedia, requests, type]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedMedia && !searchQuery.trim()) return;
-    if (duplicate || submitting) return;
+    if (duplicateInfo || submitting) return;
 
     setSubmitting(true);
     setMsg('');
@@ -282,28 +296,23 @@ export default function RequestsPage() {
       setSelectedMedia(null);
       setNote('');
       setTmdbResults([]);
-      fetchRequests();
+      fetchData();
     }
     setSubmitting(false);
   };
 
-  /* ---------------- Admin (logique inchangée) ---------------- */
-
   const handleStatusChange = async (id: string, newStatus: string) => {
     const { error } = await supabase.from('requests').update({ status: newStatus }).eq('id', id);
-    if (!error) fetchRequests();
+    if (!error) fetchData();
   };
 
   const handleDelete = async (id: string) => {
     const { error } = await supabase.from('requests').delete().eq('id', id);
     setConfirmDeleteId(null);
-    if (!error) fetchRequests();
+    if (!error) fetchData();
   };
 
   const isAdmin = currentUser?.email === ADMIN_EMAIL;
-
-  /* ---------------- Données dérivées ---------------- */
-
   const isMine = (r: RequestItem) => !!currentUser?.email && r.user_email === currentUser.email;
 
   const counts = useMemo(() => {
@@ -313,7 +322,6 @@ export default function RequestsPage() {
       if (c[r.status] !== undefined) c[r.status]++;
     });
     return c;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requests, currentUser]);
 
   const visibleRequests = requests.filter(r =>
@@ -329,9 +337,7 @@ export default function RequestsPage() {
     { key: 'refuse', label: 'Non dispo', count: counts.refuse },
   ];
 
-  const canSubmit = (!!selectedMedia || searchQuery.trim().length > 0) && !duplicate && !submitting;
-
-  /* ---------------- Chargement ---------------- */
+  const canSubmit = (!!selectedMedia || searchQuery.trim().length > 0) && !duplicateInfo && !submitting;
 
   if (loading) {
     return (
@@ -346,13 +352,10 @@ export default function RequestsPage() {
     );
   }
 
-  /* ---------------- Rendu ---------------- */
-
   return (
     <main className="relative min-h-screen overflow-x-hidden bg-[#0a0a0b] pb-24 font-sans text-white antialiased selection:bg-red-600 selection:text-white">
       <div className="pointer-events-none absolute -top-56 left-1/2 h-[560px] w-[560px] -translate-x-1/2 rounded-full bg-red-600/10 blur-[140px]" />
 
-      {/* ================= Header ================= */}
       <header className="sticky top-0 z-40 border-b border-white/5 bg-[#0a0a0b]/85 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-10">
           <button
@@ -376,8 +379,6 @@ export default function RequestsPage() {
       </header>
 
       <div className="relative mx-auto max-w-5xl space-y-12 px-4 pt-10 sm:px-10">
-
-        {/* ================= Titre ================= */}
         <section>
           <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-red-500">Demandes</p>
           <h1 className="text-3xl font-black tracking-tight sm:text-5xl">Il te manque un film ou une série ?</h1>
@@ -386,7 +387,6 @@ export default function RequestsPage() {
           </p>
         </section>
 
-        {/* ================= Formulaire ================= */}
         <section className="rounded-3xl bg-white/[0.03] p-5 ring-1 ring-white/10 sm:p-8">
           {msg && (
             <div role="status" className="mb-6 flex items-start gap-3 rounded-2xl bg-emerald-500/10 px-4 py-3 ring-1 ring-emerald-500/30">
@@ -402,7 +402,6 @@ export default function RequestsPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Type */}
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">1. Type de contenu</p>
               <div className="grid grid-cols-2 gap-2 sm:inline-grid sm:w-auto">
@@ -430,7 +429,6 @@ export default function RequestsPage() {
               </div>
             </div>
 
-            {/* Recherche */}
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">2. Titre</p>
 
@@ -483,7 +481,11 @@ export default function RequestsPage() {
                   {dropdownOpen && tmdbResults.length > 0 && (
                     <div role="listbox" className="absolute left-0 right-0 top-full z-50 mt-2 max-h-80 overflow-y-auto rounded-2xl border border-white/10 bg-[#141416]/95 p-1.5 shadow-2xl backdrop-blur-xl">
                       {tmdbResults.map((item, i) => {
-                        const already = requests.find(r => r.tmdb_id === String(item.id) && r.type === type && r.status !== 'refuse');
+                        const name = item.title || item.name || '';
+                        const qName = normalize(name);
+                        const inCat = catalogMedia.find(m => m.type === type && normalize(m.title || '') === qName);
+                        const inReq = requests.find(r => r.type === type && r.status !== 'refuse' && (r.tmdb_id === String(item.id) || normalize(r.title) === qName));
+
                         return (
                           <button
                             key={item.id}
@@ -502,10 +504,16 @@ export default function RequestsPage() {
                               )}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-semibold text-white">{item.title || item.name}</p>
+                              <p className="truncate text-sm font-semibold text-white">{name}</p>
                               <p className="text-xs text-zinc-500">{yearOf(item) || 'Année inconnue'}</p>
                             </div>
-                            {already && <StatusBadge status={already.status} />}
+                            {inCat ? (
+                              <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300 ring-1 ring-emerald-500/30">
+                                Dans le catalogue
+                              </span>
+                            ) : inReq ? (
+                              <StatusBadge status={inReq.status} />
+                            ) : null}
                           </button>
                         );
                       })}
@@ -520,20 +528,16 @@ export default function RequestsPage() {
                 </div>
               )}
 
-              {/* Déjà demandé */}
-              {duplicate && (
+              {duplicateInfo && (
                 <div className="mt-3 flex items-start gap-3 rounded-2xl bg-amber-500/10 px-4 py-3 ring-1 ring-amber-500/30">
                   <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
                   <p className="text-sm text-amber-100">
-                    {duplicate.status === 'ajoute'
-                      ? 'Ce titre a déjà été ajouté au catalogue. Cherche-le depuis l\'accueil !'
-                      : <>Ce titre a déjà été demandé et il est <span className="font-semibold">{STATUS[duplicate.status].label.toLowerCase()}</span>. Pas besoin de le redemander.</>}
+                    Ce titre est <span className="font-semibold">{duplicateInfo.label}</span>. Il est impossible de le demander une nouvelle fois.
                   </p>
                 </div>
               )}
             </div>
 
-            {/* Remarque */}
             <div>
               <label htmlFor="note" className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-zinc-400">
                 <span>3. Remarque <span className="normal-case tracking-normal text-zinc-600">(optionnel)</span></span>
@@ -580,7 +584,6 @@ export default function RequestsPage() {
           </form>
         </section>
 
-        {/* ================= Liste ================= */}
         <section>
           <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -591,7 +594,6 @@ export default function RequestsPage() {
             </div>
           </div>
 
-          {/* Filtres */}
           <div className="-mx-4 mb-5 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
             {filterTabs.map(t => (
               <button

@@ -27,8 +27,17 @@ interface MediaItem {
   url: string;
   embedUrl?: string;
   description: string;
+  runtime?: number;
   seasons?: Season[];
   watched?: Record<string, boolean>;
+}
+
+interface CommentItem {
+  id: string;
+  user_id: string;
+  user_email: string;
+  content: string;
+  created_at: string;
 }
 
 type Position = { s: number; e: number };
@@ -45,6 +54,8 @@ const clampIndex = (value: number, length: number) => {
 
 const hasText = (v?: string) => !!v && v.trim() !== '';
 
+const epKey = (s: number, e: number) => `s${s}_e${e}`;
+
 const nextPositionOf = (seasons: Season[] | undefined, pos: Position): Position | null => {
   if (!seasons) return null;
   const season = seasons[pos.s];
@@ -56,9 +67,24 @@ const nextPositionOf = (seasons: Season[] | undefined, pos: Position): Position 
   return null;
 };
 
+const maskEmail = (email?: string) => {
+  if (!email || !email.includes('@')) return email || 'Utilisateur';
+  const [name, domain] = email.split('@');
+  return `${name.slice(0, 2)}***@${domain}`;
+};
+
+const timeAgo = (iso: string) => {
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (!Number.isFinite(diff)) return '';
+  if (diff < 60) return "à l'instant";
+  if (diff < 3600) return `il y a ${Math.floor(diff / 60)} min`;
+  if (diff < 86400) return `il y a ${Math.floor(diff / 3600)} h`;
+  return `il y a ${Math.floor(diff / 86400)} j`;
+};
+
 type IconName =
   | 'play' | 'back' | 'close' | 'next' | 'reload' | 'check' | 'restart'
-  | 'crown' | 'alert' | 'chevronLeft' | 'chevronRight' | 'clock' | 'lock';
+  | 'crown' | 'alert' | 'chevronLeft' | 'chevronRight' | 'clock' | 'lock' | 'eye' | 'send' | 'trash';
 
 const ICONS: Record<IconName, React.ReactNode> = {
   play: <path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5Z" fill="currentColor" stroke="none" />,
@@ -74,6 +100,9 @@ const ICONS: Record<IconName, React.ReactNode> = {
   chevronRight: <path d="m9 18 6-6-6-6" />,
   clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
   lock: <><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></>,
+  eye: <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></>,
+  send: <path d="m22 2-7 20-4-9-9-4Z" />,
+  trash: <><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /></>,
 };
 
 function Icon({ name, className = 'w-4 h-4' }: { name: IconName; className?: string }) {
@@ -116,12 +145,21 @@ export default function WatchPage() {
   const [autoPlayEnabled, setAutoPlayEnabled] = useState(true);
   const [countdown, setCountdown] = useState<number | null>(null);
 
+  // États pour les commentaires
+  const [comments, setComments] = useState<CommentItem[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
   const mediaRef = useRef<MediaItem | null>(null);
   const posRef = useRef<Position>({ s: 0, e: 0 });
   const busyRef = useRef(false);
   const episodeListRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const watchValidationTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const userIdRef = useRef<string | null>(null);
+
+  const currentProgressRef = useRef<{ currentTime: number; duration: number }>({ currentTime: 0, duration: 0 });
 
   useEffect(() => { mediaRef.current = media; }, [media]);
   useEffect(() => { posRef.current = { s: selectedSeasonIdx, e: selectedEpisodeIdx }; }, [selectedSeasonIdx, selectedEpisodeIdx]);
@@ -169,6 +207,68 @@ export default function WatchPage() {
   }, [notice]);
 
   useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      if (e.data && typeof e.data === 'object') {
+        const time = e.data.currentTime || e.data.time;
+        const dur = e.data.duration;
+        if (typeof time === 'number') {
+          currentProgressRef.current.currentTime = time;
+          if (typeof dur === 'number' && dur > 0) {
+            currentProgressRef.current.duration = dur;
+          }
+        }
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  /* ---------------- Chargement des commentaires ---------------- */
+  const fetchComments = async (mediaId: string) => {
+    const { data, error } = await supabase
+      .from('comments')
+      .select('*')
+      .eq('media_id', mediaId)
+      .order('created_at', { ascending: false });
+
+    if (!error && data) {
+      setComments(data);
+    }
+  };
+
+  const handleAddComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newComment.trim() || submittingComment || !currentUser || !id) return;
+
+    setSubmittingComment(true);
+    const { error } = await supabase.from('comments').insert([
+      {
+        media_id: String(id),
+        user_id: currentUser.id,
+        user_email: currentUser.email || 'Utilisateur',
+        content: newComment.trim(),
+      },
+    ]);
+
+    if (!error) {
+      setNewComment('');
+      fetchComments(String(id));
+    } else {
+      setNotice('Erreur lors de l\'envoi du commentaire.');
+    }
+    setSubmittingComment(false);
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    const { error } = await supabase.from('comments').delete().eq('id', commentId);
+    if (!error && id) {
+      fetchComments(String(id));
+    }
+  };
+
+  /* ---------------- Chargement Principal ---------------- */
+
+  useEffect(() => {
     if (!id) return;
     let cancelled = false;
 
@@ -176,6 +276,8 @@ export default function WatchPage() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         const user = session?.user;
+        setCurrentUser(user || null);
+        userIdRef.current = user?.id || null;
 
         const { data: mediaData, error } = await supabase
           .from('media')
@@ -185,7 +287,22 @@ export default function WatchPage() {
 
         if (cancelled || error || !mediaData) return;
 
-        const item = mediaData as MediaItem;
+        // Charger les commentaires de ce média
+        fetchComments(String(id));
+
+        const userWatched: Record<string, boolean> = {};
+        if (user) {
+          const { data: watchedRows, error: watchedError } = await supabase
+            .from('user_watched')
+            .select('ep_key')
+            .eq('user_id', user.id)
+            .eq('media_id', String(mediaData.id));
+          if (watchedError) console.error('Erreur user_watched :', watchedError);
+          (watchedRows || []).forEach((r: any) => { userWatched[r.ep_key] = true; });
+        }
+        if (cancelled) return;
+
+        const item: MediaItem = { ...(mediaData as MediaItem), watched: userWatched };
         setMedia(item);
 
         if (user) {
@@ -258,7 +375,9 @@ export default function WatchPage() {
     return () => clearTimeout(t);
   }, [loading, resumePos]);
 
-  const saveWatchHistory = async (sIdx: number, eIdx: number) => {
+  /* ---------------- Historique & Vus ---------------- */
+
+  const saveWatchHistory = async (sIdx: number, eIdx: number, currentTime = 0, duration = 0) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const current = mediaRef.current;
@@ -266,6 +385,8 @@ export default function WatchPage() {
 
       const user = session.user;
       const currentSeason = current.seasons?.[sIdx];
+      const epRuntime = currentSeason?.episodes?.[eIdx]?.runtime;
+      const defaultDuration = duration || (epRuntime ? epRuntime * 60 : (current.runtime ? current.runtime * 60 : 0));
 
       const payload = {
         user_id: user.id,
@@ -275,6 +396,8 @@ export default function WatchPage() {
         episode_idx: eIdx,
         season_number: currentSeason?.seasonNumber || 1,
         episode_number: currentSeason?.episodes?.[eIdx]?.number || 1,
+        current_time: Math.floor(currentTime),
+        duration: Math.floor(defaultDuration),
         updated_at: new Date().toISOString(),
       };
 
@@ -288,6 +411,74 @@ export default function WatchPage() {
       console.error('Erreur saveWatchHistory:', err);
     }
   };
+
+  const setWatchedKeys = async (keys: string[], value: boolean) => {
+    const current = mediaRef.current;
+    if (!current || keys.length === 0) return;
+
+    const updatedWatched = { ...(current.watched || {}) };
+    keys.forEach(k => { if (value) updatedWatched[k] = true; else delete updatedWatched[k]; });
+    const updatedMedia = { ...current, watched: updatedWatched };
+    mediaRef.current = updatedMedia;
+    setMedia(updatedMedia);
+
+    let uid = userIdRef.current;
+    if (!uid) {
+      const { data: { session } } = await supabase.auth.getSession();
+      uid = session?.user?.id || null;
+      userIdRef.current = uid;
+    }
+    if (!uid) {
+      setNotice('Connecte-toi pour enregistrer tes épisodes vus.');
+      return;
+    }
+
+    const mediaId = String(current.id);
+    const { error } = value
+      ? await supabase.from('user_watched').upsert(
+          keys.map(k => ({ user_id: uid, media_id: mediaId, ep_key: k, watched_at: new Date().toISOString() })),
+          { onConflict: 'user_id,media_id,ep_key' }
+        )
+      : await supabase.from('user_watched').delete()
+          .eq('user_id', uid).eq('media_id', mediaId).in('ep_key', keys);
+
+    if (error) console.error('Erreur user_watched :', error);
+  };
+
+  const markAsWatched = async (key: string) => {
+    if (mediaRef.current?.watched?.[key]) return;
+    await setWatchedKeys([key], true);
+  };
+
+  const toggleEpisodeWatched = (sIdx: number, eIdx: number) => {
+    const key = epKey(sIdx, eIdx);
+    setWatchedKeys([key], !mediaRef.current?.watched?.[key]);
+  };
+
+  const setSeasonWatched = (sIdx: number, value: boolean) => {
+    const season = mediaRef.current?.seasons?.[sIdx];
+    if (!season) return;
+    setWatchedKeys(season.episodes.map((_, eIdx) => epKey(sIdx, eIdx)), value);
+    setNotice(value ? `Saison ${season.seasonNumber} marquée comme vue` : `Saison ${season.seasonNumber} décochée`);
+  };
+
+  const markUpTo = (sIdx: number, eIdx: number) => {
+    const seasons = mediaRef.current?.seasons || [];
+    const keys: string[] = [];
+    seasons.forEach((season, s) => {
+      season.episodes.forEach((_, e) => {
+        if (s < sIdx || (s === sIdx && e <= eIdx)) keys.push(epKey(s, e));
+      });
+    });
+    setWatchedKeys(keys, true);
+    setNotice(`Épisodes marqués comme vus jusqu'à S${seasons[sIdx]?.seasonNumber ?? sIdx + 1} · É${seasons[sIdx]?.episodes?.[eIdx]?.number ?? eIdx + 1}`);
+  };
+
+  const toggleMovieWatched = () => {
+    setWatchedKeys(['movie_main'], !mediaRef.current?.watched?.movie_main);
+  };
+
+  /* ---------------- Lecture ---------------- */
 
   const checkAndIncrementWatch = async (): Promise<boolean> => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -335,27 +526,12 @@ export default function WatchPage() {
     }
 
     const current = mediaRef.current;
-    if (current?.type === 'series') markAsWatched(`s${sIdx}_e${eIdx}`);
+    if (current?.type === 'series') markAsWatched(epKey(sIdx, eIdx));
     else markAsWatched('movie_main');
 
-    await saveWatchHistory(sIdx, eIdx);
-  };
-
-  const markAsWatched = async (key: string) => {
-    const current = mediaRef.current;
-    if (!current) return;
-    const currentWatched = current.watched || {};
-    if (currentWatched[key]) return;
-
-    const updatedWatched = { ...currentWatched, [key]: true };
-    const updatedMedia = { ...current, watched: updatedWatched };
-    mediaRef.current = updatedMedia;
-    setMedia(updatedMedia);
-
-    await supabase
-      .from('media')
-      .update({ watched: updatedWatched })
-      .eq('id', current.id);
+    const currTime = currentProgressRef.current.currentTime;
+    const currDur = currentProgressRef.current.duration;
+    await saveWatchHistory(sIdx, eIdx, currTime, currDur);
   };
 
   const startPlaying = async (sIdx = selectedSeasonIdx, eIdx = selectedEpisodeIdx) => {
@@ -365,6 +541,10 @@ export default function WatchPage() {
     try {
       const canPlay = await checkAndIncrementWatch();
       if (!canPlay) return;
+
+      if (sIdx !== selectedSeasonIdx) setSelectedSeasonIdx(sIdx);
+      if (eIdx !== selectedEpisodeIdx) setSelectedEpisodeIdx(eIdx);
+      posRef.current = { s: sIdx, e: eIdx };
 
       if (watchValidationTimerRef.current) clearTimeout(watchValidationTimerRef.current);
       setCountdown(null);
@@ -394,6 +574,9 @@ export default function WatchPage() {
     const current = mediaRef.current;
     if (!current || current.type !== 'series' || !current.seasons || busyRef.current) return;
 
+    markAsWatched(epKey(posRef.current.s, posRef.current.e));
+    saveWatchHistory(posRef.current.s, posRef.current.e, currentProgressRef.current.currentTime, currentProgressRef.current.duration);
+
     setCountdown(null);
     const from = posRef.current;
     const next = nextPositionOf(current.seasons, from);
@@ -413,6 +596,8 @@ export default function WatchPage() {
       setSelectedEpisodeIdx(next.e);
       posRef.current = next;
       setResumePos(next);
+
+      currentProgressRef.current = { currentTime: 0, duration: 0 };
 
       setPlayerKey(prev => prev + 1);
       setShowAdPopup(false);
@@ -435,6 +620,9 @@ export default function WatchPage() {
   const closePlayer = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
     if (watchValidationTimerRef.current) clearTimeout(watchValidationTimerRef.current);
+
+    saveWatchHistory(posRef.current.s, posRef.current.e, currentProgressRef.current.currentTime, currentProgressRef.current.duration);
+
     setIsPlaying(false);
     setShowAdPopup(true);
     setCountdown(null);
@@ -442,14 +630,15 @@ export default function WatchPage() {
 
   const handleLaunchClick = () => {
     setShowAdPopup(false);
+    const { s, e } = posRef.current;
 
     if (watchValidationTimerRef.current) clearTimeout(watchValidationTimerRef.current);
     watchValidationTimerRef.current = setTimeout(() => {
-      performValidatedWatchAction(selectedSeasonIdx, selectedEpisodeIdx);
+      performValidatedWatchAction(s, e);
     }, 60000);
 
     if (media?.type === 'series' && autoPlayEnabled) {
-      scheduleNextEpisodeTimer(selectedSeasonIdx, selectedEpisodeIdx);
+      scheduleNextEpisodeTimer(s, e);
     }
   };
 
@@ -472,7 +661,7 @@ export default function WatchPage() {
     setSelectedSeasonIdx(0);
     setSelectedEpisodeIdx(0);
     setResumePos({ s: 0, e: 0 });
-    saveWatchHistory(0, 0);
+    saveWatchHistory(0, 0, 0, 0);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -510,7 +699,6 @@ export default function WatchPage() {
       }
     }
 
-    // Gestion des séries (inchangée)
     if (!rawUrl) return '';
     let clean = rawUrl.trim();
 
@@ -542,6 +730,8 @@ export default function WatchPage() {
     }
   };
 
+  /* ---------------- États de chargement ---------------- */
+
   if (loading) {
     return (
       <main className="min-h-screen bg-[#0a0a0b] text-white">
@@ -550,8 +740,6 @@ export default function WatchPage() {
           <div className="h-5 w-24 rounded-full bg-zinc-800 animate-pulse" />
           <div className="h-12 w-2/3 max-w-lg rounded-xl bg-zinc-800 animate-pulse" />
           <div className="h-4 w-full max-w-2xl rounded bg-zinc-900 animate-pulse" />
-          <div className="h-4 w-4/5 max-w-xl rounded bg-zinc-900 animate-pulse" />
-          <div className="h-12 w-40 rounded-full bg-zinc-800 animate-pulse" />
         </div>
       </main>
     );
@@ -561,7 +749,7 @@ export default function WatchPage() {
     return (
       <main className="min-h-screen bg-[#0a0a0b] text-white flex flex-col items-center justify-center gap-5 p-6 text-center">
         <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-white/10 flex items-center justify-center text-zinc-500">
-          <Icon className="w-7 h-7" name="alert"/>
+          <Icon className="w-7 h-7" name="alert" />
         </div>
         <div className="space-y-1">
           <h1 className="text-lg font-bold">Média introuvable</h1>
@@ -571,17 +759,16 @@ export default function WatchPage() {
           onClick={() => router.push('/')}
           className="inline-flex items-center gap-2 bg-white text-black hover:bg-zinc-200 px-5 py-2.5 rounded-full text-sm font-semibold transition cursor-pointer"
         >
-          <Icon name="back"/> Retour à l'accueil
+          <Icon name="back" /> Retour à l'accueil
         </button>
       </main>
     );
   }
 
   const isSeries = media.type === 'series' && !!media.seasons && media.seasons.length > 0;
-  const currentKey = media.type === 'movie' ? 'movie_main' : `s${selectedSeasonIdx}_e${selectedEpisodeIdx}`;
-
   const currentSeason = media.seasons?.[selectedSeasonIdx] || media.seasons?.[0];
   const currentEpisode = currentSeason?.episodes?.[selectedEpisodeIdx] || currentSeason?.episodes?.[0];
+  const w = media.watched || {};
 
   const currentEmbedRaw = isSeries
     ? currentEpisode?.embedUrl || media.embedUrl || media.url || ''
@@ -597,22 +784,33 @@ export default function WatchPage() {
   const hasNext = !!nextPos;
   const episodesCount = currentSeason?.episodes?.length || 0;
 
+  const totalEpisodes = isSeries ? media.seasons!.reduce((n, s) => n + s.episodes.length, 0) : 0;
+  const seenEpisodes = isSeries
+    ? media.seasons!.reduce((n, s, sIdx) => n + s.episodes.filter((_, eIdx) => !!w[epKey(sIdx, eIdx)]).length, 0)
+    : 0;
+  const seriesDone = isSeries && totalEpisodes > 0 && seenEpisodes === totalEpisodes;
+  const seasonSeen = (sIdx: number) =>
+    (media.seasons?.[sIdx]?.episodes || []).filter((_, eIdx) => !!w[epKey(sIdx, eIdx)]).length;
+  const currentSeasonSeen = seasonSeen(selectedSeasonIdx);
+  const currentSeasonDone = episodesCount > 0 && currentSeasonSeen === episodesCount;
+  const movieSeen = !!w.movie_main;
+
   const isResumeSelection =
     !!resumePos && resumePos.s === selectedSeasonIdx && resumePos.e === selectedEpisodeIdx;
-  const resumeSeason = resumePos ? media.seasons?.[resumePos.s] : null;
-  const resumeEpisode = resumePos ? resumeSeason?.episodes?.[resumePos.e] : null;
   const showRestart = !!resumePos && (resumePos.s !== 0 || resumePos.e !== 0);
 
   const playLabel = isSeries
     ? `${isResumeSelection ? 'Reprendre' : 'Lecture'} S${currentSeason?.seasonNumber || 1} · É${currentEpisode?.number || 1}`
     : hasMovieHistory ? 'Reprendre' : 'Regarder';
 
+  const isAdmin = currentUser?.email === ADMIN_EMAIL;
+
   return (
     <main className="min-h-screen bg-[#0a0a0b] text-white font-sans pb-24 antialiased selection:bg-red-600 selection:text-white">
       {notice && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[80] px-4 w-full max-w-sm pointer-events-none">
           <div className="flex items-center gap-3 bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-2xl px-4 py-3 shadow-2xl">
-            <span className="text-red-500"><Icon name="play"/></span>
+            <span className="text-emerald-400"><Icon name="check" /></span>
             <p className="text-sm text-zinc-200">{notice}</p>
           </div>
         </div>
@@ -624,26 +822,12 @@ export default function WatchPage() {
             <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-amber-500/15 to-transparent pointer-events-none" />
             <div className="relative p-8 text-center">
               <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-zinc-950 flex items-center justify-center mx-auto mb-5 shadow-lg shadow-amber-500/30">
-                <Icon className="w-7 h-7" name="crown"/>
+                <Icon className="w-7 h-7" name="crown" />
               </div>
               <h3 className="text-xl font-bold tracking-tight mb-2">Passe au VIP</h3>
               <p className="text-sm text-zinc-400 leading-relaxed mb-6">
                 Tu as utilisé tes <span className="text-white font-semibold">{MAX_FREE_LIMIT} visions gratuites</span> (films ou épisodes).
-                {isSeries && resumeEpisode && (
-                  <> Ta progression est sauvegardée : tu reprendras à l'<span className="text-white">épisode {resumeEpisode.number}</span>.</>
-                )}
               </p>
-
-              <ul className="text-left space-y-2.5 mb-7">
-                {['Visionnage illimité', 'Épisodes enchaînés sans limite', 'Accès immédiat'].map(item => (
-                  <li key={item} className="flex items-center gap-3 text-sm text-zinc-300">
-                    <span className="w-5 h-5 rounded-full bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0">
-                      <Icon className="w-3 h-3" name="check"/>
-                    </span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
 
               <button
                 onClick={() => router.push('/abonnement')}
@@ -668,7 +852,7 @@ export default function WatchPage() {
             onClick={() => router.push('/')}
             className="group inline-flex items-center gap-2 text-sm font-medium text-zinc-200 hover:text-white bg-white/5 hover:bg-white/10 backdrop-blur-md border border-white/10 pl-3 pr-4 py-2 rounded-full transition cursor-pointer"
           >
-            <Icon className="w-4 h-4 transition group-hover:-translate-x-0.5" name="back"/>
+            <Icon className="w-4 h-4 transition group-hover:-translate-x-0.5" name="back" />
             Retour
           </button>
           <span className="font-black text-lg tracking-[0.2em] text-red-600 select-none">
@@ -683,7 +867,7 @@ export default function WatchPage() {
             <div className="flex-1 flex items-center justify-center p-4 bg-[radial-gradient(ellipse_at_center,rgba(220,38,38,0.12),transparent_60%)]">
               <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#111113] p-8 text-center shadow-2xl">
                 <div className="w-14 h-14 rounded-2xl bg-red-600/10 border border-red-500/20 text-red-500 flex items-center justify-center mx-auto mb-5">
-                  <Icon className="w-6 h-6" name="alert"/>
+                  <Icon className="w-6 h-6" name="alert" />
                 </div>
                 <h3 className="text-lg font-bold tracking-tight mb-2">Prêt à lancer la vidéo</h3>
                 <p className="text-sm text-zinc-400 leading-relaxed mb-7">
@@ -694,7 +878,7 @@ export default function WatchPage() {
                   onClick={handleLaunchClick}
                   className="w-full inline-flex items-center justify-center gap-2 bg-red-600 hover:bg-red-500 text-white font-semibold py-3.5 rounded-full text-sm transition shadow-lg shadow-red-600/30 cursor-pointer active:scale-[0.98]"
                 >
-                  <Icon className="w-4 h-4" name="play"/> Lancer la vidéo
+                  <Icon className="w-4 h-4" name="play" /> Lancer la vidéo
                 </button>
                 <button
                   onClick={closePlayer}
@@ -714,7 +898,7 @@ export default function WatchPage() {
                       aria-label="Fermer le lecteur"
                       className="w-9 h-9 shrink-0 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition cursor-pointer"
                     >
-                      <Icon name="back"/>
+                      <Icon name="back" />
                     </button>
                     <div className="min-w-0">
                       <p className="text-sm font-semibold truncate">{media.title}</p>
@@ -732,9 +916,8 @@ export default function WatchPage() {
                       <button
                         onClick={() => router.push('/abonnement')}
                         className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1.5 text-[11px] font-bold text-amber-400 ring-1 ring-amber-500/30 transition hover:bg-amber-500/20 cursor-pointer"
-                        title="Visions gratuites restantes"
                       >
-                        <Icon className="w-3.5 h-3.5" name="crown"/>
+                        <Icon className="w-3.5 h-3.5" name="crown" />
                         {remainingFree} restante{remainingFree > 1 ? 's' : ''}
                       </button>
                     )}
@@ -745,7 +928,6 @@ export default function WatchPage() {
                         role="switch"
                         aria-checked={autoPlayEnabled}
                         className="inline-flex items-center gap-2 rounded-full bg-white/5 border border-white/10 pl-1.5 pr-3 py-1 text-[11px] font-semibold text-zinc-300 transition hover:bg-white/10 cursor-pointer"
-                        title="Enchaîner automatiquement les épisodes"
                       >
                         <span className={`relative h-4 w-7 rounded-full transition ${autoPlayEnabled ? 'bg-red-600' : 'bg-zinc-700'}`}>
                           <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all ${autoPlayEnabled ? 'left-3.5' : 'left-0.5'}`} />
@@ -760,7 +942,7 @@ export default function WatchPage() {
                       aria-label="Recharger le lecteur"
                       className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-zinc-300 hover:text-white transition cursor-pointer"
                     >
-                      <Icon name="reload"/>
+                      <Icon name="reload" />
                     </button>
 
                     {isSeries && (
@@ -769,7 +951,7 @@ export default function WatchPage() {
                         disabled={!hasNext || isStarting}
                         className="hidden sm:inline-flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-zinc-100 px-4 py-2 rounded-full text-xs font-semibold transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                       >
-                        Suivant <Icon className="w-3.5 h-3.5" name="next"/>
+                        Suivant <Icon className="w-3.5 h-3.5" name="next" />
                       </button>
                     )}
 
@@ -777,7 +959,7 @@ export default function WatchPage() {
                       onClick={closePlayer}
                       className="inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-full text-xs font-semibold transition cursor-pointer"
                     >
-                      <Icon className="w-3.5 h-3.5" name="close"/> Fermer
+                      <Icon className="w-3.5 h-3.5" name="close" /> Fermer
                     </button>
                   </div>
                 </div>
@@ -807,7 +989,7 @@ export default function WatchPage() {
                     </>
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-zinc-500">
-                      <Icon className="w-6 h-6" name="alert"/>
+                      <Icon className="w-6 h-6" name="alert" />
                       <span className="text-sm">Aucun flux vidéo disponible.</span>
                     </div>
                   )}
@@ -851,7 +1033,7 @@ export default function WatchPage() {
                                 onClick={() => goToNextEpisode(false)}
                                 className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full bg-white py-2 text-xs font-bold text-black transition hover:bg-zinc-200 cursor-pointer"
                               >
-                                <Icon className="w-3.5 h-3.5" name="play"/> Lancer maintenant
+                                <Icon className="w-3.5 h-3.5" name="play" /> Lancer maintenant
                               </button>
                               <button
                                 onClick={() => setCountdown(null)}
@@ -872,6 +1054,7 @@ export default function WatchPage() {
         </div>
       )}
 
+      {/* ================= Hero ================= */}
       <section className="relative w-full">
         <div className="relative h-[72svh] min-h-[480px] sm:h-[70vh] sm:min-h-[460px] w-full overflow-hidden">
           {mobileBg && (
@@ -890,6 +1073,7 @@ export default function WatchPage() {
           )}
           <div className="absolute inset-0 hidden sm:block bg-gradient-to-r from-[#0a0a0b] via-[#0a0a0b]/70 to-transparent" />
           <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0b] via-[#0a0a0b]/30 to-black/40" />
+          <div className="absolute inset-x-0 bottom-0 h-3/5 bg-gradient-to-t from-[#0a0a0b] via-[#0a0a0b]/70 to-transparent sm:hidden" />
         </div>
 
         <div className="absolute inset-x-0 bottom-0">
@@ -903,6 +1087,22 @@ export default function WatchPage() {
             )}
 
             <div className="flex-1 min-w-0 space-y-4 text-center sm:text-left">
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                <span className="text-[11px] uppercase tracking-wider font-semibold text-white bg-red-600 px-2.5 py-1 rounded-md">
+                  {media.type === 'movie' ? 'Film' : 'Série'}
+                </span>
+                {isSeries && (
+                  <span className="text-[11px] uppercase tracking-wider font-semibold text-zinc-300 bg-white/10 backdrop-blur px-2.5 py-1 rounded-md">
+                    {media.seasons!.length} saison{media.seasons!.length > 1 ? 's' : ''}
+                  </span>
+                )}
+                {(seriesDone || (!isSeries && movieSeen)) && (
+                  <span className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-500/25 px-2.5 py-1 rounded-md">
+                    <Icon className="w-3 h-3" name="check" /> {isSeries ? 'Terminée' : 'Vu'}
+                  </span>
+                )}
+              </div>
+
               <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-[1.05] drop-shadow-lg">
                 {media.title}
               </h1>
@@ -913,13 +1113,27 @@ export default function WatchPage() {
                 </p>
               )}
 
+              {isSeries && totalEpisodes > 0 && (
+                <div className="mx-auto sm:mx-0 flex max-w-sm items-center gap-3">
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/15">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${seriesDone ? 'bg-emerald-500' : 'bg-red-600'}`}
+                      style={{ width: `${(seenEpisodes / totalEpisodes) * 100}%` }}
+                    />
+                  </div>
+                  <span className="shrink-0 text-xs font-medium tabular-nums text-zinc-300">
+                    {seenEpisodes} / {totalEpisodes} vus
+                  </span>
+                </div>
+              )}
+
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 pt-1">
                 <button
                   onClick={() => startPlaying(selectedSeasonIdx, selectedEpisodeIdx)}
                   disabled={isStarting}
                   className="inline-flex items-center gap-2.5 bg-white hover:bg-zinc-200 text-black font-bold py-3.5 pl-6 pr-7 rounded-full text-sm transition shadow-xl shadow-black/40 cursor-pointer active:scale-[0.97] disabled:opacity-60 disabled:cursor-wait"
                 >
-                  <Icon className="w-5 h-5" name="play"/>
+                  <Icon className="w-5 h-5" name="play" />
                   {playLabel}
                 </button>
 
@@ -928,7 +1142,20 @@ export default function WatchPage() {
                     onClick={restartFromBeginning}
                     className="inline-flex items-center gap-2 rounded-full bg-white/10 px-5 py-3.5 text-sm font-semibold text-white ring-1 ring-white/15 backdrop-blur transition hover:bg-white/15 cursor-pointer"
                   >
-                    <Icon name="restart"/> Depuis le début
+                    <Icon name="restart" /> Depuis le début
+                  </button>
+                )}
+
+                {!isSeries && (
+                  <button
+                    onClick={toggleMovieWatched}
+                    className={`inline-flex items-center gap-2 rounded-full px-5 py-3.5 text-sm font-semibold ring-1 backdrop-blur transition cursor-pointer ${
+                      movieSeen
+                        ? 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30 hover:bg-emerald-500/25'
+                        : 'bg-white/10 text-white ring-white/15 hover:bg-white/15'
+                    }`}
+                  >
+                    <Icon name="check" /> {movieSeen ? 'Vu' : 'Marquer comme vu'}
                   </button>
                 )}
               </div>
@@ -937,21 +1164,36 @@ export default function WatchPage() {
         </div>
       </section>
 
+      {/* ================= Épisodes ================= */}
       {isSeries && currentSeason && (
-        <section className="max-w-7xl mx-auto px-4 sm:px-12 mt-6 space-y-6">
+        <section className="max-w-7xl mx-auto px-4 sm:px-12 mt-12 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div>
               <h2 className="text-xl font-bold tracking-tight">Épisodes</h2>
               <p className="text-sm text-zinc-500 mt-0.5">
-                Saison {currentSeason.seasonNumber} · {episodesCount} épisode{episodesCount > 1 ? 's' : ''}
+                Saison {currentSeason.seasonNumber} · {currentSeasonSeen} / {episodesCount} vu{currentSeasonSeen > 1 ? 's' : ''}
               </p>
             </div>
+
+            <button
+              onClick={() => setSeasonWatched(selectedSeasonIdx, !currentSeasonDone)}
+              className={`inline-flex items-center gap-2 self-start rounded-full px-4 py-2 text-xs font-semibold ring-1 transition cursor-pointer sm:self-auto ${
+                currentSeasonDone
+                  ? 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30 hover:bg-emerald-500/25'
+                  : 'bg-white/5 text-zinc-200 ring-white/10 hover:bg-white/10'
+              }`}
+            >
+              <Icon name="check" className="w-3.5 h-3.5" />
+              {currentSeasonDone ? `Saison ${currentSeason.seasonNumber} vue` : `Marquer la saison ${currentSeason.seasonNumber} comme vue`}
+            </button>
           </div>
 
           {media.seasons!.length > 1 && (
             <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {media.seasons!.map((season, sIdx) => {
                 const isSelected = selectedSeasonIdx === sIdx;
+                const seen = seasonSeen(sIdx);
+                const done = season.episodes.length > 0 && seen === season.episodes.length;
                 return (
                   <button
                     key={sIdx}
@@ -959,13 +1201,19 @@ export default function WatchPage() {
                       setSelectedSeasonIdx(sIdx);
                       setSelectedEpisodeIdx(0);
                     }}
-                    className={`shrink-0 px-5 py-2 rounded-full text-sm font-semibold transition cursor-pointer ${
+                    className={`inline-flex shrink-0 items-center gap-1.5 px-5 py-2 rounded-full text-sm font-semibold transition cursor-pointer ${
                       isSelected
                         ? 'bg-white text-black'
                         : 'bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10 border border-white/10'
                     }`}
                   >
+                    {done && <Icon name="check" className={`w-3.5 h-3.5 ${isSelected ? 'text-emerald-600' : 'text-emerald-400'}`} />}
                     Saison {season.seasonNumber}
+                    {!done && seen > 0 && (
+                      <span className={`text-[11px] tabular-nums ${isSelected ? 'text-zinc-500' : 'text-zinc-500'}`}>
+                        {seen}/{season.episodes.length}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -975,18 +1223,29 @@ export default function WatchPage() {
           <div ref={episodeListRef} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {currentSeason.episodes.map((ep, eIdx) => {
               const isSelected = eIdx === selectedEpisodeIdx;
+              const isWatched = !!w[epKey(selectedSeasonIdx, eIdx)];
+              const isResume = resumePos?.s === selectedSeasonIdx && resumePos?.e === eIdx;
               const thumb = ep.still_path || currentSeason.poster_path || media.poster;
+              const canMarkUpTo = !isWatched && (eIdx > 0 || selectedSeasonIdx > 0);
 
               return (
-                <button
+                <div
                   key={eIdx}
                   data-ep={`${selectedSeasonIdx}-${eIdx}`}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => selectEpisode(eIdx)}
                   onDoubleClick={() => startPlaying(selectedSeasonIdx, eIdx)}
-                  className={`group text-left flex gap-4 p-3 rounded-2xl border transition cursor-pointer scroll-mt-24 ${
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') startPlaying(selectedSeasonIdx, eIdx);
+                    else if (e.key === ' ') { e.preventDefault(); selectEpisode(eIdx); }
+                  }}
+                  className={`group relative flex gap-4 p-3 rounded-2xl border transition cursor-pointer scroll-mt-24 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-600 ${
                     isSelected
                       ? 'bg-red-600/10 border-red-600/50 ring-1 ring-red-600/30'
-                      : 'bg-white/[0.03] border-white/5 hover:bg-white/[0.06] hover:border-white/15'
+                      : isWatched
+                        ? 'bg-emerald-500/[0.04] border-emerald-500/15 hover:border-emerald-500/30'
+                        : 'bg-white/[0.03] border-white/5 hover:bg-white/[0.06] hover:border-white/15'
                   }`}
                 >
                   <div className="relative w-32 sm:w-36 shrink-0 aspect-video rounded-xl overflow-hidden bg-zinc-900">
@@ -995,32 +1254,145 @@ export default function WatchPage() {
                         src={thumb}
                         alt=""
                         loading="lazy"
-                        className="w-full h-full object-cover transition duration-300 group-hover:scale-105"
+                        className={`w-full h-full object-cover transition duration-300 group-hover:scale-105 ${isWatched && !isSelected ? 'opacity-50' : ''}`}
                       />
                     )}
+                    <button
+                      onClick={e => { e.stopPropagation(); startPlaying(selectedSeasonIdx, eIdx); }}
+                      aria-label={`Lire l'épisode ${ep.number}`}
+                      className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition group-hover:opacity-100 focus:opacity-100"
+                    >
+                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-black">
+                        <Icon name="play" className="h-4 w-4 translate-x-[1px]" />
+                      </span>
+                    </button>
+                    {isResume && !isWatched && (
+                      <span className="absolute left-1.5 top-1.5 rounded-md bg-red-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider shadow">
+                        En cours
+                      </span>
+                    )}
+                    {isWatched && (
+                      <span className="absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded-md bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider shadow">
+                        <Icon name="check" className="h-3 w-3" /> Vu
+                      </span>
+                    )}
+                    {isSelected && <span className="absolute bottom-0 inset-x-0 h-1 bg-red-600" />}
                   </div>
 
-                  <div className="min-w-0 py-1 space-y-1">
-                    <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1 py-1 space-y-1 pr-8">
+                    <div className="flex items-center gap-2">
                       <p className={`text-[11px] font-semibold uppercase tracking-wider ${isSelected ? 'text-red-500' : 'text-zinc-500'}`}>
                         {isSelected ? 'Sélectionné' : `Épisode ${ep.number}`}
                       </p>
-                      {ep.runtime && ep.runtime > 0 && (
-                        <p className="text-[11px] text-zinc-400 font-medium">
-                          {ep.runtime} min
-                        </p>
-                      )}
+                      {ep.runtime && ep.runtime > 0 ? (
+                        <p className="text-[11px] text-zinc-500">· {ep.runtime} min</p>
+                      ) : null}
                     </div>
-                    <p className="text-sm font-semibold text-white line-clamp-2 leading-snug">
+                    <p className={`text-sm font-semibold line-clamp-2 leading-snug ${isWatched && !isSelected ? 'text-zinc-400' : 'text-white'}`}>
                       {isSelected ? `${ep.number}. ` : ''}{ep.title || `Épisode ${ep.number}`}
                     </p>
+                    {canMarkUpTo && (
+                      <button
+                        onClick={e => { e.stopPropagation(); markUpTo(selectedSeasonIdx, eIdx); }}
+                        className="text-[11px] font-medium text-zinc-500 opacity-0 transition hover:text-white group-hover:opacity-100 focus:opacity-100"
+                      >
+                        Tout marquer vu jusqu'ici
+                      </button>
+                    )}
                   </div>
-                </button>
+
+                  <button
+                    onClick={e => { e.stopPropagation(); toggleEpisodeWatched(selectedSeasonIdx, eIdx); }}
+                    aria-label={isWatched ? 'Marquer comme non vu' : 'Marquer comme vu'}
+                    aria-pressed={isWatched}
+                    title={isWatched ? 'Marquer comme non vu' : 'Marquer comme vu'}
+                    className={`absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full ring-2 transition ${
+                      isWatched
+                        ? 'bg-emerald-500 text-white ring-emerald-500 hover:bg-emerald-400'
+                        : 'text-transparent ring-white/20 hover:text-white/50 hover:ring-white/40'
+                    }`}
+                  >
+                    <Icon name="check" className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               );
             })}
           </div>
         </section>
       )}
+
+      {/* ================= Espace Commentaires ================= */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-12 mt-16 space-y-8 border-t border-white/5 pt-12">
+        <div>
+          <h2 className="text-2xl font-black tracking-tight">Commentaires ({comments.length})</h2>
+          <p className="text-sm text-zinc-400 mt-1">Donne ton avis ou discute de ce contenu avec la communauté.</p>
+        </div>
+
+        {currentUser ? (
+          <form onSubmit={handleAddComment} className="rounded-3xl bg-white/[0.03] p-4 sm:p-6 ring-1 ring-white/10 space-y-4">
+            <textarea
+              required
+              rows={3}
+              placeholder="Écris ton commentaire..."
+              value={newComment}
+              onChange={e => setNewComment(e.target.value)}
+              className="w-full rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-white outline-none focus:border-red-600 resize-none"
+            />
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={submittingComment}
+                className="inline-flex items-center gap-2 rounded-full bg-red-600 hover:bg-red-500 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-red-600/25 transition cursor-pointer disabled:opacity-50"
+              >
+                <Icon name="send" className="w-4 h-4" />
+                {submittingComment ? 'Publication...' : 'Publier le commentaire'}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="rounded-3xl border border-dashed border-white/10 p-6 text-center">
+            <p className="text-sm text-zinc-400">Connecte-toi pour laisser un commentaire.</p>
+          </div>
+        )}
+
+        <div className="space-y-4">
+          {comments.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-white/10 py-12 text-center text-sm text-zinc-500">
+              Aucun commentaire pour le moment. Sois le premier à donner ton avis !
+            </div>
+          ) : (
+            comments.map(comment => {
+              const isAuthor = currentUser?.id === comment.user_id;
+              return (
+                <div key={comment.id} className="rounded-2xl bg-white/[0.02] p-4 sm:p-5 ring-1 ring-white/10 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-red-600/20 text-xs font-bold text-red-400 uppercase">
+                        {comment.user_email[0]}
+                      </span>
+                      <span className="text-xs font-semibold text-zinc-300">
+                        {maskEmail(comment.user_email)}
+                      </span>
+                      <span className="text-[11px] text-zinc-500">· {timeAgo(comment.created_at)}</span>
+                    </div>
+
+                    {(isAuthor || isAdmin) && (
+                      <button
+                        onClick={() => handleDeleteComment(comment.id)}
+                        aria-label="Supprimer le commentaire"
+                        className="rounded-full bg-white/5 p-2 text-zinc-400 hover:bg-red-600 hover:text-white transition cursor-pointer"
+                      >
+                        <Icon name="trash" className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-sm text-zinc-200 leading-relaxed pl-9 whitespace-pre-wrap">{comment.content}</p>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </section>
     </main>
   );
 }

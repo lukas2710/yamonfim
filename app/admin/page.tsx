@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
@@ -29,14 +29,68 @@ interface MediaItem {
   description: string;
   genres?: string[];
   seasons?: Season[];
+  created_at?: string;
 }
+
+const ADMIN_EMAIL = 'lukas.leclerc312@gmail.com';
+const TMDB_KEY = 'af281c5089038e174e83c576ff765be9';
+
+const EMPTY_SEASONS: Season[] = [
+  { seasonNumber: 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '', runtime: 45 }] },
+];
+
+type IconName =
+  | 'search' | 'film' | 'tv' | 'plus' | 'edit' | 'trash' | 'close' | 'check'
+  | 'alert' | 'back' | 'image' | 'chevron' | 'layers' | 'save' | 'sparkles';
+
+const ICONS: Record<IconName, React.ReactNode> = {
+  search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></>,
+  film: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M7 4v16M17 4v16M3 9h4m10 0h4M3 15h4m10 0h4" /></>,
+  tv: <><rect x="3" y="6" width="18" height="13" rx="2" /><path d="m8 2 4 4 4-4" /></>,
+  plus: <path d="M12 5v14M5 12h14" />,
+  edit: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></>,
+  trash: <><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /></>,
+  close: <path d="M18 6 6 18M6 6l12 12" />,
+  check: <path d="m5 12.5 4.5 4.5L19 7.5" />,
+  alert: <><circle cx="12" cy="12" r="9" /><path d="M12 8v4m0 4h.01" /></>,
+  back: <path d="M19 12H5m6-7-7 7 7 7" />,
+  image: <><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-5-5L5 21" /></>,
+  chevron: <path d="m6 9 6 6 6-6" />,
+  layers: <><path d="m12 2 10 5-10 5L2 7l10-5Z" /><path d="m2 17 10 5 10-5M2 12l10 5 10-5" /></>,
+  save: <><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" /><path d="M17 21v-8H7v8M7 3v5h8" /></>,
+  sparkles: <path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3ZM19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15Z" />,
+};
+
+function Icon({ name, className = 'w-4 h-4' }: { name: IconName; className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      {ICONS[name]}
+    </svg>
+  );
+}
+
+const inputClass =
+  'w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 text-sm text-white outline-none transition placeholder:text-zinc-600 focus:border-red-600/70 focus:ring-4 focus:ring-red-600/15';
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 flex items-baseline justify-between gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+        {label}
+        {hint && <span className="font-normal normal-case tracking-normal text-zinc-600">{hint}</span>}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+const episodeCount = (seasons?: Season[] | null) =>
+  (seasons || []).reduce((n, s) => n + (s.episodes?.length || 0), 0);
 
 export default function AdminPage() {
   const router = useRouter();
   const [loadingAuth, setLoadingAuth] = useState(true);
-
-  const ADMIN_EMAIL = 'lukas.leclerc312@gmail.com';
-  const TMDB_KEY = 'af281c5089038e174e83c576ff765be9';
 
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [editingId, setEditingId] = useState<any>(null);
@@ -44,6 +98,7 @@ export default function AdminPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [tmdbSearchResults, setTmdbSearchResults] = useState<any[]>([]);
   const [selectedTmdbId, setSelectedTmdbId] = useState('');
+  const [searchingTmdb, setSearchingTmdb] = useState(false);
 
   const [title, setTitle] = useState('');
   const [type, setType] = useState<'movie' | 'series'>('movie');
@@ -54,13 +109,19 @@ export default function AdminPage() {
   const [description, setDescription] = useState('');
   const [genresInput, setGenresInput] = useState('');
 
-  const [seasons, setSeasons] = useState<Season[]>([
-    { seasonNumber: 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '', runtime: 45 }] }
-  ]);
+  const [seasons, setSeasons] = useState<Season[]>(EMPTY_SEASONS);
+  const [openSeason, setOpenSeason] = useState<number | null>(0);
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+
+  const [libraryQuery, setLibraryQuery] = useState('');
+  const [libraryType, setLibraryType] = useState<'all' | 'movie' | 'series'>('all');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<any>(null);
+
+  const formRef = useRef<HTMLDivElement>(null);
+  const tmdbTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     async function checkAdmin() {
@@ -81,27 +142,52 @@ export default function AdminPage() {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (!error && data) {
-      setMediaList(data);
-    }
+    if (!error && data) setMediaList(data);
   };
 
-  const handleSearchTmdbByName = async (query: string) => {
+  useEffect(() => {
+    if (!message) return;
+    const t = setTimeout(() => setMessage(''), 5000);
+    return () => clearTimeout(t);
+  }, [message]);
+
+  const handleSearchTmdbByName = (query: string) => {
     setSearchQuery(query);
-    if (query.length < 2) {
+    if (tmdbTimer.current) clearTimeout(tmdbTimer.current);
+    if (query.trim().length < 2) {
       setTmdbSearchResults([]);
+      setSearchingTmdb(false);
       return;
     }
 
+    tmdbTimer.current = setTimeout(async () => {
+      setSearchingTmdb(true);
+      try {
+        const endpoint = type === 'movie' ? 'movie' : 'tv';
+        const res = await fetch(
+          `https://api.themoviedb.org/3/search/${endpoint}?api_key=${TMDB_KEY}&query=${encodeURIComponent(query.trim())}&language=fr-FR`
+        );
+        const data = await res.json();
+        setTmdbSearchResults(data.results || []);
+      } catch {
+        setTmdbSearchResults([]);
+      } finally {
+        setSearchingTmdb(false);
+      }
+    }, 300);
+  };
+
+  // Vérification si le flux moviez.ac signale le titre comme indisponible
+  const checkUrlAvailable = async (testUrl: string): Promise<boolean> => {
     try {
-      const endpoint = type === 'movie' ? 'movie' : 'tv';
-      const res = await fetch(
-        `https://api.themoviedb.org/3/search/${endpoint}?api_key=${TMDB_KEY}&query=${encodeURIComponent(query)}&language=fr-FR`
-      );
-      const data = await res.json();
-      setTmdbSearchResults(data.results || []);
+      const res = await fetch(testUrl);
+      const text = await res.text();
+      if (text.includes("n'est pas encore disponible") || text.includes("pas encore disponible")) {
+        return false;
+      }
+      return true;
     } catch {
-      setTmdbSearchResults([]);
+      return true; // En cas de blocage CORS, on laisse passer le contrôle
     }
   };
 
@@ -150,13 +236,28 @@ export default function AdminPage() {
         }
 
         if (type === 'movie') {
-          const iframeCode = `<iframe src="https://api.moviez.ac/${tmdbId}?${moviezParams}" width="100%" height="100%" frameborder="0" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" referrerpolicy="origin" allowfullscreen></iframe>`;
-          setUrl(iframeCode);
-          setEmbedUrl(iframeCode);
+          const streamUrl = `https://api.moviez.ac/${tmdbId}?${moviezParams}`;
+          const isAvailable = await checkUrlAvailable(streamUrl);
+
+          if (!isAvailable) {
+            setErrorMsg(`⚠️ Le film "${item.title}" n'est pas encore disponible sur le lecteur externe.`);
+            setUrl('');
+            setEmbedUrl('');
+          } else {
+            const iframeCode = `<iframe src="${streamUrl}" width="100%" height="100%" frameborder="0" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" referrerpolicy="origin" allowfullscreen></iframe>`;
+            setUrl(iframeCode);
+            setEmbedUrl(iframeCode);
+            setMessage('Informations TMDb récupérées et lecteur vérifié avec succès !');
+          }
         }
 
         if (type === 'series' && data.number_of_seasons) {
           const fetchedSeasons: Season[] = [];
+          let firstEpAvailable = true;
+
+          // Test du premier épisode pour vérifier la disponibilité de la série
+          const testSeriesUrl = `https://api.moviez.ac/serie/${tmdbId}/1/1?autoplay=1&next=1&color=e8213f&info=title,year,rating,duration,synopsis`;
+          firstEpAvailable = await checkUrlAvailable(testSeriesUrl);
 
           for (let sNum = 1; sNum <= data.number_of_seasons; sNum++) {
             try {
@@ -166,8 +267,8 @@ export default function AdminPage() {
               const seasonData = await seasonRes.json();
 
               if (seasonData && seasonData.episodes) {
-                const seasonPoster = seasonData.poster_path 
-                  ? `https://image.tmdb.org/t/p/w500${seasonData.poster_path}` 
+                const seasonPoster = seasonData.poster_path
+                  ? `https://image.tmdb.org/t/p/w500${seasonData.poster_path}`
                   : mainPoster;
 
                 const episodesList = seasonData.episodes.map((ep: any) => {
@@ -177,7 +278,9 @@ export default function AdminPage() {
                     color: 'e8213f',
                     info: 'title,year,rating,duration,synopsis'
                   }).toString();
-                  const autoEmbed = `https://api.moviez.ac/serie/${tmdbId}/${sNum}/${ep.episode_number}?${seriesParams}`;
+                  const autoEmbed = firstEpAvailable
+                    ? `https://api.moviez.ac/serie/${tmdbId}/${sNum}/${ep.episode_number}?${seriesParams}`
+                    : '';
 
                   return {
                     number: ep.episode_number,
@@ -201,16 +304,21 @@ export default function AdminPage() {
 
           if (fetchedSeasons.length > 0) {
             setSeasons(fetchedSeasons);
+            setOpenSeason(0);
+          }
+
+          if (!firstEpAvailable) {
+            setErrorMsg(`⚠️ La série "${item.name}" n'est pas encore disponible sur le lecteur externe.`);
+          } else {
+            setMessage('Informations TMDb récupérées et épisodes générés avec succès !');
           }
         }
-
-        setMessage('Informations TMDb et liens Embed générés avec succès !');
       } else {
-        setErrorMsg("Impossible de récupérer les détails TMDb.");
+        setErrorMsg('Impossible de récupérer les détails TMDb.');
       }
     } catch (err) {
       console.error(err);
-      setErrorMsg("Erreur lors de la récupération TMDb.");
+      setErrorMsg('Erreur lors de la récupération TMDb.');
     }
     setLoading(false);
   };
@@ -225,8 +333,11 @@ export default function AdminPage() {
     setEmbedUrl(item.embedUrl || '');
     setDescription(item.description || '');
     setGenresInput(item.genres ? item.genres.join(', ') : '');
-    setSeasons(item.seasons || [{ seasonNumber: 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '', runtime: 45 }] }]);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setSeasons(item.seasons && item.seasons.length ? item.seasons : EMPTY_SEASONS);
+    setOpenSeason(0);
+    setErrorMsg('');
+    setMessage('');
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const handleCancel = () => {
@@ -234,6 +345,7 @@ export default function AdminPage() {
     setEditingId(null);
     setSelectedTmdbId('');
     setSearchQuery('');
+    setTmdbSearchResults([]);
     setTitle('');
     setType(currentType);
     setPoster('');
@@ -242,34 +354,35 @@ export default function AdminPage() {
     setEmbedUrl('');
     setDescription('');
     setGenresInput('');
-    setSeasons([{ seasonNumber: 1, episodes: [{ number: 1, title: 'Épisode 1', embedUrl: '', runtime: 45 }] }]);
+    setSeasons(EMPTY_SEASONS);
+    setOpenSeason(0);
   };
 
   const handleDelete = async (id: any) => {
-    if (!confirm('Voulez-vous vraiment supprimer ce média ?')) return;
-
     const { error } = await supabase.from('media').delete().eq('id', id);
+    setConfirmDeleteId(null);
     if (error) {
       setErrorMsg(`Erreur suppression : ${error.message}`);
     } else {
-      setMessage('Média supprimé avec succès.');
+      setMessage('Média supprimé.');
+      if (editingId === id) handleCancel();
       fetchMedia();
     }
   };
 
   const updateEpisodeField = (seasonIndex: number, epIndex: number, field: keyof Episode, value: any) => {
-    setSeasons(prev => {
-      const updated = [...prev];
-      updated[seasonIndex].episodes[epIndex] = {
-        ...updated[seasonIndex].episodes[epIndex],
-        [field]: value
-      };
-      return updated;
-    });
+    setSeasons(prev =>
+      prev.map((s, si) =>
+        si !== seasonIndex
+          ? s
+          : { ...s, episodes: s.episodes.map((ep, ei) => (ei !== epIndex ? ep : { ...ep, [field]: value })) }
+      )
+    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
     setMessage('');
     setErrorMsg('');
@@ -295,7 +408,7 @@ export default function AdminPage() {
       if (error) {
         setErrorMsg(`Erreur modification : ${error.message}`);
       } else {
-        setMessage('Média modifié avec succès !');
+        setMessage(`« ${title} » a été mis à jour.`);
         handleCancel();
         fetchMedia();
       }
@@ -311,7 +424,7 @@ export default function AdminPage() {
             .eq('tmdb_id', selectedTmdbId);
         }
 
-        setMessage('Média ajouté avec succès au catalogue !');
+        setMessage(`« ${title} » a été ajouté au catalogue.`);
         handleCancel();
         fetchMedia();
       }
@@ -319,233 +432,500 @@ export default function AdminPage() {
     setLoading(false);
   };
 
+  const normalize = (s: string) =>
+    s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+  const filteredLibrary = useMemo(() => {
+    const q = normalize(libraryQuery.trim());
+    return mediaList.filter(m => {
+      if (libraryType !== 'all' && m.type !== libraryType) return false;
+      if (!q) return true;
+      return (
+        normalize(m.title || '').includes(q) ||
+        (m.genres || []).some(g => normalize(g).includes(q))
+      );
+    });
+  }, [mediaList, libraryQuery, libraryType]);
+
+  const counts = useMemo(() => ({
+    all: mediaList.length,
+    movie: mediaList.filter(m => m.type === 'movie').length,
+    series: mediaList.filter(m => m.type === 'series').length,
+  }), [mediaList]);
+
+  const duplicate = useMemo(() => {
+    if (editingId !== null || !title.trim()) return null;
+    const t = normalize(title.trim());
+    return mediaList.find(m => m.type === type && normalize(m.title || '') === t) || null;
+  }, [title, type, mediaList, editingId]);
+
   if (loadingAuth) {
-    return <div className="min-h-screen bg-[#141414] text-white flex items-center justify-center text-sm">Vérification des accès...</div>;
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#0a0a0b] text-white">
+        <div className="flex items-center gap-3 text-sm text-zinc-400">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-red-600" />
+          Vérification des accès…
+        </div>
+      </main>
+    );
   }
 
-  return (
-    <main className="min-h-screen bg-[#141414] text-white p-6 md:p-12 font-sans pb-32">
-      <header className="flex justify-between items-center mb-8 pb-4 border-b border-zinc-800">
-        <span className="font-black text-xl tracking-wider text-red-600">
-          YAMON<span className="text-white">FIM</span> <span className="text-xs text-zinc-400 font-normal">/ Admin</span>
-        </span>
+  const isEditing = editingId !== null && editingId !== undefined;
+  const totalEpisodes = episodeCount(seasons);
 
-        <div className="flex items-center gap-3">
-          <a href="/admin/banners" className="text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-3 py-2 rounded-lg text-white transition">
-            Gérer les Bannières
-          </a>
-          <a href="/" className="text-xs bg-zinc-900 border border-zinc-800 px-3 py-2 rounded-lg hover:text-red-500 transition">
-            Retour au site
-          </a>
+  return (
+    <main className="min-h-screen bg-[#0a0a0b] pb-24 font-sans text-white antialiased selection:bg-red-600 selection:text-white">
+      <header className="sticky top-0 z-40 border-b border-white/5 bg-[#0a0a0b]/85 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-8">
+          <div className="flex items-center gap-3">
+            <span className="select-none text-lg font-black tracking-[0.2em] text-red-600">
+              YAMON<span className="text-white">FIM</span>
+            </span>
+            <span className="rounded-full bg-red-600/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-red-300 ring-1 ring-red-500/30">
+              Admin
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <a
+              href="/admin/banners"
+              className="hidden items-center gap-2 rounded-full bg-white/5 px-4 py-2 text-sm font-medium text-zinc-200 ring-1 ring-white/10 transition hover:bg-white/10 hover:text-white sm:inline-flex"
+            >
+              <Icon name="layers" /> Bannières
+            </a>
+            <a
+              href="/"
+              className="inline-flex items-center gap-2 rounded-full bg-white/5 py-2 pl-3 pr-4 text-sm font-medium text-zinc-200 ring-1 ring-white/10 transition hover:bg-white/10 hover:text-white"
+            >
+              <Icon name="back" /> Site
+            </a>
+          </div>
         </div>
       </header>
 
-      <div className="max-w-2xl mx-auto bg-zinc-900/60 border border-zinc-800 rounded-2xl p-6 md:p-8 shadow-xl mb-12">
-        <h1 className="text-xl font-bold mb-6">
-          {editingId !== null ? 'Modifier le média' : 'Ajouter un film ou une série'}
-        </h1>
-
-        {message && <div className="bg-green-600/20 border border-green-500/40 text-green-400 text-xs p-3 rounded-lg mb-4">{message}</div>}
-        {errorMsg && <div className="bg-red-600/20 border border-red-500/40 text-red-400 text-xs p-3 rounded-lg mb-4">{errorMsg}</div>}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-zinc-400 mb-1">Type</label>
-            <select
-              value={type}
-              onChange={(e) => {
-                setType(e.target.value as 'movie' | 'series');
-                setSearchQuery('');
-                setTmdbSearchResults([]);
-              }}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
-            >
-              <option value="movie">Film</option>
-              <option value="series">Série</option>
-            </select>
+      <div className="pointer-events-none fixed inset-x-0 top-20 z-50 flex flex-col items-center gap-2 px-4">
+        {message && (
+          <div role="status" className="pointer-events-auto flex w-full max-w-md items-start gap-3 rounded-2xl bg-[#111113]/95 px-4 py-3 shadow-2xl ring-1 ring-emerald-500/30 backdrop-blur-xl">
+            <Icon name="check" className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+            <p className="flex-1 text-sm text-emerald-100">{message}</p>
+            <button onClick={() => setMessage('')} className="text-zinc-500 hover:text-white"><Icon name="close" className="h-3.5 w-3.5" /></button>
           </div>
-
-          <div className="border border-zinc-800 bg-zinc-950/40 p-4 rounded-xl space-y-3 relative">
-            <label className="block text-xs font-semibold text-red-500 uppercase tracking-wider">Rechercher sur TMDb (Remplit tout & Génère le code)</label>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => handleSearchTmdbByName(e.target.value)}
-              placeholder="Tape le nom d'un film ou d'une série..."
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
-            />
-            {tmdbSearchResults.length > 0 && (
-              <ul className="absolute z-20 left-4 right-4 bg-zinc-900 border border-zinc-800 rounded-xl mt-1 max-h-60 overflow-y-auto shadow-2xl">
-                {tmdbSearchResults.map((item) => (
-                  <li
-                    key={item.id}
-                    onClick={() => handleSelectTmdbItem(item)}
-                    className="p-3 hover:bg-zinc-800 cursor-pointer text-xs flex items-center gap-3 border-b border-zinc-800/60 transition"
-                  >
-                    {item.poster_path ? (
-                      <img src={`https://image.tmdb.org/t/p/w92${item.poster_path}`} alt="" className="w-8 h-12 object-cover rounded" />
-                    ) : (
-                      <div className="w-8 h-12 bg-zinc-800 rounded" />
-                    )}
-                    <div>
-                      <div className="font-bold text-white">{item.title || item.name}</div>
-                      <div className="text-zinc-400 text-[10px]">
-                        {item.release_date?.slice(0, 4) || item.first_air_date?.slice(0, 4) || 'Année inconnue'}
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+        )}
+        {errorMsg && (
+          <div role="alert" className="pointer-events-auto flex w-full max-w-md items-start gap-3 rounded-2xl bg-[#111113]/95 px-4 py-3 shadow-2xl ring-1 ring-red-500/40 backdrop-blur-xl">
+            <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+            <p className="flex-1 text-sm text-red-200">{errorMsg}</p>
+            <button onClick={() => setErrorMsg('')} className="text-zinc-500 hover:text-white"><Icon name="close" className="h-3.5 w-3.5" /></button>
           </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-zinc-400 mb-1">Titre</label>
-            <input
-              type="text"
-              required
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-zinc-400 mb-1">Catégories / Genres</label>
-            <input
-              type="text"
-              value={genresInput}
-              onChange={(e) => setGenresInput(e.target.value)}
-              placeholder="ex: Action, Drame, Science-Fiction"
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-zinc-400 mb-1">Affiche (Poster Portrait)</label>
-            <input
-              type="text"
-              value={poster}
-              onChange={(e) => setPoster(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-zinc-400 mb-1">Bandeau (Backdrop Paysage)</label>
-            <input
-              type="text"
-              value={backdrop}
-              onChange={(e) => setBackdrop(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
-            />
-          </div>
-
-          {type === 'movie' && (
-            <div>
-              <label className="block text-xs font-semibold text-zinc-400 mb-1">Code Iframe / Lien du film</label>
-              <textarea
-                rows={3}
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder='<iframe src="https://api.moviez.ac/..." ...></iframe>'
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600 font-mono resize-none"
-              />
-            </div>
-          )}
-
-          {type === 'series' && (
-            <div className="border border-zinc-800 bg-zinc-950/60 p-4 rounded-xl space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-red-500">
-                Saisons & Épisodes ({seasons.length} saisons)
-              </h3>
-              <div className="max-h-80 overflow-y-auto space-y-3 pr-2">
-                {seasons.map((season, sIndex) => (
-                  <div key={sIndex} className="bg-zinc-900 p-3 rounded-lg border border-zinc-800 space-y-2">
-                    <span className="text-xs font-bold text-white">Saison {season.seasonNumber}</span>
-                    <div className="space-y-2">
-                      {season.episodes.map((ep, eIndex) => (
-                        <div key={eIndex} className="bg-zinc-950 p-2 rounded-lg border border-zinc-800 space-y-2 text-xs">
-                          <div className="flex gap-2 items-center">
-                            <span className="text-zinc-500 w-10">E{ep.number}</span>
-                            <input
-                              type="text"
-                              value={ep.title}
-                              onChange={(e) => updateEpisodeField(sIndex, eIndex, 'title', e.target.value)}
-                              className="bg-zinc-900 border border-zinc-800 rounded p-1 text-white w-1/3 text-xs"
-                            />
-                            <input
-                              type="text"
-                              placeholder="Lien Embed de l'épisode"
-                              value={ep.embedUrl}
-                              onChange={(e) => updateEpisodeField(sIndex, eIndex, 'embedUrl', e.target.value)}
-                              className="bg-zinc-900 border border-zinc-800 rounded p-1 text-white flex-1 text-xs"
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div>
-            <label className="block text-xs font-semibold text-zinc-400 mb-1">Description</label>
-            <textarea
-              rows={3}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600 resize-none"
-            />
-          </div>
-
-          <div className="flex gap-3 pt-2">
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 bg-red-600 hover:bg-red-500 font-bold py-3 rounded-lg text-xs transition cursor-pointer shadow-lg shadow-red-600/20"
-            >
-              {loading ? 'Enregistrement...' : editingId !== null ? 'Mettre à jour' : 'Ajouter au catalogue'}
-            </button>
-            {editingId !== null && (
-              <button
-                type="button"
-                onClick={handleCancel}
-                className="bg-zinc-800 hover:bg-zinc-700 font-bold py-3 px-5 rounded-lg text-xs transition cursor-pointer"
-              >
-                Annuler
-              </button>
-            )}
-          </div>
-        </form>
+        )}
       </div>
 
-      <div className="max-w-4xl mx-auto">
-        <h2 className="text-lg font-bold mb-4">Gérer les médias existants ({mediaList.length})</h2>
-        <div className="space-y-3">
-          {mediaList.map((item) => (
-            <div key={item.id} className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-4 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3 overflow-hidden">
-                <div className="w-10 h-14 bg-zinc-800 shrink-0 rounded overflow-hidden">
-                  {item.poster ? <img src={item.poster} alt={item.title} className="w-full h-full object-cover" /> : null}
-                </div>
-                <div className="truncate">
-                  <h3 className="font-bold text-sm text-white truncate">{item.title}</h3>
-                  <span className="text-[10px] uppercase text-zinc-400 bg-zinc-800 px-2 py-0.5 rounded">{item.type}</span>
-                </div>
+      <div className="mx-auto max-w-7xl px-4 pt-8 sm:px-8">
+        <section className="mb-8 grid grid-cols-3 gap-3 sm:gap-4">
+          {[
+            { label: 'Total', value: counts.all, icon: 'layers' as IconName },
+            { label: 'Films', value: counts.movie, icon: 'film' as IconName },
+            { label: 'Séries', value: counts.series, icon: 'tv' as IconName },
+          ].map(s => (
+            <div key={s.label} className="rounded-2xl bg-white/[0.03] p-4 ring-1 ring-white/10 sm:p-5">
+              <div className="flex items-center justify-between text-zinc-500">
+                <span className="text-xs font-semibold uppercase tracking-wider">{s.label}</span>
+                <Icon name={s.icon} className="h-4 w-4" />
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button onClick={() => handleEdit(item)} className="bg-zinc-800 hover:bg-zinc-700 text-xs px-3 py-1.5 rounded-lg transition cursor-pointer">
-                  Modifier
-                </button>
-                <button onClick={() => handleDelete(item.id)} className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 text-xs px-3 py-1.5 rounded-lg transition cursor-pointer">
-                  Supprimer
-                </button>
-              </div>
+              <p className="mt-2 text-2xl font-black tabular-nums sm:text-3xl">{s.value}</p>
             </div>
           ))}
+        </section>
+
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:items-start">
+          <section ref={formRef} className="scroll-mt-24 rounded-3xl bg-white/[0.03] ring-1 ring-white/10">
+            <div className="flex items-center justify-between gap-3 border-b border-white/5 px-5 py-4 sm:px-6">
+              <div>
+                <h1 className="text-lg font-bold tracking-tight">
+                  {isEditing ? 'Modifier le média' : 'Ajouter un film ou une série'}
+                </h1>
+                {isEditing && <p className="mt-0.5 truncate text-sm text-zinc-500">{title}</p>}
+              </div>
+              {isEditing && (
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-zinc-200 transition hover:bg-white/15"
+                >
+                  <Icon name="close" className="h-3.5 w-3.5" /> Annuler
+                </button>
+              )}
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-6 p-5 sm:p-6">
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { key: 'movie', label: 'Film', icon: 'film' },
+                  { key: 'series', label: 'Série', icon: 'tv' },
+                ] as const).map(t => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => {
+                      setType(t.key);
+                      setSearchQuery('');
+                      setTmdbSearchResults([]);
+                    }}
+                    className={`flex items-center justify-center gap-2 rounded-2xl py-3 text-sm font-semibold transition ${
+                      type === t.key
+                        ? 'bg-white text-black shadow'
+                        : 'bg-white/5 text-zinc-400 ring-1 ring-white/10 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    <Icon name={t.icon} /> {t.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative rounded-2xl bg-red-600/[0.06] p-4 ring-1 ring-red-500/20">
+                <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-red-400">
+                  <Icon name="sparkles" className="h-3.5 w-3.5" /> Remplir automatiquement depuis TMDb
+                </p>
+                <div className="relative">
+                  <Icon name="search" className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={e => handleSearchTmdbByName(e.target.value)}
+                    placeholder={type === 'movie' ? 'Nom du film…' : 'Nom de la série…'}
+                    className={`${inputClass} pl-10 pr-10`}
+                  />
+                  {(searchingTmdb || loading) && (
+                    <span className="absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+                  )}
+                </div>
+
+                {tmdbSearchResults.length > 0 && (
+                  <ul className="absolute left-4 right-4 z-30 mt-2 max-h-80 overflow-y-auto rounded-2xl border border-white/10 bg-[#141416]/95 p-1.5 shadow-2xl backdrop-blur-xl">
+                    {tmdbSearchResults.map(item => {
+                      const name = item.title || item.name;
+                      const already = mediaList.find(
+                        m => m.type === type && normalize(m.title || '') === normalize(name || '')
+                      );
+                      return (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            onClick={() => handleSelectTmdbItem(item)}
+                            className="flex w-full items-center gap-3 rounded-xl p-2 text-left transition hover:bg-white/5"
+                          >
+                            <div className="h-14 w-10 shrink-0 overflow-hidden rounded-lg bg-zinc-800">
+                              {item.poster_path && (
+                                <img src={`https://image.tmdb.org/t/p/w92${item.poster_path}`} alt="" className="h-full w-full object-cover" />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-semibold">{name}</p>
+                              <p className="text-xs text-zinc-500">
+                                {item.release_date?.slice(0, 4) || item.first_air_date?.slice(0, 4) || 'Année inconnue'}
+                              </p>
+                            </div>
+                            {already && (
+                              <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-300 ring-1 ring-amber-500/30">
+                                Déjà ajouté
+                              </span>
+                            )}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+
+              {(poster || backdrop) && (
+                <div className="relative overflow-hidden rounded-2xl ring-1 ring-white/10">
+                  {backdrop && <img src={backdrop} alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" />}
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#0a0a0b] via-[#0a0a0b]/80 to-transparent" />
+                  <div className="relative flex items-center gap-4 p-4">
+                    <div className="h-28 w-20 shrink-0 overflow-hidden rounded-xl bg-zinc-900 ring-1 ring-white/10">
+                      {poster && <img src={poster} alt="" className="h-full w-full object-cover" />}
+                    </div>
+                    <div className="min-w-0">
+                      <span className="rounded-md bg-red-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+                        {type === 'movie' ? 'Film' : 'Série'}
+                      </span>
+                      <p className="mt-1.5 line-clamp-2 text-base font-bold leading-snug">{title || 'Sans titre'}</p>
+                      {type === 'series' && (
+                        <p className="mt-0.5 text-xs text-zinc-400">
+                          {seasons.length} saison{seasons.length > 1 ? 's' : ''} · {totalEpisodes} épisode{totalEpisodes > 1 ? 's' : ''}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {duplicate && (
+                <div className="flex items-start gap-3 rounded-2xl bg-amber-500/10 px-4 py-3 ring-1 ring-amber-500/30">
+                  <Icon name="alert" className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                  <p className="flex-1 text-sm text-amber-100">
+                    « {duplicate.title} » est déjà dans ton catalogue.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleEdit(duplicate)}
+                    className="shrink-0 text-xs font-semibold text-amber-300 underline underline-offset-2"
+                  >
+                    Le modifier
+                  </button>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <Field label="Titre">
+                  <input type="text" required value={title} onChange={e => setTitle(e.target.value)} className={inputClass} />
+                </Field>
+
+                <Field label="Genres" hint="séparés par des virgules">
+                  <input
+                    type="text"
+                    value={genresInput}
+                    onChange={e => setGenresInput(e.target.value)}
+                    placeholder="Action, Drame, Science-Fiction"
+                    className={inputClass}
+                  />
+                </Field>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Affiche" hint="portrait">
+                    <input type="text" value={poster} onChange={e => setPoster(e.target.value)} placeholder="https://…" className={inputClass} />
+                  </Field>
+                  <Field label="Bandeau" hint="paysage">
+                    <input type="text" value={backdrop} onChange={e => setBackdrop(e.target.value)} placeholder="https://…" className={inputClass} />
+                  </Field>
+                </div>
+
+                <Field label="Description">
+                  <textarea
+                    rows={3}
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
+                    className={`${inputClass} resize-none`}
+                  />
+                </Field>
+
+                {type === 'movie' && (
+                  <Field label="Lecteur du film" hint="code iframe ou lien">
+                    <textarea
+                      rows={3}
+                      value={url}
+                      onChange={e => setUrl(e.target.value)}
+                      placeholder='<iframe src="…"></iframe>'
+                      className={`${inputClass} resize-none font-mono text-xs`}
+                    />
+                  </Field>
+                )}
+              </div>
+
+              {type === 'series' && (
+                <div>
+                  <p className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                    <span>Saisons & épisodes</span>
+                    <span className="font-normal normal-case tracking-normal text-zinc-600">
+                      {seasons.length} saison{seasons.length > 1 ? 's' : ''} · {totalEpisodes} épisode{totalEpisodes > 1 ? 's' : ''}
+                    </span>
+                  </p>
+                  <div className="space-y-2">
+                    {seasons.map((season, sIndex) => {
+                      const open = openSeason === sIndex;
+                      const missing = season.episodes.filter(ep => !ep.embedUrl?.trim()).length;
+                      return (
+                        <div key={sIndex} className="overflow-hidden rounded-2xl bg-black/20 ring-1 ring-white/10">
+                          <button
+                            type="button"
+                            onClick={() => setOpenSeason(open ? null : sIndex)}
+                            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-white/[0.03]"
+                          >
+                            <span className="text-sm font-semibold">Saison {season.seasonNumber}</span>
+                            <span className="flex items-center gap-2 text-xs text-zinc-500">
+                              {missing > 0 && (
+                                <span className="rounded-full bg-red-600/15 px-2 py-0.5 font-semibold text-red-300">
+                                  {missing} sans lien
+                                </span>
+                              )}
+                              {season.episodes.length} ép.
+                              <Icon name="chevron" className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} />
+                            </span>
+                          </button>
+                          {open && (
+                            <div className="max-h-96 space-y-2 overflow-y-auto border-t border-white/5 p-3">
+                              {season.episodes.map((ep, eIndex) => (
+                                <div key={eIndex} className="flex flex-col gap-2 rounded-xl bg-white/[0.03] p-2.5 sm:flex-row sm:items-center">
+                                  <span className="w-10 shrink-0 text-xs font-bold text-zinc-500">É{ep.number}</span>
+                                  <input
+                                    type="text"
+                                    value={ep.title}
+                                    onChange={e => updateEpisodeField(sIndex, eIndex, 'title', e.target.value)}
+                                    className="w-full rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-xs text-white outline-none focus:border-red-600/70 sm:w-1/3"
+                                  />
+                                  <input
+                                    type="text"
+                                    placeholder="Lien de l'épisode"
+                                    value={ep.embedUrl}
+                                    onChange={e => updateEpisodeField(sIndex, eIndex, 'embedUrl', e.target.value)}
+                                    className={`w-full flex-1 rounded-lg border bg-black/30 px-2.5 py-1.5 font-mono text-[11px] text-white outline-none focus:border-red-600/70 ${
+                                      ep.embedUrl?.trim() ? 'border-white/10' : 'border-red-500/40'
+                                    }`}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-red-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-red-600/25 transition hover:bg-red-500 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? (
+                  <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Enregistrement…</>
+                ) : isEditing ? (
+                  <><Icon name="save" /> Mettre à jour</>
+                ) : (
+                  <><Icon name="plus" /> Ajouter au catalogue</>
+                )}
+              </button>
+            </form>
+          </section>
+
+          <section className="lg:sticky lg:top-24">
+            <div className="mb-4 flex items-end justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold tracking-tight">Catalogue</h2>
+                <p className="text-sm text-zinc-500">
+                  {filteredLibrary.length} résultat{filteredLibrary.length > 1 ? 's' : ''}
+                  {libraryQuery || libraryType !== 'all' ? ` sur ${counts.all}` : ''}
+                </p>
+              </div>
+            </div>
+
+            <div className="relative mb-3">
+              <Icon name="search" className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+              <input
+                type="text"
+                value={libraryQuery}
+                onChange={e => setLibraryQuery(e.target.value)}
+                placeholder="Rechercher un titre ou un genre…"
+                className={`${inputClass} pl-10 pr-10`}
+              />
+              {libraryQuery && (
+                <button
+                  onClick={() => setLibraryQuery('')}
+                  aria-label="Effacer"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-zinc-500 hover:bg-white/10 hover:text-white"
+                >
+                  <Icon name="close" className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="mb-4 flex gap-2">
+              {([
+                { key: 'all', label: 'Tout', count: counts.all },
+                { key: 'movie', label: 'Films', count: counts.movie },
+                { key: 'series', label: 'Séries', count: counts.series },
+              ] as const).map(t => (
+                <button
+                  key={t.key}
+                  onClick={() => setLibraryType(t.key)}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
+                    libraryType === t.key ? 'bg-white text-black' : 'bg-white/5 text-zinc-400 ring-1 ring-white/10 hover:text-white'
+                  }`}
+                >
+                  {t.label}
+                  <span className={`rounded-full px-1.5 text-[10px] tabular-nums ${libraryType === t.key ? 'bg-black/10' : 'bg-white/10'}`}>{t.count}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-2 lg:max-h-[calc(100vh-17rem)] lg:overflow-y-auto lg:pr-1">
+              {filteredLibrary.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-white/10 py-12 text-center">
+                  <Icon name="search" className="h-5 w-5 text-zinc-600" />
+                  <p className="text-sm text-zinc-500">Aucun média trouvé.</p>
+                </div>
+              ) : (
+                filteredLibrary.map(item => {
+                  const isCurrent = isEditing && editingId === item.id;
+                  const eps = episodeCount(item.seasons);
+                  return (
+                    <div
+                      key={item.id}
+                      className={`flex items-center gap-3 rounded-2xl p-2.5 ring-1 transition ${
+                        isCurrent ? 'bg-red-600/10 ring-red-500/40' : 'bg-white/[0.03] ring-white/10 hover:bg-white/[0.05]'
+                      }`}
+                    >
+                      <div className="flex h-16 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-zinc-900 text-zinc-600">
+                        {item.poster
+                          ? <img src={item.poster} alt="" loading="lazy" className="h-full w-full object-cover" />
+                          : <Icon name="image" />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold">{item.title}</p>
+                        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-zinc-500">
+                          <span className="inline-flex items-center gap-1">
+                            <Icon name={item.type === 'movie' ? 'film' : 'tv'} className="h-3 w-3" />
+                            {item.type === 'movie' ? 'Film' : 'Série'}
+                          </span>
+                          {item.type === 'series' && item.seasons && (
+                            <span>{item.seasons.length} s. · {eps} ép.</span>
+                          )}
+                          {item.genres && item.genres.length > 0 && (
+                            <span className="truncate">{item.genres.slice(0, 2).join(', ')}</span>
+                          )}
+                        </p>
+                      </div>
+
+                      {confirmDeleteId === item.id ? (
+                        <div className="flex shrink-0 items-center gap-1">
+                          <button
+                            onClick={() => handleDelete(item.id)}
+                            className="rounded-full bg-red-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-red-500"
+                          >
+                            Supprimer
+                          </button>
+                          <button
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="rounded-full px-2 py-1.5 text-xs text-zinc-400 hover:text-white"
+                          >
+                            Non
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex shrink-0 items-center gap-1">
+                          <button
+                            onClick={() => handleEdit(item)}
+                            aria-label={`Modifier ${item.title}`}
+                            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-zinc-300 ring-1 ring-white/10 transition hover:bg-white/10 hover:text-white"
+                          >
+                            <Icon name="edit" className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setConfirmDeleteId(item.id)}
+                            aria-label={`Supprimer ${item.title}`}
+                            className="flex h-9 w-9 items-center justify-center rounded-full bg-red-600/10 text-red-400 ring-1 ring-red-500/30 transition hover:bg-red-600/25"
+                          >
+                            <Icon name="trash" className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </section>
         </div>
       </div>
     </main>
