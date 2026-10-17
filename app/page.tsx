@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import PromoBanner from '@/components/PromoBanner';
 
 /* ------------------------------------------------------------------ */
 /* Types & constantes                                                  */
@@ -253,7 +254,7 @@ export default function Home() {
 
           if (historyData && historyData.length > 0) {
             const continueList: MediaItem[] = [];
-            
+
             historyData.forEach((historyItem) => {
               const foundMedia = mediaData.find((m) => String(m.id) === String(historyItem.media_id));
               if (foundMedia) {
@@ -661,6 +662,14 @@ export default function Home() {
                         <Icon name="shield" /> Administration
                       </a>
                     )}
+                    {isAdmin && (
+                      <a
+                        href="/admin/promotions"
+                        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 transition hover:bg-white/5 hover:text-white"
+                      >
+                        <Icon name="flame" /> Promotions
+                      </a>
+                    )}
                   </div>
                   <div className="border-t border-white/5 p-1.5">
                     <button
@@ -845,6 +854,9 @@ export default function Home() {
           </section>
         ) : (
           <>
+            {/* ===== PROMOTIONS (gérées depuis /admin/promotions) ===== */}
+            <PromoBanner isVip={isVip} isAdmin={isAdmin} />
+
             {continueWatchingList.length > 0 && (
               <Row title="Reprendre la lecture" icon={<Icon name="play" className="h-4 w-4 text-red-600" />}>
                 {continueWatchingList.map(item => (
