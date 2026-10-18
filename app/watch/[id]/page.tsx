@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
@@ -84,7 +84,7 @@ const timeAgo = (iso: string) => {
 
 type IconName =
   | 'play' | 'back' | 'close' | 'next' | 'reload' | 'check' | 'restart'
-  | 'crown' | 'alert' | 'chevronLeft' | 'chevronRight' | 'clock' | 'lock' | 'eye' | 'send' | 'trash' | 'pause' | 'plus' | 'minus' | 'maximize';
+  | 'crown' | 'alert' | 'chevronLeft' | 'chevronRight' | 'clock' | 'lock' | 'eye' | 'send' | 'trash' | 'pause' | 'plus' | 'minus' | 'maximize' | 'minimize';
 
 const ICONS: Record<IconName, React.ReactNode> = {
   play: <path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5Z" fill="currentColor" stroke="none" />,
@@ -107,6 +107,7 @@ const ICONS: Record<IconName, React.ReactNode> = {
   plus: <path d="M12 5v14M5 12h14" />,
   minus: <path d="M5 12h14" />,
   maximize: <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />,
+  minimize: <path d="M4 14h6m0 0v6m0-6-7 7m17-11h-6m0 0V4m0 6 7-7" />,
 };
 
 function Icon({ name, className = 'w-4 h-4' }: { name: IconName; className?: string }) {
@@ -117,6 +118,35 @@ function Icon({ name, className = 'w-4 h-4' }: { name: IconName; className?: str
     </svg>
   );
 }
+
+const ActiveEpisodeBanner = React.memo(function ActiveEpisodeBanner({
+  mediaTitle,
+  seasons,
+  seasonIdx,
+  episodeIdx,
+}: {
+  mediaTitle: string;
+  seasons?: Season[];
+  seasonIdx: number;
+  episodeIdx: number;
+}) {
+  const season = seasons?.[seasonIdx];
+  const episode = season?.episodes?.[episodeIdx];
+
+  return (
+    <div className="min-w-0 overflow-hidden relative h-10 flex items-center">
+      <div className="transition-all duration-500 ease-in-out flex flex-col justify-center">
+        <p className="text-sm font-semibold truncate">{mediaTitle}</p>
+        {seasons && (
+          <p className="text-xs text-zinc-400 truncate">
+            Saison {season?.seasonNumber || 1} · Épisode {episode?.number || 1}
+            {episode?.title ? ` — ${episode.title}` : ''}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+});
 
 export default function WatchPage() {
   const params = useParams();
@@ -134,9 +164,8 @@ export default function WatchPage() {
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const playerWrapperRef = useRef<HTMLDivElement | null>(null);
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const [playerKey, setPlayerKey] = useState(0);
-  const [iframeLoaded, setIframeLoaded] = useState(false);
+  const [showExitFullBtn, setShowExitFullBtn] = useState(false);
+  const mouseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const [showVipModal, setShowVipModal] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
@@ -163,6 +192,7 @@ export default function WatchPage() {
   const busyRef = useRef(false);
   const episodeListRef = useRef<HTMLDivElement>(null);
   const userIdRef = useRef<string | null>(null);
+  const stableUrlRef = useRef<string>('');
 
   const currentProgressRef = useRef<{ currentTime: number; duration: number }>({ currentTime: 0, duration: 0 });
 
@@ -175,10 +205,6 @@ export default function WatchPage() {
       if (saved !== null) setAutoPlayEnabled(saved === '1');
     } catch {}
   }, []);
-
-  useEffect(() => {
-    setIframeLoaded(false);
-  }, [playerKey, selectedSeasonIdx, selectedEpisodeIdx]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -243,6 +269,23 @@ export default function WatchPage() {
     }
   };
 
+  const exitFullscreenPlayer = () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+  };
+
+  const handleMouseMove = () => {
+    if (!document.fullscreenElement) return;
+    setShowExitFullBtn(true);
+
+    if (mouseTimeoutRef.current) clearTimeout(mouseTimeoutRef.current);
+
+    mouseTimeoutRef.current = setTimeout(() => {
+      setShowExitFullBtn(false);
+    }, 2000);
+  };
+
   const handleTimerFinished = async () => {
     const current = mediaRef.current;
     if (!current) return;
@@ -254,11 +297,10 @@ export default function WatchPage() {
 
       const next = nextPositionOf(current.seasons, from);
       if (!next) {
-        setNotice('Épisode validé. Tu as atteint la fin de la série 🎉');
+        setNotice('Fin de la série atteinte 🎉');
         return;
       }
 
-      // Met uniquement à jour la position courante et le titre affiché en haut, sans recharger l'iframe
       setSelectedSeasonIdx(next.s);
       setSelectedEpisodeIdx(next.e);
       posRef.current = next;
@@ -266,11 +308,8 @@ export default function WatchPage() {
 
       const nextEpObj = current.seasons?.[next.s]?.episodes?.[next.e];
       initTimer(nextEpObj?.runtime || current.runtime || 21);
-
-      setNotice("Épisode validé, passage de l'indicateur au suivant !");
     } else {
       await markAsWatched('movie_main');
-      setNotice('Film validé comme vu !');
     }
   };
 
@@ -304,7 +343,7 @@ export default function WatchPage() {
       setNewComment('');
       fetchComments(String(id));
     } else {
-      setNotice('Erreur lors de l\'envoi du commentaire.');
+      setNotice("Erreur lors de l'envoi du commentaire.");
     }
     setSubmittingComment(false);
   };
@@ -412,16 +451,6 @@ export default function WatchPage() {
     };
   }, [id, searchParams]);
 
-  useEffect(() => {
-    if (loading || !resumePos) return;
-    const t = setTimeout(() => {
-      episodeListRef.current
-        ?.querySelector<HTMLElement>(`[data-ep="${resumePos.s}-${resumePos.e}"]`)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
-    }, 300);
-    return () => clearTimeout(t);
-  }, [loading, resumePos]);
-
   const saveWatchHistory = async (sIdx: number, eIdx: number, currentTime = 0, duration = 0) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -473,10 +502,7 @@ export default function WatchPage() {
       uid = session?.user?.id || null;
       userIdRef.current = uid;
     }
-    if (!uid) {
-      setNotice('Connecte-toi pour enregistrer tes épisodes vus.');
-      return;
-    }
+    if (!uid) return;
 
     const mediaId = String(current.id);
     const { error } = value
@@ -504,7 +530,6 @@ export default function WatchPage() {
     const season = mediaRef.current?.seasons?.[sIdx];
     if (!season) return;
     setWatchedKeys(season.episodes.map((_, eIdx) => epKey(sIdx, eIdx)), value);
-    setNotice(value ? `Saison ${season.seasonNumber} marquée comme vue` : `Saison ${season.seasonNumber} décochée`);
   };
 
   const markUpTo = (sIdx: number, eIdx: number) => {
@@ -516,7 +541,6 @@ export default function WatchPage() {
       });
     });
     setWatchedKeys(keys, true);
-    setNotice(`Épisodes marqués comme vus jusqu'à S${seasons[sIdx]?.seasonNumber ?? sIdx + 1} · É${seasons[sIdx]?.episodes?.[eIdx]?.number ?? eIdx + 1}`);
   };
 
   const toggleMovieWatched = () => {
@@ -577,6 +601,37 @@ export default function WatchPage() {
     await saveWatchHistory(sIdx, eIdx, currTime, currDur);
   };
 
+  const getCleanEmbedUrl = (rawUrl?: string) => {
+    const target = rawUrl || media?.embedUrl || media?.url || '';
+    let clean = target.trim();
+
+    if (clean.includes('<iframe')) {
+      try {
+        const doc = new DOMParser().parseFromString(clean, 'text/html');
+        const iframe = doc.querySelector('iframe');
+        clean = iframe ? iframe.getAttribute('src') || '' : '';
+      } catch {
+        clean = '';
+      }
+    }
+
+    if (!clean && media?.type === 'movie') {
+      clean = `https://api.moviez.ac/${media.id}`;
+    }
+    if (!clean) return '';
+
+    try {
+      const url = new URL(clean, window.location.origin);
+      url.searchParams.set('autoplay', '1');
+      url.searchParams.set('color', 'e8213f');
+      return url.toString();
+    } catch {
+      let out = clean;
+      if (!/[?&]autoplay=/.test(out)) out += (out.includes('?') ? '&' : '?') + 'autoplay=1';
+      return out;
+    }
+  };
+
   const startPlaying = async (sIdx = selectedSeasonIdx, eIdx = selectedEpisodeIdx) => {
     if (isStarting || busyRef.current) return;
     busyRef.current = true;
@@ -591,15 +646,13 @@ export default function WatchPage() {
 
       await saveWatchHistory(sIdx, eIdx, 0, 0);
 
-      clearTimer();
+      const activeEp = mediaRef.current?.seasons?.[sIdx]?.episodes?.[eIdx];
+      const raw = activeEp?.embedUrl || mediaRef.current?.embedUrl || mediaRef.current?.url || '';
+      stableUrlRef.current = getCleanEmbedUrl(raw);
 
-      setPlayerKey(prev => prev + 1);
+      clearTimer();
       setShowAdPopup(true);
       setIsPlaying(true);
-
-      window.setTimeout(() => {
-        document.getElementById('lecteur-video')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 80);
     } finally {
       busyRef.current = false;
       setIsStarting(false);
@@ -626,9 +679,9 @@ export default function WatchPage() {
     const activeEp = mediaRef.current?.seasons?.[s]?.episodes?.[e];
     initTimer(activeEp?.runtime || mediaRef.current?.runtime || 21);
 
-    if (playerWrapperRef.current && !document.fullscreenElement) {
-      playerWrapperRef.current.requestFullscreen().catch(() => {});
-    }
+    setTimeout(() => {
+      requestFullscreenPlayer();
+    }, 100);
 
     performValidatedWatchAction(s, e);
   };
@@ -647,13 +700,9 @@ export default function WatchPage() {
       setSelectedEpisodeIdx(idx);
       setResumePos({ s: selectedSeasonIdx, e: idx });
       void saveWatchHistory(selectedSeasonIdx, idx, 0, 0);
-      setPlayerKey(prevKey => prevKey + 1);
-      setIframeLoaded(false);
 
       const activeEp = mediaRef.current?.seasons?.[selectedSeasonIdx]?.episodes?.[idx];
       initTimer(activeEp?.runtime || mediaRef.current?.runtime || 21);
-
-      setNotice(`Lecture de l'épisode ${activeEp?.number ?? idx + 1}`);
       return;
     }
 
@@ -665,59 +714,6 @@ export default function WatchPage() {
     setSelectedEpisodeIdx(0);
     setResumePos({ s: 0, e: 0 });
     saveWatchHistory(0, 0, 0, 0);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const getCleanEmbedUrl = (rawUrl?: string) => {
-    const episodeObj = media?.seasons?.[selectedSeasonIdx]?.episodes?.[selectedEpisodeIdx];
-    const target = (episodeObj?.embedUrl && episodeObj.embedUrl.trim() !== '') 
-      ? episodeObj.embedUrl 
-      : (rawUrl || media?.embedUrl || media?.url || '');
-    
-    let clean = target.trim();
-
-    if (clean.includes('<iframe')) {
-      try {
-        const doc = new DOMParser().parseFromString(clean, 'text/html');
-        const iframe = doc.querySelector('iframe');
-        clean = iframe ? iframe.getAttribute('src') || '' : '';
-      } catch {
-        clean = '';
-      }
-    }
-
-    if (!clean && media?.type === 'movie') {
-      clean = `https://api.moviez.ac/${media.id}`;
-    }
-    if (!clean) return '';
-
-    try {
-      const url = new URL(clean, window.location.origin);
-      url.searchParams.set('autoplay', '1');
-      if (media?.type === 'series') {
-        url.searchParams.set('next', '1');
-        url.searchParams.set('season', String(currentSeason?.seasonNumber || 1));
-        url.searchParams.set('episode', String(currentEpisode?.number || 1));
-        if (currentEpisode?.tmdb_id) {
-          url.searchParams.set('tmdb_id', String(currentEpisode.tmdb_id));
-        }
-      }
-      url.searchParams.set('color', 'e8213f');
-      return url.toString();
-    } catch {
-      let out = clean;
-      if (!/[?&]autoplay=/.test(out)) out += (out.includes('?') ? '&' : '?') + 'autoplay=1';
-      if (media?.type === 'series') {
-        out = out.replace(/([?&])next=[^&]*/i, '$1next=1');
-        if (!/[?&]next=/.test(out)) out += '&next=1';
-        if (!/[?&]season=/.test(out)) out += `&season=${currentSeason?.seasonNumber || 1}`;
-        if (!/[?&]episode=/.test(out)) out += `&episode=${currentEpisode?.number || 1}`;
-        if (currentEpisode?.tmdb_id && !/[?&]tmdb_id=/.test(out)) {
-          out += `&tmdb_id=${currentEpisode.tmdb_id}`;
-        }
-      }
-      return out;
-    }
   };
 
   if (loading) {
@@ -758,11 +754,6 @@ export default function WatchPage() {
   const currentEpisode = currentSeason?.episodes?.[selectedEpisodeIdx] || currentSeason?.episodes?.[0];
   const w = media.watched || {};
 
-  const currentEmbedRaw = isSeries
-    ? currentEpisode?.embedUrl || media.embedUrl || media.url || ''
-    : media.embedUrl || media.url || '';
-
-  const finalEmbedUrl = getCleanEmbedUrl(currentEmbedRaw);
   const desktopBg = hasText(media.backdrop) ? media.backdrop! : media.poster;
   const mobileBg = hasText(media.poster) ? media.poster : media.backdrop || '';
 
@@ -846,7 +837,7 @@ export default function WatchPage() {
       </header>
 
       {isPlaying && (
-        <section id="lecteur-video" className="relative z-10 w-[calc(100%-2rem)] max-w-7xl mx-auto mt-24 mb-10 bg-[#070708] flex flex-col rounded-3xl overflow-hidden border border-white/10 shadow-[0_30px_100px_-35px_rgba(0,0,0,0.9)]">
+        <section id="lecteur-video" className="fixed inset-0 z-[100] bg-black flex flex-col overflow-hidden">
           {showAdPopup ? (
             <div className="flex-1 flex items-center justify-center p-4 bg-[radial-gradient(ellipse_at_center,rgba(220,38,38,0.12),transparent_60%)]">
               <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#111113] p-8 text-center shadow-2xl">
@@ -862,7 +853,7 @@ export default function WatchPage() {
                   onClick={handleLaunchClick}
                   className="w-full inline-flex items-center justify-center gap-2 bg-red-600 hover:bg-red-500 text-white font-semibold py-3.5 rounded-full text-sm transition shadow-lg shadow-red-600/30 cursor-pointer active:scale-[0.98]"
                 >
-                  <Icon className="w-4 h-4" name="play" /> Lancer la vidéo & Plein écran
+                  <Icon className="w-4 h-4" name="play" /> Lancer la vidéo en Plein Écran
                 </button>
                 <button
                   onClick={closePlayer}
@@ -885,15 +876,13 @@ export default function WatchPage() {
                     >
                       <Icon name="back" />
                     </button>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold truncate">{media.title}</p>
-                      {isSeries && (
-                        <p className="text-xs text-zinc-400 truncate">
-                          Saison {currentSeason?.seasonNumber} · Épisode {currentEpisode?.number}
-                          {currentEpisode?.title ? ` — ${currentEpisode.title}` : ''}
-                        </p>
-                      )}
-                    </div>
+                    {/* Bannière supérieure isolée qui change sans toucher au lecteur */}
+                    <ActiveEpisodeBanner
+                      mediaTitle={media.title}
+                      seasons={media.seasons}
+                      seasonIdx={selectedSeasonIdx}
+                      episodeIdx={selectedEpisodeIdx}
+                    />
                   </div>
 
                   {/* Widget Minuteur Visible & Modifiable pour tout le monde */}
@@ -950,58 +939,49 @@ export default function WatchPage() {
                     )}
 
                     <button
-                      onClick={() => setPlayerKey(prev => prev + 1)}
-                      title="Recharger le lecteur"
-                      aria-label="Recharger le lecteur"
-                      className="w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-zinc-300 hover:text-white transition cursor-pointer"
-                    >
-                      <Icon name="reload" />
-                    </button>
-
-                    <button
                       onClick={closePlayer}
                       className="inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-full text-xs font-semibold transition cursor-pointer"
                     >
-                      <Icon className="w-3.5 h-3.5" name="close" /> Fermer
+                      <Icon name="close" className="w-3.5 h-3.5" /> Fermer
                     </button>
                   </div>
                 </div>
               </div>
 
-              <div className="h-[56vw] min-h-[260px] max-h-[76vh] flex items-center justify-center p-0 sm:p-4 lg:p-6 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.06),transparent_65%)]">
+              <div className="flex-1 w-full flex items-center justify-center bg-black relative">
                 <div 
                   ref={playerWrapperRef}
-                  className="w-full max-w-[1500px] max-h-full aspect-video bg-black sm:rounded-2xl overflow-hidden ring-1 ring-white/10 shadow-[0_24px_100px_-35px_rgba(0,0,0,0.9)] relative flex items-center justify-center group"
+                  onMouseMove={handleMouseMove}
+                  className="w-full h-full bg-black relative flex items-center justify-center group"
                 >
-                  <div className="absolute inset-x-0 bottom-4 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
+                  {/* Petite croix discrète en haut à droite en plein écran */}
+                  <button
+                    onClick={exitFullscreenPlayer}
+                    title="Quitter le plein écran"
+                    aria-label="Quitter le plein écran"
+                    className="absolute top-4 right-4 z-40 w-9 h-9 rounded-full bg-black/60 hover:bg-black/90 text-white/70 hover:text-white border border-white/10 backdrop-blur-md flex items-center justify-center transition cursor-pointer opacity-80 hover:opacity-100"
+                  >
+                    <Icon name="close" className="w-4 h-4" />
+                  </button>
+
+                  <div className={`absolute bottom-6 inset-x-0 flex justify-center z-30 transition-opacity duration-300 pointer-events-none ${showExitFullBtn ? 'opacity-100' : 'opacity-0'}`}>
                     <button
-                      onClick={requestFullscreenPlayer}
-                      className="pointer-events-auto inline-flex items-center gap-2 bg-black/80 hover:bg-black text-white backdrop-blur-md px-4 py-2 rounded-full text-xs font-semibold shadow-lg border border-white/20 transition cursor-pointer"
+                      onClick={exitFullscreenPlayer}
+                      className="pointer-events-auto inline-flex items-center gap-2 bg-black/80 hover:bg-red-600 text-white backdrop-blur-md px-5 py-2.5 rounded-full text-sm font-semibold shadow-2xl border border-white/20 transition cursor-pointer active:scale-95"
                     >
-                      <Icon name="maximize" className="w-3.5 h-3.5" /> Basculer en Plein Écran
+                      <Icon name="minimize" className="w-4 h-4" /> Retour en petit écran
                     </button>
                   </div>
 
-                  {finalEmbedUrl ? (
-                    <>
-                      {!iframeLoaded && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-zinc-500 pointer-events-none z-10">
-                          <div className="w-10 h-10 rounded-full border-2 border-white/10 border-t-red-600 animate-spin" />
-                          <span className="text-xs">Chargement du lecteur…</span>
-                        </div>
-                      )}
-                      <iframe
-                        ref={iframeRef}
-                        key={`player-${playerKey}-${selectedSeasonIdx}-${selectedEpisodeIdx}`}
-                        src={finalEmbedUrl}
-                        onLoad={() => setIframeLoaded(true)}
-                        className="relative w-full h-full border-0"
-                        allow="fullscreen; accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                        referrerPolicy="origin"
-                        title={media.title}
-                      />
-                    </>
+                  {stableUrlRef.current ? (
+                    <iframe
+                      src={stableUrlRef.current}
+                      className="relative w-full h-full border-0"
+                      allow="fullscreen; accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      referrerPolicy="origin"
+                      title={media.title}
+                    />
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-zinc-500">
                       <Icon className="w-6 h-6" name="alert" />
@@ -1170,12 +1150,6 @@ export default function WatchPage() {
                       setSelectedEpisodeIdx(0);
                       posRef.current = { s: sIdx, e: 0 };
                       setResumePos({ s: sIdx, e: 0 });
-                      if (isPlaying) {
-                        setPlayerKey(prevKey => prevKey + 1);
-                        setIframeLoaded(false);
-                        void saveWatchHistory(sIdx, 0, 0, 0);
-                        setNotice(`Saison ${season.seasonNumber}`);
-                      }
                     }}
                     className={`inline-flex shrink-0 items-center gap-1.5 px-5 py-2 rounded-full text-sm font-semibold transition cursor-pointer ${
                       isSelected
