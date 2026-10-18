@@ -46,7 +46,7 @@ const MAX_FREE_LIMIT = 5;
 type IconName =
   | 'play' | 'info' | 'search' | 'close' | 'home' | 'film' | 'tv'
   | 'request' | 'history' | 'crown' | 'lock' | 'logout' | 'shield'
-  | 'chevronLeft' | 'chevronRight' | 'check' | 'user' | 'flame' | 'trash' | 'alert';
+  | 'chevronLeft' | 'chevronRight' | 'check' | 'user' | 'flame' | 'trash' | 'alert' | 'sparkles';
 
 const ICONS: Record<IconName, React.ReactNode> = {
   play: <path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5Z" fill="currentColor" stroke="none" />,
@@ -69,6 +69,7 @@ const ICONS: Record<IconName, React.ReactNode> = {
   flame: <path d="M12 22c4 0 7-2.8 7-7 0-3.5-2.5-6-4-8-.5 2-1.5 3-3 3 0-3-1-6-4-8 0 4-5 6.5-5 13 0 4.2 3 7 9 7Z" />,
   trash: <><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /></>,
   alert: <><circle cx="12" cy="12" r="9" /><path d="M12 8v4m0 4h.01" /></>,
+  sparkles: <path d="m12 3 1.912 5.813a2 2 0 0 0 1.275 1.275L21 12l-5.813 1.912a2 2 0 0 0-1.275 1.275L12 21l-1.912-5.813a2 2 0 0 0-1.275-1.275L3 12l5.813-1.912a2 2 0 0 0 1.275-1.275L12 3Z" />,
 };
 
 function Icon({ name, className = 'w-4 h-4' }: { name: IconName; className?: string }) {
@@ -192,6 +193,8 @@ export default function Home() {
   const router = useRouter();
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [continueWatchingList, setContinueWatchingList] = useState<MediaItem[]>([]);
+  const [becauseYouWatched, setBecauseYouWatched] = useState<{ parentTitle: string; list: MediaItem[] } | null>(null);
+  const [recommendedForYou, setRecommendedForYou] = useState<MediaItem[]>([]);
   const [customBanners, setCustomBanners] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -262,7 +265,7 @@ export default function Home() {
                 const duration = historyItem.duration || foundMedia.runtime || 0;
 
                 const progressPercent = duration > 0 ? (currentTime / duration) : 0;
-                const isCompleted = progressPercent >= 0.9;
+                const isCompleted = duration > 0 && progressPercent >= 0.9;
 
                 if (!isCompleted) {
                   continueList.push({
@@ -280,6 +283,34 @@ export default function Home() {
               }
             });
             setContinueWatchingList(continueList);
+
+            const lastWatchedHistory = historyData[0];
+            const lastMedia = mediaData.find(m => String(m.id) === String(lastWatchedHistory?.media_id));
+
+            if (lastMedia && lastMedia.genres && lastMedia.genres.length > 0) {
+              const similarMedia = mediaData.filter(m => 
+                String(m.id) !== String(lastMedia.id) &&
+                m.genres?.some(g => lastMedia.genres?.includes(g))
+              );
+              if (similarMedia.length > 0) {
+                setBecauseYouWatched({ parentTitle: lastMedia.title, list: similarMedia });
+              }
+            }
+
+            const userWatchedGenres = new Set(
+              historyData
+                .map(h => mediaData.find(m => String(m.id) === String(h.media_id)))
+                .filter(Boolean)
+                .flatMap(m => m!.genres || [])
+            );
+
+            if (userWatchedGenres.size > 0) {
+              const recommended = mediaData.filter(m => 
+                !historyData.some(h => String(h.media_id) === String(m.id)) &&
+                m.genres?.some(g => userWatchedGenres.has(g))
+              );
+              setRecommendedForYou(recommended);
+            }
           }
         }
       } catch (err) {
@@ -294,6 +325,7 @@ export default function Home() {
 
   const handleMediaClick = (item: MediaItem) => {
     if (item.id === undefined || item.id === null) return;
+    // MODIFICATION ICI : On vérifie bien que si l'utilisateur n'est pas VIP et dépasse la limite
     if (!isVip && watchCount >= MAX_FREE_LIMIT) {
       setShowVipModal(true);
       return;
@@ -854,7 +886,6 @@ export default function Home() {
           </section>
         ) : (
           <>
-            {/* ===== PROMOTIONS (gérées depuis /admin/promotions) ===== */}
             <PromoBanner isVip={isVip} isAdmin={isAdmin} />
 
             {continueWatchingList.length > 0 && (
@@ -901,6 +932,37 @@ export default function Home() {
                       <h3 className="truncate text-sm font-bold text-white">{item.title}</h3>
                     </div>
                   </div>
+                ))}
+              </Row>
+            )}
+
+            {becauseYouWatched && becauseYouWatched.list.length > 0 && (
+              <Row
+                title={`Parce que vous avez regardé « ${becauseYouWatched.parentTitle} »`}
+                icon={<Icon name="sparkles" className="h-5 w-5 text-amber-400" />}
+              >
+                {becauseYouWatched.list.map(item => (
+                  <PosterCard
+                    key={item.id}
+                    item={item}
+                    locked={userLimitReached}
+                    onOpen={() => handleMediaClick(item)}
+                    className="w-[130px] sm:w-[170px]"
+                  />
+                ))}
+              </Row>
+            )}
+
+            {recommendedForYou.length > 0 && (
+              <Row title="Recommandé pour vous" icon={<Icon name="sparkles" className="h-5 w-5 text-red-500" />}>
+                {recommendedForYou.map(item => (
+                  <PosterCard
+                    key={item.id}
+                    item={item}
+                    locked={userLimitReached}
+                    onOpen={() => handleMediaClick(item)}
+                    className="w-[130px] sm:w-[170px]"
+                  />
                 ))}
               </Row>
             )}
