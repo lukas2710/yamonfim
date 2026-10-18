@@ -22,8 +22,8 @@ export const metadata: Metadata = {
     title: "YAMONFILM",
   },
   icons: {
-    icon: "/icone.jpg",
-    apple: "/icone.jpg",
+    icon: "/icone.png",
+    apple: "/icone.png",
   },
 };
 
