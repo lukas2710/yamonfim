@@ -283,38 +283,41 @@ export default function Home() {
               }
             }
 
+            let lastMediaId: any = null;
             if (lastMedia && lastMedia.genres && lastMedia.genres.length > 0) {
+              lastMediaId = lastMedia.id;
               const similarMedia: MediaItem[] = [];
               for (const m of mediaData) {
                 if (String(m.id) === String(lastMedia.id)) continue;
-                let hasCommon = false;
+                let commonCount = 0;
                 if (m.genres && lastMedia.genres) {
                   for (const g of m.genres) {
-                    if (lastMedia.genres.includes(g)) {
-                      hasCommon = true;
-                      break;
-                    }
+                    if (lastMedia.genres.includes(g)) commonCount++;
                   }
                 }
-                if (hasCommon) similarMedia.push(m);
+                if (commonCount >= 1) similarMedia.push(m);
               }
               if (similarMedia.length > 0) {
                 setBecauseYouWatched({ parentTitle: lastMedia.title, list: similarMedia });
               }
             }
 
-            const userWatchedGenres = new Set<string>();
+            const genreFrequency: Record<string, number> = {};
             for (const h of historyData) {
               for (const m of mediaData) {
                 if (String(m.id) === String(h.media_id) && m.genres) {
                   for (const g of m.genres) {
-                    userWatchedGenres.add(g);
+                    genreFrequency[g] = (genreFrequency[g] || 0) + 1;
                   }
                 }
               }
             }
 
-            if (userWatchedGenres.size > 0) {
+            const sortedGenres = Object.keys(genreFrequency).sort(
+              (a, b) => genreFrequency[b] - genreFrequency[a]
+            );
+
+            if (sortedGenres.length > 0) {
               const recommended: MediaItem[] = [];
               for (const m of mediaData) {
                 let alreadyWatched = false;
@@ -324,12 +327,13 @@ export default function Home() {
                     break;
                   }
                 }
-                if (alreadyWatched) continue;
+                if (alreadyWatched || (lastMediaId && String(m.id) === String(lastMediaId))) continue;
 
+                const targetGenres = sortedGenres.length > 3 ? sortedGenres.slice(1, 4) : sortedGenres;
                 let matches = false;
                 if (m.genres) {
                   for (const g of m.genres) {
-                    if (userWatchedGenres.has(g)) {
+                    if (targetGenres.includes(g)) {
                       matches = true;
                       break;
                     }
@@ -1013,6 +1017,38 @@ export default function Home() {
                 ))}
               </Row>
             )}
+
+            {recommendedForYou.length > 3 && (
+              <Row title="Tendances actuelles" icon={<Icon name="flame" className="h-5 w-5 text-red-500" />}>
+                {recommendedForYou.slice().reverse().map((item: MediaItem) => (
+                  <PosterCard
+                    key={'trend-' + item.id}
+                    item={item}
+                    locked={userLimitReached}
+                    onOpen={() => handleMediaClick(item)}
+                    className="w-[130px] sm:w-[170px]"
+                  />
+                ))}
+              </Row>
+            )}
+
+            {availableGenres.map((genre: string) => {
+              const genreItems = mediaList.filter(m => m.genres && m.genres.includes(genre));
+              if (genreItems.length === 0) return null;
+              return (
+                <Row key={genre} title={`Populaires en ${genre}`} icon={<Icon name="film" className="h-5 w-5 text-zinc-400" />}>
+                  {genreItems.map((item: MediaItem) => (
+                    <PosterCard
+                      key={genre + '-' + item.id}
+                      item={item}
+                      locked={userLimitReached}
+                      onOpen={() => handleMediaClick(item)}
+                      className="w-[130px] sm:w-[170px]"
+                    />
+                  ))}
+                </Row>
+              );
+            })}
 
             {customBanners.map((banner: any) => {
               const bannerMedia: MediaItem[] = [];
