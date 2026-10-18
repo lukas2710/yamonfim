@@ -5,10 +5,6 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import PromoBanner from '@/components/PromoBanner';
 
-/* ------------------------------------------------------------------ */
-/* Types & constantes                                                  */
-/* ------------------------------------------------------------------ */
-
 interface MediaItem {
   id: any;
   title: string;
@@ -38,10 +34,6 @@ const DEFAULT_GENRES = [
 
 const ADMIN_EMAIL = 'lukas.leclerc312@gmail.com';
 const MAX_FREE_LIMIT = 5;
-
-/* ------------------------------------------------------------------ */
-/* Icônes SVG                                                          */
-/* ------------------------------------------------------------------ */
 
 type IconName =
   | 'play' | 'info' | 'search' | 'close' | 'home' | 'film' | 'tv'
@@ -81,10 +73,6 @@ function Icon({ name, className = 'w-4 h-4' }: { name: IconName; className?: str
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Composants d'affichage                                              */
-/* ------------------------------------------------------------------ */
-
 const activateProps = (onActivate: () => void) => ({
   role: 'button' as const,
   tabIndex: 0,
@@ -104,7 +92,7 @@ function PosterCard({
     <div
       {...activateProps(onOpen)}
       aria-label={item.title}
-      className={`group relative aspect-[2/3] shrink-0 cursor-pointer overflow-hidden rounded-xl bg-zinc-900 ring-1 ring-white/5 transition duration-300 hover:-translate-y-1 hover:ring-white/20 hover:shadow-2xl hover:shadow-black/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:-translate-y-1 active:scale-[0.97] ${className}`}
+      className={`group relative aspect-[2/3] shrink-0 cursor-pointer overflow-hidden rounded-xl bg-zinc-900 ring-1 ring-white/5 transition duration-300 hover:-translate-y-1 hover:ring-white/25 hover:shadow-2xl hover:shadow-black/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-600 active:scale-[0.97] ${className}`}
     >
       {item.poster ? (
         <img
@@ -120,7 +108,7 @@ function PosterCard({
       )}
 
       {!locked && (
-        <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/90 via-black/20 to-transparent p-3 opacity-0 transition duration-300 group-hover:opacity-100 group-focus-visible:opacity-100">
+        <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/90 via-black/20 to-transparent p-3 opacity-0 transition duration-300 group-hover:opacity-100">
           <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-white text-black shadow-lg">
             <Icon name="play" className="h-4 w-4 translate-x-[1px]" />
           </div>
@@ -184,10 +172,6 @@ function Row({
     </section>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/* Page                                                                */
-/* ------------------------------------------------------------------ */
 
 export default function Home() {
   const router = useRouter();
@@ -258,13 +242,19 @@ export default function Home() {
           if (historyData && historyData.length > 0) {
             const continueList: MediaItem[] = [];
 
-            historyData.forEach((historyItem) => {
-              const foundMedia = mediaData.find((m) => String(m.id) === String(historyItem.media_id));
+            for (const historyItem of historyData) {
+              let foundMedia: MediaItem | undefined = undefined;
+              for (const m of mediaData) {
+                if (String(m.id) === String(historyItem.media_id)) {
+                  foundMedia = m;
+                  break;
+                }
+              }
+
               if (foundMedia) {
                 const currentTime = historyItem.current_time || 0;
                 const duration = historyItem.duration || foundMedia.runtime || 0;
-
-                const progressPercent = duration > 0 ? (currentTime / duration) : 0;
+                const progressPercent = duration > 0 ? currentTime / duration : 0;
                 const isCompleted = duration > 0 && progressPercent >= 0.9;
 
                 if (!isCompleted) {
@@ -281,34 +271,72 @@ export default function Home() {
                   });
                 }
               }
-            });
+            }
             setContinueWatchingList(continueList);
 
-            const lastWatchedHistory = historyData[0];
-            const lastMedia = mediaData.find(m => String(m.id) === String(lastWatchedHistory?.media_id));
+            let lastWatchedHistory = historyData[0];
+            let lastMedia: MediaItem | undefined = undefined;
+            for (const m of mediaData) {
+              if (String(m.id) === String(lastWatchedHistory?.media_id)) {
+                lastMedia = m;
+                break;
+              }
+            }
 
             if (lastMedia && lastMedia.genres && lastMedia.genres.length > 0) {
-              const similarMedia = mediaData.filter(m => 
-                String(m.id) !== String(lastMedia.id) &&
-                m.genres?.some(g => lastMedia.genres?.includes(g))
-              );
+              const similarMedia: MediaItem[] = [];
+              for (const m of mediaData) {
+                if (String(m.id) === String(lastMedia.id)) continue;
+                let hasCommon = false;
+                if (m.genres && lastMedia.genres) {
+                  for (const g of m.genres) {
+                    if (lastMedia.genres.includes(g)) {
+                      hasCommon = true;
+                      break;
+                    }
+                  }
+                }
+                if (hasCommon) similarMedia.push(m);
+              }
               if (similarMedia.length > 0) {
                 setBecauseYouWatched({ parentTitle: lastMedia.title, list: similarMedia });
               }
             }
 
-            const userWatchedGenres = new Set(
-              historyData
-                .map(h => mediaData.find(m => String(m.id) === String(h.media_id)))
-                .filter(Boolean)
-                .flatMap(m => m!.genres || [])
-            );
+            const userWatchedGenres = new Set<string>();
+            for (const h of historyData) {
+              for (const m of mediaData) {
+                if (String(m.id) === String(h.media_id) && m.genres) {
+                  for (const g of m.genres) {
+                    userWatchedGenres.add(g);
+                  }
+                }
+              }
+            }
 
             if (userWatchedGenres.size > 0) {
-              const recommended = mediaData.filter(m => 
-                !historyData.some(h => String(h.media_id) === String(m.id)) &&
-                m.genres?.some(g => userWatchedGenres.has(g))
-              );
+              const recommended: MediaItem[] = [];
+              for (const m of mediaData) {
+                let alreadyWatched = false;
+                for (const h of historyData) {
+                  if (String(h.media_id) === String(m.id)) {
+                    alreadyWatched = true;
+                    break;
+                  }
+                }
+                if (alreadyWatched) continue;
+
+                let matches = false;
+                if (m.genres) {
+                  for (const g of m.genres) {
+                    if (userWatchedGenres.has(g)) {
+                      matches = true;
+                      break;
+                    }
+                  }
+                }
+                if (matches) recommended.push(m);
+              }
               setRecommendedForYou(recommended);
             }
           }
@@ -349,10 +377,16 @@ export default function Home() {
         .eq('media_id', String(mediaId));
 
       if (!error) {
-        setContinueWatchingList(prev => prev.filter(item => String(item.id) !== String(mediaId)));
+        const updatedList: MediaItem[] = [];
+        for (const item of continueWatchingList) {
+          if (String(item.id) !== String(mediaId)) {
+            updatedList.push(item);
+          }
+        }
+        setContinueWatchingList(updatedList);
       }
     } catch (err) {
-      console.error('Erreur lors de la suppression de l\'historique :', err);
+      console.error("Erreur lors de la suppression de l'historique :", err);
     }
   };
 
@@ -399,12 +433,18 @@ export default function Home() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const dbGenres = mediaList
-    .filter(item => selectedType !== 'all' && item.type === selectedType)
-    .flatMap(item => item.genres || []);
+  const dbGenres: string[] = [];
+  for (const item of mediaList) {
+    if (selectedType === 'all' || item.type === selectedType) {
+      if (item.genres) {
+        for (const g of item.genres) {
+          dbGenres.push(g);
+        }
+      }
+    }
+  }
 
   const availableGenres = Array.from(new Set(dbGenres.length > 0 ? dbGenres : DEFAULT_GENRES)).sort();
-
   const carouselItems = mediaList.slice(0, 5);
 
   useEffect(() => {
@@ -426,18 +466,25 @@ export default function Home() {
   };
 
   const query = searchQuery.trim().toLowerCase();
-  const filteredMedia = mediaList.filter(item => {
+  const filteredMedia: MediaItem[] = [];
+  for (const item of mediaList) {
     const matchesType = selectedType === 'all' || item.type === selectedType;
     const matchesGenre = selectedGenre === 'all' || (item.genres && item.genres.includes(selectedGenre));
     const matchesSearch =
       !query ||
       (item.title || '').toLowerCase().includes(query) ||
       (item.description || '').toLowerCase().includes(query);
-    return matchesType && matchesGenre && matchesSearch;
-  });
+    if (matchesType && matchesGenre && matchesSearch) {
+      filteredMedia.push(item);
+    }
+  }
 
-  const recentMovies = filteredMedia.filter(item => item.type === 'movie');
-  const recentSeries = filteredMedia.filter(item => item.type === 'series');
+  const recentMovies: MediaItem[] = [];
+  const recentSeries: MediaItem[] = [];
+  for (const item of filteredMedia) {
+    if (item.type === 'movie') recentMovies.push(item);
+    if (item.type === 'series') recentSeries.push(item);
+  }
 
   const hasText = (v?: string) => !!v && v.trim() !== '';
   const getHeroImage = (m: MediaItem) => (hasText(m.backdrop) ? m.backdrop! : m.poster);
@@ -523,7 +570,7 @@ export default function Home() {
               </div>
 
               <ul className="mb-7 space-y-2.5 text-left">
-                {['Visionnage illimité', 'Tous les films et séries', 'Accès immédiat après paiement'].map(f => (
+                {['Visionnage illimité', 'Tous les films et séries', 'Accès immédiat après paiement'].map((f: string) => (
                   <li key={f} className="flex items-center gap-3 text-sm text-zinc-300">
                     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-400">
                       <Icon name="check" className="h-3 w-3" />
@@ -797,7 +844,7 @@ export default function Home() {
 
           {carouselItems.length > 1 && (
             <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1.5 sm:bottom-8 sm:left-auto sm:right-10 sm:translate-x-0">
-              {carouselItems.map((m, i) => (
+              {carouselItems.map((m: MediaItem, i: number) => (
                 <button
                   key={String(m.id) + i}
                   onClick={() => setCurrentIndex(i)}
@@ -820,7 +867,7 @@ export default function Home() {
             {selectedType === 'movie' ? 'Films' : 'Séries'}
           </h1>
           <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-2 [-webkit-overflow-scrolling:touch] [scrollbar-width:none] sm:-mx-10 sm:px-10 [&::-webkit-scrollbar]:hidden">
-            {['all', ...availableGenres].map(genre => {
+            {['all', ...availableGenres].map((genre: string) => {
               const active = selectedGenre === genre;
               return (
                 <button
@@ -842,10 +889,9 @@ export default function Home() {
 
       <div className={`relative z-10 space-y-10 px-4 sm:px-10 ${showHero ? '-mt-4 sm:-mt-10' : 'mt-6'}`}>
         
-        {/* Section "Reprendre la lecture" placée hors des conditions de filtres pour s'afficher en permanence */}
         {continueWatchingList.length > 0 && !searchQuery && (
           <Row title="Reprendre la lecture" icon={<Icon name="play" className="h-4 w-4 text-red-600" />}>
-            {continueWatchingList.map(item => (
+            {continueWatchingList.map((item: MediaItem) => (
               <div
                 key={item.id}
                 {...activateProps(() => handleMediaClick(item))}
@@ -922,7 +968,7 @@ export default function Home() {
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4 md:grid-cols-5 lg:grid-cols-6 2xl:grid-cols-8">
-                {filteredMedia.map(item => (
+                {filteredMedia.map((item: MediaItem) => (
                   <PosterCard
                     key={item.id}
                     item={item}
@@ -942,7 +988,7 @@ export default function Home() {
                 title={`Parce que vous avez regardé « ${becauseYouWatched.parentTitle} »`}
                 icon={<Icon name="sparkles" className="h-5 w-5 text-amber-400" />}
               >
-                {becauseYouWatched.list.map(item => (
+                {becauseYouWatched.list.map((item: MediaItem) => (
                   <PosterCard
                     key={item.id}
                     item={item}
@@ -956,7 +1002,7 @@ export default function Home() {
 
             {recommendedForYou.length > 0 && (
               <Row title="Recommandé pour vous" icon={<Icon name="sparkles" className="h-5 w-5 text-red-500" />}>
-                {recommendedForYou.map(item => (
+                {recommendedForYou.map((item: MediaItem) => (
                   <PosterCard
                     key={item.id}
                     item={item}
@@ -968,12 +1014,20 @@ export default function Home() {
               </Row>
             )}
 
-            {customBanners.map(banner => {
-              const bannerMedia = mediaList.filter(m =>
-                banner.media_ids &&
-                Array.isArray(banner.media_ids) &&
-                banner.media_ids.some((id: any) => String(id) === String(m.id))
-              );
+            {customBanners.map((banner: any) => {
+              const bannerMedia: MediaItem[] = [];
+              if (banner.media_ids && Array.isArray(banner.media_ids)) {
+                for (const m of mediaList) {
+                  let found = false;
+                  for (const id of banner.media_ids) {
+                    if (String(id) === String(m.id)) {
+                      found = true;
+                      break;
+                    }
+                  }
+                  if (found) bannerMedia.push(m);
+                }
+              }
               if (bannerMedia.length === 0) return null;
 
               return (
@@ -1000,7 +1054,7 @@ export default function Home() {
                       subtitle={banner.subtitle}
                       icon={<Icon name="flame" className="h-5 w-5 text-red-500" />}
                     >
-                      {bannerMedia.map(item => (
+                      {bannerMedia.map((item: MediaItem) => (
                         <PosterCard
                           key={item.id}
                           item={item}
@@ -1019,7 +1073,7 @@ export default function Home() {
               {recentMovies.length === 0 ? (
                 <p className="py-6 text-sm text-zinc-500">Aucun film pour le moment.</p>
               ) : (
-                recentMovies.map(item => (
+                recentMovies.map((item: MediaItem) => (
                   <PosterCard
                     key={item.id}
                     item={item}
@@ -1035,7 +1089,7 @@ export default function Home() {
               {recentSeries.length === 0 ? (
                 <p className="py-6 text-sm text-zinc-500">Aucune série pour le moment.</p>
               ) : (
-                recentSeries.map(item => (
+                recentSeries.map((item: MediaItem) => (
                   <PosterCard
                     key={item.id}
                     item={item}
