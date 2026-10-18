@@ -145,7 +145,6 @@ export default function WatchPage() {
   const [autoPlayEnabled, setAutoPlayEnabled] = useState(true);
   const [countdown, setCountdown] = useState<number | null>(null);
 
-  // États pour les commentaires
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [newComment, setNewComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
@@ -223,7 +222,6 @@ export default function WatchPage() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  /* ---------------- Chargement des commentaires ---------------- */
   const fetchComments = async (mediaId: string) => {
     const { data, error } = await supabase
       .from('comments')
@@ -266,8 +264,6 @@ export default function WatchPage() {
     }
   };
 
-  /* ---------------- Chargement Principal ---------------- */
-
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
@@ -287,7 +283,6 @@ export default function WatchPage() {
 
         if (cancelled || error || !mediaData) return;
 
-        // Charger les commentaires de ce média
         fetchComments(String(id));
 
         const userWatched: Record<string, boolean> = {};
@@ -374,8 +369,6 @@ export default function WatchPage() {
     }, 300);
     return () => clearTimeout(t);
   }, [loading, resumePos]);
-
-  /* ---------------- Historique & Vus ---------------- */
 
   const saveWatchHistory = async (sIdx: number, eIdx: number, currentTime = 0, duration = 0) => {
     try {
@@ -477,8 +470,6 @@ export default function WatchPage() {
   const toggleMovieWatched = () => {
     setWatchedKeys(['movie_main'], !mediaRef.current?.watched?.movie_main);
   };
-
-  /* ---------------- Lecture ---------------- */
 
   const checkAndIncrementWatch = async (): Promise<boolean> => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -599,9 +590,20 @@ export default function WatchPage() {
 
       currentProgressRef.current = { currentTime: 0, duration: 0 };
 
-      setPlayerKey(prev => prev + 1);
-      setShowAdPopup(false);
-      setIsPlaying(true);
+      setIsPlaying(false);
+      setTimeout(() => {
+        setPlayerKey(prev => prev + 1);
+        setShowAdPopup(false);
+        setIsPlaying(true);
+
+        setTimeout(() => {
+          if (iframeRef.current) {
+            if (iframeRef.current.requestFullscreen) {
+              iframeRef.current.requestFullscreen().catch(() => {});
+            }
+          }
+        }, 500);
+      }, 100);
 
       if (watchValidationTimerRef.current) clearTimeout(watchValidationTimerRef.current);
       watchValidationTimerRef.current = setTimeout(() => {
@@ -729,8 +731,6 @@ export default function WatchPage() {
       return out;
     }
   };
-
-  /* ---------------- États de chargement ---------------- */
 
   if (loading) {
     return (
@@ -1054,7 +1054,7 @@ export default function WatchPage() {
         </div>
       )}
 
-      {/* ================= Hero ================= */}
+      {/* Hero */}
       <section className="relative w-full">
         <div className="relative h-[72svh] min-h-[480px] sm:h-[70vh] sm:min-h-[460px] w-full overflow-hidden">
           {mobileBg && (
@@ -1164,7 +1164,7 @@ export default function WatchPage() {
         </div>
       </section>
 
-      {/* ================= Épisodes ================= */}
+      {/* Épisodes */}
       {isSeries && currentSeason && (
         <section className="max-w-7xl mx-auto px-4 sm:px-12 mt-12 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
@@ -1321,7 +1321,7 @@ export default function WatchPage() {
         </section>
       )}
 
-      {/* ================= Espace Commentaires ================= */}
+      {/* Commentaires */}
       <section className="max-w-7xl mx-auto px-4 sm:px-12 mt-16 space-y-8 border-t border-white/5 pt-12">
         <div>
           <h2 className="text-2xl font-black tracking-tight">Commentaires ({comments.length})</h2>

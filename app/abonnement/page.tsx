@@ -8,14 +8,11 @@ import { supabase } from '@/lib/supabase';
 /* À PERSONNALISER                                                     */
 /* ------------------------------------------------------------------ */
 
-// Un "Payment Link" Stripe par forfait.
-// Dans Stripe, règle la redirection après paiement de chaque lien sur : https://tonsite.com/vip
-
 type Plan = {
   id: string;
   name: string;
-  price: number;   // en euros
-  days: number;    // durée du forfait en jours
+  price: number;
+  days: number;
   tagline: string;
   badge?: string;
   stripeLink: string;
@@ -28,22 +25,118 @@ const PLANS: Plan[] = [
 ];
 
 const DEFAULT_PLAN_ID = '3m';
-const STRIPE_PORTAL_URL = '';        // ← lien "Portail client" Stripe (optionnel) pour gérer/résilier
-const SUPPORT_EMAIL = '';            // ← ton email de contact (ex : 'support@tonsite.com'). Vide = bouton email masqué
+const STRIPE_PORTAL_URL = '';
+const SUPPORT_EMAIL = '';
+
+type VipDurationType = '15d' | '3m' | '1y';
 
 const formatEuro = (n: number) =>
   n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: n % 1 ? 2 : 0 });
 
-const BASE_DAILY = PLANS[0].price / PLANS[0].days; // prix/jour du plus petit forfait
+const BASE_DAILY = PLANS[0].price / PLANS[0].days;
 const perMonth = (p: Plan) => (p.price / p.days) * 30.44;
 const savingPct = (p: Plan) => Math.round((1 - p.price / p.days / BASE_DAILY) * 100);
 
-/* ------------------------------------------------------------------ */
-/* Constantes du site (identiques aux autres pages)                    */
-/* ------------------------------------------------------------------ */
-
 const ADMIN_EMAIL = 'lukas.leclerc312@gmail.com';
 const MAX_FREE_LIMIT = 5;
+
+/* ------------------------------------------------------------------ */
+/* Composant Compte à Rebours VIP Visuel & Moderne[cite: 1]             */
+/* ------------------------------------------------------------------ */
+
+function VipCountdownClient({
+  startDate,
+  duration,
+}: {
+  startDate?: string;
+  duration?: VipDurationType;
+}) {
+  const [timeLeft, setTimeLeft] = useState<{
+    expired: boolean;
+    days: number;
+    hours: number;
+    minutes: number;
+    seconds: number;
+  }>({ expired: false, days: 0, hours: 0, minutes: 0, seconds: 0 });
+
+  useEffect(() => {
+    if (!startDate || !duration) return;
+
+    const start = new Date(startDate).getTime();
+    if (isNaN(start)) return;
+
+    const expiration = new Date(start);
+    if (duration === '15d') {
+      expiration.setDate(expiration.getDate() + 15);
+    } else if (duration === '3m') {
+      expiration.setMonth(expiration.getMonth() + 3);
+    } else if (duration === '1y') {
+      expiration.setFullYear(expiration.getFullYear() + 1);
+    }
+
+    const expTime = expiration.getTime();
+
+    const updateTimer = () => {
+      const now = new Date().getTime();
+      const difference = expTime - now;
+
+      if (difference <= 0) {
+        setTimeLeft({ expired: true, days: 0, hours: 0, minutes: 0, seconds: 0 });
+        return;
+      }
+
+      setTimeLeft({
+        expired: false,
+        days: Math.floor(difference / (1000 * 60 * 60 * 24)),
+        hours: Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+        minutes: Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60)),
+        seconds: Math.floor((difference % (1000 * 60)) / 1000),
+      });
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [startDate, duration]);
+
+  if (timeLeft.expired) {
+    return (
+      <div className="rounded-2xl bg-red-600/10 px-6 py-4 text-center ring-1 ring-red-500/30">
+        <p className="text-sm font-bold text-red-400">Ton abonnement VIP a expiré</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-500/20 via-[#16130f] to-amber-600/10 p-6 ring-1 ring-amber-500/40 shadow-[0_0_50px_-15px_rgba(245,158,11,0.3)]">
+      <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-amber-500/10 blur-2xl" />
+      
+      <p className="mb-4 flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-[0.25em] text-amber-400">
+        <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+        Temps VIP Restant
+      </p>
+
+      <div className="grid grid-cols-4 gap-2 sm:gap-4 text-center">
+        <div className="rounded-2xl bg-black/40 p-3 ring-1 ring-white/10">
+          <span className="block text-2xl font-black tabular-nums text-white sm:text-3xl">{timeLeft.days}</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Jours</span>
+        </div>
+        <div className="rounded-2xl bg-black/40 p-3 ring-1 ring-white/10">
+          <span className="block text-2xl font-black tabular-nums text-white sm:text-3xl">{timeLeft.hours}</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Heures</span>
+        </div>
+        <div className="rounded-2xl bg-black/40 p-3 ring-1 ring-white/10">
+          <span className="block text-2xl font-black tabular-nums text-white sm:text-3xl">{timeLeft.minutes}</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Min</span>
+        </div>
+        <div className="rounded-2xl bg-black/40 p-3 ring-1 ring-white/10">
+          <span className="block text-2xl font-black tabular-nums text-amber-400 sm:text-3xl">{timeLeft.seconds}</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Sec</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /* Icônes                                                              */
@@ -84,18 +177,14 @@ function Icon({ name, className = 'w-4 h-4' }: { name: IconName; className?: str
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Contenu                                                             */
-/* ------------------------------------------------------------------ */
-
-const PERKS: { icon: IconName; title: string; text: string }[] = [
-  { icon: 'infinity', title: 'Visionnage illimité', text: 'Plus aucune limite : regarde autant de films et d\'épisodes que tu veux.' },
-  { icon: 'play', title: 'Tout le catalogue', text: 'Accès complet à tous les films et toutes les séries, saison après saison.' },
-  { icon: 'tv', title: 'Sur tous tes écrans', text: 'Téléphone, ordinateur, tablette ou TV, avec le même compte.' },
-  { icon: 'zap', title: 'Activation immédiate', text: 'Ton accès VIP est activé juste après le paiement.' },
+const PERKS = [
+  { icon: 'infinity' as IconName, title: 'Visionnage illimité', text: 'Plus aucune limite : regarde autant de films et d\'épisodes que tu veux.' },
+  { icon: 'play' as IconName, title: 'Tout le catalogue', text: 'Accès complet à tous les films et toutes les séries, saison après saison.' },
+  { icon: 'tv' as IconName, title: 'Sur tous tes écrans', text: 'Téléphone, ordinateur, tablette ou TV, avec le même compte.' },
+  { icon: 'zap' as IconName, title: 'Activation immédiate', text: 'Ton accès VIP est activé juste après le paiement.' },
 ];
 
-const COMPARE: { label: string; free: string | boolean; vip: string | boolean }[] = [
+const COMPARE = [
   { label: 'Nombre de visions', free: `${MAX_FREE_LIMIT} au total`, vip: 'Illimité' },
   { label: 'Films et séries', free: true, vip: true },
   { label: 'Reprendre la lecture', free: true, vip: true },
@@ -142,6 +231,9 @@ export default function AbonnementPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [isVip, setIsVip] = useState(false);
   const [watchCount, setWatchCount] = useState(0);
+  const [vipStartedAt, setVipStartedAt] = useState<string | undefined>(undefined);
+  const [vipDuration, setVipDuration] = useState<VipDurationType | undefined>(undefined);
+
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [selectedPlanId, setSelectedPlanId] = useState(DEFAULT_PLAN_ID);
   const [copied, setCopied] = useState(false);
@@ -159,24 +251,25 @@ export default function AbonnementPage() {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('is_vip, watch_count')
+      .select('is_vip, watch_count, vip_started_at, vip_duration')
       .eq('id', user.id)
       .single();
 
-    setIsVip(user.email === ADMIN_EMAIL || (profile ? !!profile.is_vip : false));
+    const adminCheck = user.email === ADMIN_EMAIL;
+    setIsVip(adminCheck || (profile ? !!profile.is_vip : false));
     setWatchCount(profile ? profile.watch_count || 0 : 0);
+    setVipStartedAt(profile?.vip_started_at || undefined);
+    setVipDuration(profile?.vip_duration || undefined);
   };
 
   useEffect(() => {
     loadProfile()
       .catch(err => console.error('Erreur chargement VIP:', err))
       .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSubscribe = (plan: Plan) => {
     if (!plan.stripeLink) return;
-    // Pré-remplit l'email et associe le paiement à l'utilisateur (visible dans Stripe)
     const url = new URL(plan.stripeLink);
     if (userEmail) url.searchParams.set('prefilled_email', userEmail);
     if (userId) url.searchParams.set('client_reference_id', userId);
@@ -189,22 +282,16 @@ export default function AbonnementPage() {
       await navigator.clipboard.writeText(userId);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* presse-papiers indisponible : l'identifiant reste affiché à l'écran */
-    }
+    } catch {}
   };
 
   const supportMailto = SUPPORT_EMAIL
-    ? `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Problème VIP / paiement')}&body=${encodeURIComponent(
-        `Bonjour,\n\nJ'ai un problème avec mon accès VIP.\n\nEmail du compte : ${userEmail || ''}\nIdentifiant client : ${userId || ''}\nForfait payé : \nDate du paiement : \n\nDescription du problème :\n`
-      )}`
+    ? `mailto:${SUPPORT_EMAIL}?subject=Problème VIP / paiement&body=Bonjour,%0A%0AJ'ai un problème avec mon accès VIP.%0A%0AEmail du compte : ${userEmail || ''}%0AIdentifiant client : ${userId || ''}`
     : '';
 
   const remaining = Math.max(0, MAX_FREE_LIMIT - watchCount);
   const usedPct = Math.min(100, (watchCount / MAX_FREE_LIMIT) * 100);
   const limitReached = !isVip && watchCount >= MAX_FREE_LIMIT;
-
-  /* ---------------- Chargement ---------------- */
 
   if (loading) {
     return (
@@ -223,15 +310,11 @@ export default function AbonnementPage() {
     );
   }
 
-  /* ---------------- Rendu ---------------- */
-
   return (
     <main className="relative min-h-screen overflow-x-hidden bg-[#0a0a0b] pb-24 font-sans text-white antialiased selection:bg-amber-500 selection:text-black">
-      {/* Halos */}
       <div className="pointer-events-none absolute -top-56 left-1/2 h-[620px] w-[620px] -translate-x-1/2 rounded-full bg-amber-500/15 blur-[140px]" />
       <div className="pointer-events-none absolute right-[-200px] top-[400px] h-[400px] w-[400px] rounded-full bg-red-600/10 blur-[120px]" />
 
-      {/* ================= Header ================= */}
       <header className="fixed inset-x-0 top-0 z-50 border-b border-white/5 bg-[#0a0a0b]/85 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-10">
           <button
@@ -263,19 +346,24 @@ export default function AbonnementPage() {
       <div className="relative mx-auto max-w-6xl px-4 pt-28 sm:px-10 sm:pt-32">
 
         {isVip ? (
-          /* ================= Déjà VIP ================= */
-          <section className="mx-auto max-w-2xl text-center">
-            <div className="relative mx-auto mb-8 w-fit">
+          <section className="mx-auto max-w-xl text-center">
+            <div className="relative mx-auto mb-6 w-fit">
               <div className="absolute inset-0 rounded-3xl bg-amber-500/40 blur-2xl" />
               <div className="relative flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-amber-300 via-amber-500 to-amber-700 text-zinc-950 shadow-2xl">
                 <Icon name="crown" className="h-10 w-10" />
               </div>
             </div>
-            <p className="mb-3 text-xs font-bold uppercase tracking-[0.3em] text-amber-400">Membre VIP</p>
-            <h1 className="text-4xl font-black tracking-tight sm:text-5xl">Tu profites de tout, sans limite.</h1>
-            <p className="mx-auto mt-4 max-w-lg text-base leading-relaxed text-zinc-400">
-              Merci pour ton soutien ! Ton compte <span className="text-white">{userEmail}</span> a un accès illimité à tout le catalogue.
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.3em] text-amber-400">Membre VIP</p>
+            <h1 className="text-3xl font-black tracking-tight sm:text-4xl">Tu profites de tout, sans limite.</h1>
+
+            <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-zinc-400">
+              Ton compte <span className="text-white">{userEmail}</span> possède un accès illimité actif.
             </p>
+
+            {/* Compte à rebours visuel & gros blocs */}
+            <div className="mt-8">
+              <VipCountdownClient startDate={vipStartedAt} duration={vipDuration} />
+            </div>
 
             <div className="mx-auto mt-10 grid max-w-xl gap-3 text-left sm:grid-cols-2">
               {PERKS.map(p => (
@@ -307,7 +395,6 @@ export default function AbonnementPage() {
           </section>
         ) : (
           <>
-            {/* ================= Hero ================= */}
             <section className="mx-auto max-w-3xl text-center">
               <span className="inline-flex items-center gap-2 rounded-full bg-amber-500/10 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.2em] text-amber-400 ring-1 ring-amber-500/30">
                 <Icon name="crown" className="h-3.5 w-3.5" /> YAMONFIM VIP
@@ -327,7 +414,6 @@ export default function AbonnementPage() {
               </a>
             </section>
 
-            {/* ================= Statut actuel ================= */}
             <section className="mx-auto mt-10 max-w-md">
               <div className={`rounded-2xl p-5 ring-1 ${limitReached ? 'bg-red-600/10 ring-red-500/30' : 'bg-white/[0.04] ring-white/10'}`}>
                 <div className="mb-3 flex items-center justify-between">
@@ -352,7 +438,6 @@ export default function AbonnementPage() {
               </div>
             </section>
 
-            {/* ================= Forfaits ================= */}
             <section className="mx-auto mt-14 max-w-5xl">
               <div className="mb-8 text-center">
                 <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Choisis ton forfait</h2>
@@ -465,7 +550,6 @@ export default function AbonnementPage() {
               </p>
             </section>
 
-            {/* ================= Avantages ================= */}
             <section className="mx-auto mt-24 max-w-5xl">
               <h2 className="text-center text-2xl font-bold tracking-tight sm:text-3xl">Pourquoi passer au VIP ?</h2>
               <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -481,7 +565,6 @@ export default function AbonnementPage() {
               </div>
             </section>
 
-            {/* ================= Comparatif ================= */}
             <section className="mx-auto mt-24 max-w-3xl">
               <h2 className="text-center text-2xl font-bold tracking-tight sm:text-3xl">Gratuit ou VIP</h2>
               <div className="mt-8 overflow-hidden rounded-2xl ring-1 ring-white/10">
@@ -512,7 +595,6 @@ export default function AbonnementPage() {
               </div>
             </section>
 
-            {/* ================= FAQ ================= */}
             <section className="mx-auto mt-24 max-w-2xl">
               <h2 className="text-center text-2xl font-bold tracking-tight sm:text-3xl">Questions fréquentes</h2>
               <div className="mt-8 space-y-3">
@@ -539,7 +621,6 @@ export default function AbonnementPage() {
               </div>
             </section>
 
-            {/* ================= CTA final ================= */}
             <section className="mx-auto mt-24 max-w-4xl">
               <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-500/20 via-[#16130f] to-red-600/10 p-8 text-center ring-1 ring-amber-500/30 sm:p-12">
                 <Icon name="sparkles" className="mx-auto mb-4 h-8 w-8 text-amber-400" />
@@ -574,7 +655,6 @@ export default function AbonnementPage() {
           </>
         )}
 
-        {/* ================= Aide / Support ================= */}
         <section id="aide" className="mx-auto mt-24 max-w-4xl scroll-mt-24">
           <div className="text-center">
             <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 text-zinc-300 ring-1 ring-white/10">
@@ -587,7 +667,6 @@ export default function AbonnementPage() {
           </div>
 
           <div className={`mx-auto mt-10 grid gap-4 ${SUPPORT_EMAIL ? 'max-w-3xl md:grid-cols-2' : 'max-w-md'}`}>
-            {/* Email */}
             {SUPPORT_EMAIL && (
               <div className="flex flex-col rounded-2xl bg-white/[0.03] p-6 ring-1 ring-white/10">
                 <span className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-white">
@@ -606,7 +685,6 @@ export default function AbonnementPage() {
               </div>
             )}
 
-            {/* Demandes */}
             <div className="flex flex-col rounded-2xl bg-white/[0.03] p-6 ring-1 ring-white/10">
               <span className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-white">
                 <Icon name="request" className="h-5 w-5" />
@@ -624,7 +702,6 @@ export default function AbonnementPage() {
             </div>
           </div>
 
-          {/* Infos à communiquer */}
           {userId && (
             <div className="mx-auto mt-6 max-w-2xl rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-5">
               <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">À indiquer dans ton message</p>
