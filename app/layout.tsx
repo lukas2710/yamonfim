@@ -15,25 +15,31 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "YAMONFILM",
   description: "Regarde tes films et séries préférés en streaming",
-  manifest: "/manifest.json",
+  manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "YAMONFILM",
   },
   icons: {
-    icon: "/icon-512.png",
-    apple: "/apple-touch-icon.png",
+    icon: "/icone.png",
+    apple: "/icone.png",
   },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html
       lang="fr"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-[#0a0a0b] text-white">{children}</body>
+      <body className="min-h-full flex flex-col bg-[#0a0a0b] text-white">
+        {children}
+      </body>
     </html>
   );
 }
