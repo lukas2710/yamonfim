@@ -537,6 +537,9 @@ export default function WatchPage() {
       if (eIdx !== selectedEpisodeIdx) setSelectedEpisodeIdx(eIdx);
       posRef.current = { s: sIdx, e: eIdx };
 
+      // Enregistrement immédiat dans l'historique pour la page d'accueil
+      await saveWatchHistory(sIdx, eIdx, 0, 0);
+
       if (watchValidationTimerRef.current) clearTimeout(watchValidationTimerRef.current);
       setCountdown(null);
       setPlayerKey(prev => prev + 1);

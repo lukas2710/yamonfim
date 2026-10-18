@@ -325,7 +325,6 @@ export default function Home() {
 
   const handleMediaClick = (item: MediaItem) => {
     if (item.id === undefined || item.id === null) return;
-    // MODIFICATION ICI : On vérifie bien que si l'utilisateur n'est pas VIP et dépasse la limite
     if (!isVip && watchCount >= MAX_FREE_LIMIT) {
       setShowVipModal(true);
       return;
@@ -842,6 +841,56 @@ export default function Home() {
       )}
 
       <div className={`relative z-10 space-y-10 px-4 sm:px-10 ${showHero ? '-mt-4 sm:-mt-10' : 'mt-6'}`}>
+        
+        {/* Section "Reprendre la lecture" placée hors des conditions de filtres pour s'afficher en permanence */}
+        {continueWatchingList.length > 0 && !searchQuery && (
+          <Row title="Reprendre la lecture" icon={<Icon name="play" className="h-4 w-4 text-red-600" />}>
+            {continueWatchingList.map(item => (
+              <div
+                key={item.id}
+                {...activateProps(() => handleMediaClick(item))}
+                aria-label={`Reprendre ${item.title}`}
+                className="group relative aspect-video w-[240px] shrink-0 cursor-pointer overflow-hidden rounded-xl bg-zinc-900 ring-1 ring-white/5 transition duration-300 hover:-translate-y-1 hover:ring-white/20 hover:shadow-2xl hover:shadow-black/60 focus:outline-none focus-visible:-translate-y-1 focus-visible:ring-2 focus-visible:ring-red-600 active:scale-[0.97] sm:w-[300px]"
+              >
+                {(item.backdrop || item.poster) && (
+                  <img
+                    src={item.backdrop || item.poster}
+                    alt={item.title}
+                    loading="lazy"
+                    className={`absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105 ${
+                      item.backdrop ? 'object-center' : 'object-[center_20%]'
+                    }`}
+                  />
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+
+                <button
+                  onClick={(e) => handleRemoveFromContinue(e, item.id)}
+                  aria-label="Supprimer de l'historique"
+                  className="absolute right-2 top-2 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-zinc-300 opacity-0 backdrop-blur-md transition hover:bg-red-600 hover:text-white group-hover:opacity-100"
+                >
+                  <Icon name="trash" className="h-4 w-4" />
+                </button>
+
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 transition duration-300 group-hover:opacity-100">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-black shadow-xl">
+                    {userLimitReached ? <Icon name="lock" className="h-5 w-5" /> : <Icon name="play" className="h-5 w-5 translate-x-[1px]" />}
+                  </span>
+                </div>
+
+                <div className="absolute inset-x-0 bottom-0 p-3.5">
+                  <span className="mb-0.5 block text-[10px] font-bold uppercase tracking-wider text-red-500">
+                    {item.type === 'series' && item.progress
+                      ? `Saison ${item.progress.seasonNumber} · Épisode ${item.progress.episodeNumber}`
+                      : 'Film'}
+                  </span>
+                  <h3 className="truncate text-sm font-bold text-white">{item.title}</h3>
+                </div>
+              </div>
+            ))}
+          </Row>
+        )}
+
         {isFiltered ? (
           <section>
             <div className="mb-5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -887,54 +936,6 @@ export default function Home() {
         ) : (
           <>
             <PromoBanner isVip={isVip} isAdmin={isAdmin} />
-
-            {continueWatchingList.length > 0 && (
-              <Row title="Reprendre la lecture" icon={<Icon name="play" className="h-4 w-4 text-red-600" />}>
-                {continueWatchingList.map(item => (
-                  <div
-                    key={item.id}
-                    {...activateProps(() => handleMediaClick(item))}
-                    aria-label={`Reprendre ${item.title}`}
-                    className="group relative aspect-video w-[240px] shrink-0 cursor-pointer overflow-hidden rounded-xl bg-zinc-900 ring-1 ring-white/5 transition duration-300 hover:-translate-y-1 hover:ring-white/20 hover:shadow-2xl hover:shadow-black/60 focus:outline-none focus-visible:-translate-y-1 focus-visible:ring-2 focus-visible:ring-red-600 active:scale-[0.97] sm:w-[300px]"
-                  >
-                    {(item.backdrop || item.poster) && (
-                      <img
-                        src={item.backdrop || item.poster}
-                        alt={item.title}
-                        loading="lazy"
-                        className={`absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105 ${
-                          item.backdrop ? 'object-center' : 'object-[center_20%]'
-                        }`}
-                      />
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
-
-                    <button
-                      onClick={(e) => handleRemoveFromContinue(e, item.id)}
-                      aria-label="Supprimer de l'historique"
-                      className="absolute right-2 top-2 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-zinc-300 opacity-0 backdrop-blur-md transition hover:bg-red-600 hover:text-white group-hover:opacity-100"
-                    >
-                      <Icon name="trash" className="h-4 w-4" />
-                    </button>
-
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 transition duration-300 group-hover:opacity-100">
-                      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-black shadow-xl">
-                        {userLimitReached ? <Icon name="lock" className="h-5 w-5" /> : <Icon name="play" className="h-5 w-5 translate-x-[1px]" />}
-                      </span>
-                    </div>
-
-                    <div className="absolute inset-x-0 bottom-0 p-3.5">
-                      <span className="mb-0.5 block text-[10px] font-bold uppercase tracking-wider text-red-500">
-                        {item.type === 'series' && item.progress
-                          ? `Saison ${item.progress.seasonNumber} · Épisode ${item.progress.episodeNumber}`
-                          : 'Film'}
-                      </span>
-                      <h3 className="truncate text-sm font-bold text-white">{item.title}</h3>
-                    </div>
-                  </div>
-                ))}
-              </Row>
-            )}
 
             {becauseYouWatched && becauseYouWatched.list.length > 0 && (
               <Row
