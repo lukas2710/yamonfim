@@ -10,6 +10,7 @@ interface Episode {
   embedUrl: string;
   still_path?: string;
   runtime?: number;
+  tmdb_id?: number | string;
 }
 
 interface Season {
@@ -44,7 +45,6 @@ type Position = { s: number; e: number };
 
 const MAX_FREE_LIMIT = 5;
 const ADMIN_EMAIL = 'lukas.leclerc312@gmail.com';
-const AUTO_NEXT_SECONDS = 10;
 const AUTOPLAY_STORAGE_KEY = 'yf_autoplay';
 
 const clampIndex = (value: number, length: number) => {
@@ -84,10 +84,11 @@ const timeAgo = (iso: string) => {
 
 type IconName =
   | 'play' | 'back' | 'close' | 'next' | 'reload' | 'check' | 'restart'
-  | 'crown' | 'alert' | 'chevronLeft' | 'chevronRight' | 'clock' | 'lock' | 'eye' | 'send' | 'trash';
+  | 'crown' | 'alert' | 'chevronLeft' | 'chevronRight' | 'clock' | 'lock' | 'eye' | 'send' | 'trash' | 'pause' | 'plus' | 'minus' | 'maximize';
 
 const ICONS: Record<IconName, React.ReactNode> = {
   play: <path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5Z" fill="currentColor" stroke="none" />,
+  pause: <><rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none" /><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none" /></>,
   back: <path d="M19 12H5m6-7-7 7 7 7" />,
   close: <path d="M18 6 6 18M6 6l12 12" />,
   next: <><path d="M5 4.5v15l11-7.5-11-7.5Z" fill="currentColor" stroke="none" /><path d="M19 5v14" /></>,
@@ -103,6 +104,9 @@ const ICONS: Record<IconName, React.ReactNode> = {
   eye: <><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></>,
   send: <path d="m22 2-7 20-4-9-9-4Z" />,
   trash: <><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /></>,
+  plus: <path d="M12 5v14M5 12h14" />,
+  minus: <path d="M5 12h14" />,
+  maximize: <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />,
 };
 
 function Icon({ name, className = 'w-4 h-4' }: { name: IconName; className?: string }) {
@@ -125,6 +129,11 @@ export default function WatchPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [showAdPopup, setShowAdPopup] = useState(true);
 
+  const [isPlayerPaused, setIsPlayerPaused] = useState(false);
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const playerWrapperRef = useRef<HTMLDivElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [playerKey, setPlayerKey] = useState(0);
   const [iframeLoaded, setIframeLoaded] = useState(false);
@@ -143,7 +152,6 @@ export default function WatchPage() {
   const [hasMovieHistory, setHasMovieHistory] = useState(false);
 
   const [autoPlayEnabled, setAutoPlayEnabled] = useState(true);
-  const [countdown, setCountdown] = useState<number | null>(null);
 
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [newComment, setNewComment] = useState('');
@@ -154,8 +162,6 @@ export default function WatchPage() {
   const posRef = useRef<Position>({ s: 0, e: 0 });
   const busyRef = useRef(false);
   const episodeListRef = useRef<HTMLDivElement>(null);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const watchValidationTimerRef = useRef<NodeJS.Timeout | null>(null);
   const userIdRef = useRef<string | null>(null);
 
   const currentProgressRef = useRef<{ currentTime: number; duration: number }>({ currentTime: 0, duration: 0 });
@@ -170,34 +176,17 @@ export default function WatchPage() {
     } catch {}
   }, []);
 
-  const toggleAutoPlay = () => {
-    setAutoPlayEnabled(prev => {
-      const next = !prev;
-      try { localStorage.setItem(AUTOPLAY_STORAGE_KEY, next ? '1' : '0'); } catch {}
-      if (!next) setCountdown(null);
-      return next;
-    });
-  };
-
   useEffect(() => {
     setIframeLoaded(false);
   }, [playerKey, selectedSeasonIdx, selectedEpisodeIdx]);
 
   useEffect(() => {
-    if (!isPlaying && !showVipModal) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isPlaying) closePlayer();
     };
-    window.addEventListener('keydown', onKeyDown);
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [isPlaying, showVipModal]);
+    if (isPlaying) window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isPlaying]);
 
   useEffect(() => {
     if (!notice) return;
@@ -205,22 +194,85 @@ export default function WatchPage() {
     return () => clearTimeout(t);
   }, [notice]);
 
-  useEffect(() => {
-    const handleMessage = (e: MessageEvent) => {
-      if (e.data && typeof e.data === 'object') {
-        const time = e.data.currentTime || e.data.time;
-        const dur = e.data.duration;
-        if (typeof time === 'number') {
-          currentProgressRef.current.currentTime = time;
-          if (typeof dur === 'number' && dur > 0) {
-            currentProgressRef.current.duration = dur;
-          }
+  const clearTimer = () => {
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+  };
+
+  const initTimer = (durationMinutes?: number) => {
+    clearTimer();
+    if (!autoPlayEnabled) return;
+
+    const mins = durationMinutes && durationMinutes > 0 ? durationMinutes : 21;
+    setRemainingSeconds(mins * 60);
+    setIsPlayerPaused(false);
+
+    timerIntervalRef.current = setInterval(() => {
+      if (isPlayerPaused) return;
+
+      setRemainingSeconds(prev => {
+        if (prev <= 1) {
+          clearTimer();
+          handleTimerFinished();
+          return 0;
         }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const togglePauseTimer = () => {
+    setIsPlayerPaused(prev => !prev);
+  };
+
+  const addTime = (seconds: number) => {
+    setRemainingSeconds(prev => Math.max(0, prev + seconds));
+  };
+
+  const formatTimerDisplay = (totalSecs: number) => {
+    const mins = Math.floor(totalSecs / 60);
+    const secs = totalSecs % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const requestFullscreenPlayer = () => {
+    if (playerWrapperRef.current && !document.fullscreenElement) {
+      playerWrapperRef.current.requestFullscreen().catch(() => {});
+    }
+  };
+
+  const handleTimerFinished = async () => {
+    const current = mediaRef.current;
+    if (!current) return;
+
+    const from = posRef.current;
+    if (current.type === 'series') {
+      await markAsWatched(epKey(from.s, from.e));
+      await saveWatchHistory(from.s, from.e, currentProgressRef.current.currentTime, currentProgressRef.current.duration);
+
+      const next = nextPositionOf(current.seasons, from);
+      if (!next) {
+        setNotice('Épisode validé. Tu as atteint la fin de la série 🎉');
+        return;
       }
-    };
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, []);
+
+      // Met uniquement à jour la position courante et le titre affiché en haut, sans recharger l'iframe
+      setSelectedSeasonIdx(next.s);
+      setSelectedEpisodeIdx(next.e);
+      posRef.current = next;
+      setResumePos(next);
+
+      const nextEpObj = current.seasons?.[next.s]?.episodes?.[next.e];
+      initTimer(nextEpObj?.runtime || current.runtime || 21);
+
+      setNotice("Épisode validé, passage de l'indicateur au suivant !");
+    } else {
+      await markAsWatched('movie_main');
+      setNotice('Film validé comme vu !');
+    }
+  };
 
   const fetchComments = async (mediaId: string) => {
     const { data, error } = await supabase
@@ -537,129 +589,75 @@ export default function WatchPage() {
       if (eIdx !== selectedEpisodeIdx) setSelectedEpisodeIdx(eIdx);
       posRef.current = { s: sIdx, e: eIdx };
 
-      // Enregistrement immédiat dans l'historique pour la page d'accueil
       await saveWatchHistory(sIdx, eIdx, 0, 0);
 
-      if (watchValidationTimerRef.current) clearTimeout(watchValidationTimerRef.current);
-      setCountdown(null);
+      clearTimer();
+
       setPlayerKey(prev => prev + 1);
       setShowAdPopup(true);
       setIsPlaying(true);
+
+      window.setTimeout(() => {
+        document.getElementById('lecteur-video')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 80);
     } finally {
       busyRef.current = false;
       setIsStarting(false);
     }
   };
 
-  const scheduleNextEpisodeTimer = useCallback((sIdx: number, eIdx: number) => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    const current = mediaRef.current;
-    if (!current || current.type !== 'series' || !autoPlayEnabled) return;
-
-    const episodeRuntime = current.seasons?.[sIdx]?.episodes?.[eIdx]?.runtime || 20;
-    const triggerDelayMs = Math.max(10, episodeRuntime * 60 - 60) * 1000;
-
-    timerRef.current = setTimeout(() => {
-      setCountdown(AUTO_NEXT_SECONDS);
-    }, triggerDelayMs);
-  }, [autoPlayEnabled]);
-
-  const goToNextEpisode = useCallback(async (automatic: boolean) => {
-    const current = mediaRef.current;
-    if (!current || current.type !== 'series' || !current.seasons || busyRef.current) return;
-
-    markAsWatched(epKey(posRef.current.s, posRef.current.e));
-    saveWatchHistory(posRef.current.s, posRef.current.e, currentProgressRef.current.currentTime, currentProgressRef.current.duration);
-
-    setCountdown(null);
-    const from = posRef.current;
-    const next = nextPositionOf(current.seasons, from);
-
-    if (!next) {
-      setNotice('Tu as terminé la série 🎉');
-      return;
-    }
-
-    busyRef.current = true;
-    setIsStarting(true);
-    try {
-      const canPlay = await checkAndIncrementWatch();
-      if (!canPlay) return;
-
-      setSelectedSeasonIdx(next.s);
-      setSelectedEpisodeIdx(next.e);
-      posRef.current = next;
-      setResumePos(next);
-
-      currentProgressRef.current = { currentTime: 0, duration: 0 };
-
-      setIsPlaying(false);
-      setTimeout(() => {
-        setPlayerKey(prev => prev + 1);
-        setShowAdPopup(false);
-        setIsPlaying(true);
-
-        setTimeout(() => {
-          if (iframeRef.current) {
-            if (iframeRef.current.requestFullscreen) {
-              iframeRef.current.requestFullscreen().catch(() => {});
-            }
-          }
-        }, 500);
-      }, 100);
-
-      if (watchValidationTimerRef.current) clearTimeout(watchValidationTimerRef.current);
-      watchValidationTimerRef.current = setTimeout(() => {
-        performValidatedWatchAction(next.s, next.e);
-      }, 60000);
-
-      scheduleNextEpisodeTimer(next.s, next.e);
-
-      if (automatic) setNotice('Lecture de l\'épisode suivant');
-    } finally {
-      busyRef.current = false;
-      setIsStarting(false);
-    }
-  }, [scheduleNextEpisodeTimer]);
-
   const closePlayer = () => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    if (watchValidationTimerRef.current) clearTimeout(watchValidationTimerRef.current);
+    clearTimer();
+
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
 
     saveWatchHistory(posRef.current.s, posRef.current.e, currentProgressRef.current.currentTime, currentProgressRef.current.duration);
 
     setIsPlaying(false);
     setShowAdPopup(true);
-    setCountdown(null);
   };
 
   const handleLaunchClick = () => {
     setShowAdPopup(false);
     const { s, e } = posRef.current;
 
-    if (watchValidationTimerRef.current) clearTimeout(watchValidationTimerRef.current);
-    watchValidationTimerRef.current = setTimeout(() => {
-      performValidatedWatchAction(s, e);
-    }, 60000);
+    const activeEp = mediaRef.current?.seasons?.[s]?.episodes?.[e];
+    initTimer(activeEp?.runtime || mediaRef.current?.runtime || 21);
 
-    if (media?.type === 'series' && autoPlayEnabled) {
-      scheduleNextEpisodeTimer(s, e);
+    if (playerWrapperRef.current && !document.fullscreenElement) {
+      playerWrapperRef.current.requestFullscreen().catch(() => {});
     }
+
+    performValidatedWatchAction(s, e);
   };
 
-  useEffect(() => {
-    if (countdown === null) return;
-    if (countdown <= 0) {
-      goToNextEpisode(true);
+  const selectEpisode = (idx: number) => {
+    if (idx === posRef.current.e && selectedSeasonIdx === posRef.current.s && isPlaying) return;
+
+    if (isPlaying) {
+      const previous = posRef.current;
+      if (mediaRef.current?.type === 'series') {
+        void markAsWatched(epKey(previous.s, previous.e));
+        void saveWatchHistory(previous.s, previous.e, currentProgressRef.current.currentTime, currentProgressRef.current.duration);
+      }
+      currentProgressRef.current = { currentTime: 0, duration: 0 };
+      posRef.current = { s: selectedSeasonIdx, e: idx };
+      setSelectedEpisodeIdx(idx);
+      setResumePos({ s: selectedSeasonIdx, e: idx });
+      void saveWatchHistory(selectedSeasonIdx, idx, 0, 0);
+      setPlayerKey(prevKey => prevKey + 1);
+      setIframeLoaded(false);
+
+      const activeEp = mediaRef.current?.seasons?.[selectedSeasonIdx]?.episodes?.[idx];
+      initTimer(activeEp?.runtime || mediaRef.current?.runtime || 21);
+
+      setNotice(`Lecture de l'épisode ${activeEp?.number ?? idx + 1}`);
       return;
     }
-    const t = setTimeout(() => setCountdown(c => (c === null ? null : c - 1)), 1000);
-    return () => clearTimeout(t);
-  }, [countdown, goToNextEpisode]);
 
-  const selectEpisode = (idx: number) => {
-    setSelectedEpisodeIdx(idx);
-    setResumePos({ s: selectedSeasonIdx, e: idx });
+    void startPlaying(selectedSeasonIdx, idx);
   };
 
   const restartFromBeginning = () => {
@@ -671,41 +669,12 @@ export default function WatchPage() {
   };
 
   const getCleanEmbedUrl = (rawUrl?: string) => {
-    if (media?.type === 'movie') {
-      const target = rawUrl || media.embedUrl || media.url || '';
-      let clean = target.trim();
-
-      if (clean.includes('<iframe')) {
-        try {
-          const doc = new DOMParser().parseFromString(clean, 'text/html');
-          const iframe = doc.querySelector('iframe');
-          clean = iframe ? iframe.getAttribute('src') || '' : '';
-        } catch {
-          clean = '';
-        }
-      }
-
-      if (!clean) {
-        clean = `https://api.moviez.ac/${media.id}`;
-      }
-
-      try {
-        const url = new URL(clean, window.location.origin);
-        url.searchParams.set('autoplay', '1');
-        url.searchParams.set('color', 'e8213f');
-        url.searchParams.set('info', 'title,year,rating,genres,duration');
-        return url.toString();
-      } catch {
-        let out = clean;
-        if (!/[?&]autoplay=/.test(out)) out += (out.includes('?') ? '&' : '?') + 'autoplay=1';
-        if (!/[?&]color=/.test(out)) out += '&color=e8213f';
-        if (!/[?&]info=/.test(out)) out += '&info=title,year,rating,genres,duration';
-        return out;
-      }
-    }
-
-    if (!rawUrl) return '';
-    let clean = rawUrl.trim();
+    const episodeObj = media?.seasons?.[selectedSeasonIdx]?.episodes?.[selectedEpisodeIdx];
+    const target = (episodeObj?.embedUrl && episodeObj.embedUrl.trim() !== '') 
+      ? episodeObj.embedUrl 
+      : (rawUrl || media?.embedUrl || media?.url || '');
+    
+    let clean = target.trim();
 
     if (clean.includes('<iframe')) {
       try {
@@ -716,21 +685,37 @@ export default function WatchPage() {
         clean = '';
       }
     }
+
+    if (!clean && media?.type === 'movie') {
+      clean = `https://api.moviez.ac/${media.id}`;
+    }
     if (!clean) return '';
 
     try {
       const url = new URL(clean, window.location.origin);
       url.searchParams.set('autoplay', '1');
-      url.searchParams.set('next', '0');
+      if (media?.type === 'series') {
+        url.searchParams.set('next', '1');
+        url.searchParams.set('season', String(currentSeason?.seasonNumber || 1));
+        url.searchParams.set('episode', String(currentEpisode?.number || 1));
+        if (currentEpisode?.tmdb_id) {
+          url.searchParams.set('tmdb_id', String(currentEpisode.tmdb_id));
+        }
+      }
       url.searchParams.set('color', 'e8213f');
-      url.searchParams.set('info', 'title,year,rating,duration,synopsis');
       return url.toString();
     } catch {
       let out = clean;
       if (!/[?&]autoplay=/.test(out)) out += (out.includes('?') ? '&' : '?') + 'autoplay=1';
-      if (!/[?&]next=/.test(out)) out += '&next=0';
-      if (!/[?&]color=/.test(out)) out += '&color=e8213f';
-      if (!/[?&]info=/.test(out)) out += '&info=title,year,rating,duration,synopsis';
+      if (media?.type === 'series') {
+        out = out.replace(/([?&])next=[^&]*/i, '$1next=1');
+        if (!/[?&]next=/.test(out)) out += '&next=1';
+        if (!/[?&]season=/.test(out)) out += `&season=${currentSeason?.seasonNumber || 1}`;
+        if (!/[?&]episode=/.test(out)) out += `&episode=${currentEpisode?.number || 1}`;
+        if (currentEpisode?.tmdb_id && !/[?&]tmdb_id=/.test(out)) {
+          out += `&tmdb_id=${currentEpisode.tmdb_id}`;
+        }
+      }
       return out;
     }
   };
@@ -781,10 +766,6 @@ export default function WatchPage() {
   const desktopBg = hasText(media.backdrop) ? media.backdrop! : media.poster;
   const mobileBg = hasText(media.poster) ? media.poster : media.backdrop || '';
 
-  const nextPos = isSeries ? nextPositionOf(media.seasons, { s: selectedSeasonIdx, e: selectedEpisodeIdx }) : null;
-  const nextSeason = nextPos ? media.seasons![nextPos.s] : null;
-  const nextEpisode = nextPos ? nextSeason!.episodes[nextPos.e] : null;
-  const hasNext = !!nextPos;
   const episodesCount = currentSeason?.episodes?.length || 0;
 
   const totalEpisodes = isSeries ? media.seasons!.reduce((n, s) => n + s.episodes.length, 0) : 0;
@@ -809,7 +790,7 @@ export default function WatchPage() {
   const isAdmin = currentUser?.email === ADMIN_EMAIL;
 
   return (
-    <main className="min-h-screen bg-[#0a0a0b] text-white font-sans pb-24 antialiased selection:bg-red-600 selection:text-white">
+    <main className="min-h-screen bg-[#080809] text-white font-sans pb-24 antialiased selection:bg-red-600 selection:text-white">
       {notice && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[80] px-4 w-full max-w-sm pointer-events-none">
           <div className="flex items-center gap-3 bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-2xl px-4 py-3 shadow-2xl">
@@ -865,7 +846,7 @@ export default function WatchPage() {
       </header>
 
       {isPlaying && (
-        <div className="fixed inset-0 z-50 bg-black flex flex-col">
+        <section id="lecteur-video" className="relative z-10 w-[calc(100%-2rem)] max-w-7xl mx-auto mt-24 mb-10 bg-[#070708] flex flex-col rounded-3xl overflow-hidden border border-white/10 shadow-[0_30px_100px_-35px_rgba(0,0,0,0.9)]">
           {showAdPopup ? (
             <div className="flex-1 flex items-center justify-center p-4 bg-[radial-gradient(ellipse_at_center,rgba(220,38,38,0.12),transparent_60%)]">
               <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#111113] p-8 text-center shadow-2xl">
@@ -881,7 +862,7 @@ export default function WatchPage() {
                   onClick={handleLaunchClick}
                   className="w-full inline-flex items-center justify-center gap-2 bg-red-600 hover:bg-red-500 text-white font-semibold py-3.5 rounded-full text-sm transition shadow-lg shadow-red-600/30 cursor-pointer active:scale-[0.98]"
                 >
-                  <Icon className="w-4 h-4" name="play" /> Lancer la vidéo
+                  <Icon className="w-4 h-4" name="play" /> Lancer la vidéo & Plein écran
                 </button>
                 <button
                   onClick={closePlayer}
@@ -893,8 +874,9 @@ export default function WatchPage() {
             </div>
           ) : (
             <>
-              <div className="shrink-0 border-b border-white/5 bg-[#0a0a0b]/95 backdrop-blur-xl">
-                <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-3">
+              {/* Barre de contrôle du lecteur et du minuteur */}
+              <div className="shrink-0 border-b border-white/10 bg-[#09090b]/95 backdrop-blur-2xl">
+                <div className="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3 px-4 sm:px-8 py-3.5">
                   <div className="min-w-0 flex items-center gap-3">
                     <button
                       onClick={closePlayer}
@@ -914,7 +896,49 @@ export default function WatchPage() {
                     </div>
                   </div>
 
+                  {/* Widget Minuteur Visible & Modifiable pour tout le monde */}
+                  {isSeries && (
+                    <div className="flex items-center gap-2 bg-black/50 border border-white/10 px-3 py-1.5 rounded-2xl">
+                      <div className="flex items-center gap-1.5 text-xs text-zinc-300 font-semibold px-2">
+                        <Icon name="clock" className="w-3.5 h-3.5 text-red-500" />
+                        <span className="font-mono text-white text-sm">{formatTimerDisplay(remainingSeconds)}</span>
+                      </div>
+                      <div className="h-4 w-[1px] bg-white/10" />
+                      <button
+                        onClick={togglePauseTimer}
+                        className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer ${
+                          isPlayerPaused ? 'bg-amber-500 text-black' : 'bg-white/10 text-white hover:bg-white/20'
+                        }`}
+                        title={isPlayerPaused ? 'Reprendre le minuteur' : 'Mettre en pause le minuteur'}
+                      >
+                        <Icon name={isPlayerPaused ? 'play' : 'pause'} className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => addTime(-60)}
+                        className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition cursor-pointer"
+                        title="Retirer 1 minute"
+                      >
+                        <Icon name="minus" className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => addTime(60)}
+                        className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition cursor-pointer"
+                        title="Ajouter 1 minute"
+                      >
+                        <Icon name="plus" className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={requestFullscreenPlayer}
+                      className="inline-flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white px-3.5 py-2 rounded-full text-xs font-semibold transition cursor-pointer"
+                      title="Mettre en plein écran"
+                    >
+                      <Icon name="maximize" className="w-3.5 h-3.5" /> Plein écran
+                    </button>
+
                     {!isVipUser && remainingFree !== null && (
                       <button
                         onClick={() => router.push('/abonnement')}
@@ -922,20 +946,6 @@ export default function WatchPage() {
                       >
                         <Icon className="w-3.5 h-3.5" name="crown" />
                         {remainingFree} restante{remainingFree > 1 ? 's' : ''}
-                      </button>
-                    )}
-
-                    {isSeries && (
-                      <button
-                        onClick={toggleAutoPlay}
-                        role="switch"
-                        aria-checked={autoPlayEnabled}
-                        className="inline-flex items-center gap-2 rounded-full bg-white/5 border border-white/10 pl-1.5 pr-3 py-1 text-[11px] font-semibold text-zinc-300 transition hover:bg-white/10 cursor-pointer"
-                      >
-                        <span className={`relative h-4 w-7 rounded-full transition ${autoPlayEnabled ? 'bg-red-600' : 'bg-zinc-700'}`}>
-                          <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all ${autoPlayEnabled ? 'left-3.5' : 'left-0.5'}`} />
-                        </span>
-                        Auto
                       </button>
                     )}
 
@@ -948,16 +958,6 @@ export default function WatchPage() {
                       <Icon name="reload" />
                     </button>
 
-                    {isSeries && (
-                      <button
-                        onClick={() => goToNextEpisode(false)}
-                        disabled={!hasNext || isStarting}
-                        className="hidden sm:inline-flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-zinc-100 px-4 py-2 rounded-full text-xs font-semibold transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        Suivant <Icon className="w-3.5 h-3.5" name="next" />
-                      </button>
-                    )}
-
                     <button
                       onClick={closePlayer}
                       className="inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-full text-xs font-semibold transition cursor-pointer"
@@ -968,12 +968,24 @@ export default function WatchPage() {
                 </div>
               </div>
 
-              <div className="flex-1 flex items-center justify-center p-2 sm:p-6 min-h-0">
-                <div className="w-full max-w-6xl max-h-full aspect-video bg-black rounded-xl sm:rounded-2xl overflow-hidden ring-1 ring-white/10 shadow-[0_0_120px_-30px_rgba(220,38,38,0.35)] relative">
+              <div className="h-[56vw] min-h-[260px] max-h-[76vh] flex items-center justify-center p-0 sm:p-4 lg:p-6 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.06),transparent_65%)]">
+                <div 
+                  ref={playerWrapperRef}
+                  className="w-full max-w-[1500px] max-h-full aspect-video bg-black sm:rounded-2xl overflow-hidden ring-1 ring-white/10 shadow-[0_24px_100px_-35px_rgba(0,0,0,0.9)] relative flex items-center justify-center group"
+                >
+                  <div className="absolute inset-x-0 bottom-4 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none">
+                    <button
+                      onClick={requestFullscreenPlayer}
+                      className="pointer-events-auto inline-flex items-center gap-2 bg-black/80 hover:bg-black text-white backdrop-blur-md px-4 py-2 rounded-full text-xs font-semibold shadow-lg border border-white/20 transition cursor-pointer"
+                    >
+                      <Icon name="maximize" className="w-3.5 h-3.5" /> Basculer en Plein Écran
+                    </button>
+                  </div>
+
                   {finalEmbedUrl ? (
                     <>
                       {!iframeLoaded && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-zinc-500 pointer-events-none">
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-zinc-500 pointer-events-none z-10">
                           <div className="w-10 h-10 rounded-full border-2 border-white/10 border-t-red-600 animate-spin" />
                           <span className="text-xs">Chargement du lecteur…</span>
                         </div>
@@ -996,70 +1008,16 @@ export default function WatchPage() {
                       <span className="text-sm">Aucun flux vidéo disponible.</span>
                     </div>
                   )}
-
-                  {countdown !== null && isSeries && (
-                    <div className="absolute bottom-3 right-3 left-3 sm:left-auto sm:bottom-5 sm:right-5 sm:w-[340px] z-10">
-                      <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#111113]/95 shadow-2xl backdrop-blur-xl">
-                        {nextEpisode ? (
-                          <>
-                            <div className="flex gap-3 p-3">
-                              <div className="relative w-28 shrink-0 aspect-video overflow-hidden rounded-lg bg-zinc-900">
-                                {(nextEpisode.still_path || nextSeason?.poster_path || media.poster) && (
-                                  <img
-                                    src={nextEpisode.still_path || nextSeason?.poster_path || media.poster}
-                                    alt=""
-                                    className="h-full w-full object-cover"
-                                  />
-                                )}
-                                <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-lg font-black tabular-nums">
-                                  {Math.max(0, countdown)}
-                                </span>
-                              </div>
-                              <div className="min-w-0 py-0.5">
-                                <p className="text-[11px] font-semibold uppercase tracking-wider text-red-500">
-                                  Épisode suivant dans {Math.max(0, countdown)} s
-                                </p>
-                                <p className="mt-0.5 line-clamp-2 text-sm font-semibold leading-snug">
-                                  S{nextSeason?.seasonNumber} · É{nextEpisode.number}
-                                  {nextEpisode.title ? ` — ${nextEpisode.title}` : ''}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="h-1 w-full bg-white/10">
-                              <div
-                                className="h-full bg-red-600 transition-[width] duration-1000 ease-linear"
-                                style={{ width: `${((AUTO_NEXT_SECONDS - Math.max(0, countdown)) / AUTO_NEXT_SECONDS) * 100}%` }}
-                              />
-                            </div>
-                            <div className="flex gap-2 p-3">
-                              <button
-                                onClick={() => goToNextEpisode(false)}
-                                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-full bg-white py-2 text-xs font-bold text-black transition hover:bg-zinc-200 cursor-pointer"
-                              >
-                                <Icon className="w-3.5 h-3.5" name="play" /> Lancer maintenant
-                              </button>
-                              <button
-                                onClick={() => setCountdown(null)}
-                                className="rounded-full bg-white/10 px-4 py-2 text-xs font-semibold text-white transition hover:bg-white/15 cursor-pointer"
-                              >
-                                Annuler
-                              </button>
-                            </div>
-                          </>
-                        ) : null}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             </>
           )}
-        </div>
+        </section>
       )}
 
-      {/* Hero */}
-      <section className="relative w-full">
-        <div className="relative h-[72svh] min-h-[480px] sm:h-[70vh] sm:min-h-[460px] w-full overflow-hidden">
+      {/* Présentation du contenu */}
+      <section className="relative w-full border-b border-white/[0.06]">
+        <div className="relative h-[48svh] min-h-[360px] sm:h-[52vh] sm:min-h-[390px] w-full overflow-hidden">
           {mobileBg && (
             <img
               src={mobileBg}
@@ -1169,10 +1127,10 @@ export default function WatchPage() {
 
       {/* Épisodes */}
       {isSeries && currentSeason && (
-        <section className="max-w-7xl mx-auto px-4 sm:px-12 mt-12 space-y-6">
+        <section className="max-w-7xl mx-auto px-4 sm:px-8 mt-10 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div>
-              <h2 className="text-xl font-bold tracking-tight">Épisodes</h2>
+              <h2 className="text-2xl sm:text-3xl font-black tracking-tight">Épisodes <span className="text-red-500">.</span></h2>
               <p className="text-sm text-zinc-500 mt-0.5">
                 Saison {currentSeason.seasonNumber} · {currentSeasonSeen} / {episodesCount} vu{currentSeasonSeen > 1 ? 's' : ''}
               </p>
@@ -1201,8 +1159,23 @@ export default function WatchPage() {
                   <button
                     key={sIdx}
                     onClick={() => {
+                      if (sIdx === selectedSeasonIdx) return;
+                      const previous = posRef.current;
+                      if (isPlaying && mediaRef.current?.type === 'series') {
+                        void markAsWatched(epKey(previous.s, previous.e));
+                        void saveWatchHistory(previous.s, previous.e, currentProgressRef.current.currentTime, currentProgressRef.current.duration);
+                        currentProgressRef.current = { currentTime: 0, duration: 0 };
+                      }
                       setSelectedSeasonIdx(sIdx);
                       setSelectedEpisodeIdx(0);
+                      posRef.current = { s: sIdx, e: 0 };
+                      setResumePos({ s: sIdx, e: 0 });
+                      if (isPlaying) {
+                        setPlayerKey(prevKey => prevKey + 1);
+                        setIframeLoaded(false);
+                        void saveWatchHistory(sIdx, 0, 0, 0);
+                        setNotice(`Saison ${season.seasonNumber}`);
+                      }
                     }}
                     className={`inline-flex shrink-0 items-center gap-1.5 px-5 py-2 rounded-full text-sm font-semibold transition cursor-pointer ${
                       isSelected
@@ -1223,7 +1196,7 @@ export default function WatchPage() {
             </div>
           )}
 
-          <div ref={episodeListRef} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div ref={episodeListRef} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {currentSeason.episodes.map((ep, eIdx) => {
               const isSelected = eIdx === selectedEpisodeIdx;
               const isWatched = !!w[epKey(selectedSeasonIdx, eIdx)];
@@ -1238,20 +1211,19 @@ export default function WatchPage() {
                   role="button"
                   tabIndex={0}
                   onClick={() => selectEpisode(eIdx)}
-                  onDoubleClick={() => startPlaying(selectedSeasonIdx, eIdx)}
                   onKeyDown={e => {
                     if (e.key === 'Enter') startPlaying(selectedSeasonIdx, eIdx);
                     else if (e.key === ' ') { e.preventDefault(); selectEpisode(eIdx); }
                   }}
                   className={`group relative flex gap-4 p-3 rounded-2xl border transition cursor-pointer scroll-mt-24 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-600 ${
                     isSelected
-                      ? 'bg-red-600/10 border-red-600/50 ring-1 ring-red-600/30'
+                      ? 'bg-gradient-to-br from-red-950/70 to-[#111114] border-red-500/60 ring-1 ring-red-500/25 shadow-[0_8px_35px_-20px_rgba(239,68,68,0.65)]'
                       : isWatched
-                        ? 'bg-emerald-500/[0.04] border-emerald-500/15 hover:border-emerald-500/30'
-                        : 'bg-white/[0.03] border-white/5 hover:bg-white/[0.06] hover:border-white/15'
+                        ? 'bg-gradient-to-br from-emerald-950/20 to-[#0e0e10] border-emerald-500/20 hover:border-emerald-500/40'
+                        : 'bg-[#111114]/80 border-white/[0.07] hover:bg-[#18181c] hover:border-white/20 hover:-translate-y-0.5 hover:shadow-xl'
                   }`}
                 >
-                  <div className="relative w-32 sm:w-36 shrink-0 aspect-video rounded-xl overflow-hidden bg-zinc-900">
+                  <div className="relative w-28 sm:w-36 shrink-0 aspect-video rounded-xl overflow-hidden bg-zinc-900 ring-1 ring-white/10">
                     {thumb && (
                       <img
                         src={thumb}
@@ -1325,7 +1297,7 @@ export default function WatchPage() {
       )}
 
       {/* Commentaires */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-12 mt-16 space-y-8 border-t border-white/5 pt-12">
+      <section className="max-w-7xl mx-auto px-4 sm:px-8 mt-14 space-y-8 border-t border-white/5 pt-10">
         <div>
           <h2 className="text-2xl font-black tracking-tight">Commentaires ({comments.length})</h2>
           <p className="text-sm text-zinc-400 mt-1">Donne ton avis ou discute de ce contenu avec la communauté.</p>

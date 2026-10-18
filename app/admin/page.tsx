@@ -177,7 +177,6 @@ export default function AdminPage() {
     }, 300);
   };
 
-  // Vérification si le flux moviez.ac signale le titre comme indisponible
   const checkUrlAvailable = async (testUrl: string): Promise<boolean> => {
     try {
       const res = await fetch(testUrl);
@@ -187,7 +186,7 @@ export default function AdminPage() {
       }
       return true;
     } catch {
-      return true; // En cas de blocage CORS, on laisse passer le contrôle
+      return true;
     }
   };
 
@@ -255,7 +254,6 @@ export default function AdminPage() {
           const fetchedSeasons: Season[] = [];
           let firstEpAvailable = true;
 
-          // Test du premier épisode pour vérifier la disponibilité de la série
           const testSeriesUrl = `https://api.moviez.ac/serie/${tmdbId}/1/1?autoplay=1&next=1&color=e8213f&info=title,year,rating,duration,synopsis`;
           firstEpAvailable = await checkUrlAvailable(testSeriesUrl);
 
@@ -278,8 +276,10 @@ export default function AdminPage() {
                     color: 'e8213f',
                     info: 'title,year,rating,duration,synopsis'
                   }).toString();
+                  
+                  // Génération de l'iframe demandée pour chaque épisode de série
                   const autoEmbed = firstEpAvailable
-                    ? `https://api.moviez.ac/serie/${tmdbId}/${sNum}/${ep.episode_number}?${seriesParams}`
+                    ? `<iframe src="https://api.moviez.ac/serie/${tmdbId}/${sNum}/${ep.episode_number}?${seriesParams}" width="100%" height="100%" frameborder="0" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" referrerpolicy="origin" allowfullscreen></iframe>`
                     : '';
 
                   return {
