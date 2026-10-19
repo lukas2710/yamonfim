@@ -156,12 +156,14 @@ export default function WatchPage() {
   const [newComment, setNewComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [activeProfile, setActiveProfile] = useState<any>(null);
 
   const mediaRef = useRef<MediaItem | null>(null);
   const posRef = useRef<Position>({ s: 0, e: 0 });
   const busyRef = useRef(false);
   const episodeListRef = useRef<HTMLDivElement>(null);
   const userIdRef = useRef<string | null>(null);
+  const profileIdRef = useRef<string | null>(null);
   const stableUrlRef = useRef<string>('');
 
   const currentProgressRef = useRef<{ currentTime: number; duration: number }>({ currentTime: 0, duration: 0 });
@@ -171,6 +173,12 @@ export default function WatchPage() {
 
   useEffect(() => {
     try {
+      const profileStored = localStorage.getItem('active_profile');
+      if (profileStored) {
+        const parsed = JSON.parse(profileStored);
+        setActiveProfile(parsed);
+        profileIdRef.current = parsed.id || null;
+      }
       const saved = localStorage.getItem(AUTOPLAY_STORAGE_KEY);
       if (saved !== null) setAutoPlayEnabled(saved === '1');
     } catch {}
@@ -355,11 +363,17 @@ export default function WatchPage() {
 
         const userWatched: Record<string, boolean> = {};
         if (user) {
-          const { data: watchedRows, error: watchedError } = await supabase
+          let watchedQuery = supabase
             .from('user_watched')
             .select('ep_key')
             .eq('user_id', user.id)
             .eq('media_id', String(mediaData.id));
+
+          if (profileIdRef.current) {
+            watchedQuery = watchedQuery.eq('profile_id', profileIdRef.current);
+          }
+
+          const { data: watchedRows, error: watchedError } = await watchedQuery;
           if (watchedError) console.error('Erreur user_watched :', watchedError);
           (watchedRows || []).forEach((r: any) => { userWatched[r.ep_key] = true; });
         }
@@ -393,12 +407,17 @@ export default function WatchPage() {
           eIdx = parseInt(eParam, 10);
           fromHistory = true;
         } else if (user) {
-          const { data: userHistory } = await supabase
+          let historyQuery = supabase
             .from('watch_history')
             .select('*')
             .eq('user_id', user.id)
-            .eq('media_id', String(id))
-            .maybeSingle();
+            .eq('media_id', String(id));
+
+          if (profileIdRef.current) {
+            historyQuery = historyQuery.eq('profile_id', profileIdRef.current);
+          }
+
+          const { data: userHistory } = await historyQuery.maybeSingle();
 
           if (cancelled) return;
           if (userHistory) {
@@ -441,6 +460,7 @@ export default function WatchPage() {
 
       const payload = {
         user_id: user.id,
+        profile_id: profileIdRef.current,
         media_id: String(current.id),
         type: current.type,
         season_idx: sIdx,
@@ -454,7 +474,7 @@ export default function WatchPage() {
 
       await supabase
         .from('watch_history')
-        .upsert(payload, { onConflict: 'user_id,media_id' });
+        .upsert(payload, { onConflict: 'user_id,profile_id,media_id' });
 
       if (current.type === 'series') setResumePos({ s: sIdx, e: eIdx });
       else setHasMovieHistory(true);
@@ -482,15 +502,28 @@ export default function WatchPage() {
     if (!uid) return;
 
     const mediaId = String(current.id);
-    const { error } = value
-      ? await supabase.from('user_watched').upsert(
-          keys.map(k => ({ user_id: uid, media_id: mediaId, ep_key: k, watched_at: new Date().toISOString() })),
-          { onConflict: 'user_id,media_id,ep_key' }
-        )
-      : await supabase.from('user_watched').delete()
-          .eq('user_id', uid).eq('media_id', mediaId).in('ep_key', keys);
+    const pid = profileIdRef.current;
 
-    if (error) console.error('Erreur user_watched :', error);
+    if (value) {
+      const { error } = await supabase.from('user_watched').upsert(
+        keys.map(k => ({
+          user_id: uid,
+          profile_id: pid,
+          media_id: mediaId,
+          ep_key: k,
+          watched_at: new Date().toISOString()
+        })),
+        { onConflict: 'user_id,profile_id,media_id,ep_key' }
+      );
+      if (error) console.error('Erreur insertion user_watched :', error);
+    } else {
+      const { error } = await supabase.from('user_watched').delete()
+        .eq('user_id', uid)
+        .eq('profile_id', pid)
+        .eq('media_id', mediaId)
+        .in('ep_key', keys);
+      if (error) console.error('Erreur suppression user_watched :', error);
+    }
   };
 
   const markAsWatched = async (key: string) => {
@@ -671,8 +704,8 @@ export default function WatchPage() {
       if (mediaRef.current?.type === 'series') {
         void markAsWatched(epKey(previous.s, previous.e));
         void saveWatchHistory(previous.s, previous.e, currentProgressRef.current.currentTime, currentProgressRef.current.duration);
+        currentProgressRef.current = { currentTime: 0, duration: 0 };
       }
-      currentProgressRef.current = { currentTime: 0, duration: 0 };
       posRef.current = { s: selectedSeasonIdx, e: idx };
       setSelectedEpisodeIdx(idx);
       setResumePos({ s: selectedSeasonIdx, e: idx });
@@ -807,9 +840,21 @@ export default function WatchPage() {
             <Icon className="w-4 h-4 transition group-hover:-translate-x-0.5" name="back" />
             Retour
           </button>
-          <span className="font-black text-lg tracking-[0.2em] text-red-600 select-none">
-            YAMON<span className="text-white">FIM</span>
-          </span>
+          <div className="flex items-center gap-3">
+            {activeProfile && (
+              <div className="hidden sm:flex items-center gap-2 bg-white/5 border border-white/10 px-2.5 py-1.5 rounded-full">
+                <img 
+                  src={activeProfile.avatar_url} 
+                  alt={activeProfile.name} 
+                  className="w-6 h-6 rounded-full object-cover" 
+                />
+                <span className="text-xs font-semibold text-white">{activeProfile.name}</span>
+              </div>
+            )}
+            <span className="font-black text-lg tracking-[0.2em] text-red-600 select-none">
+              YAMON<span className="text-white">FIM</span>
+            </span>
+          </div>
         </div>
       </header>
 
@@ -842,7 +887,6 @@ export default function WatchPage() {
             </div>
           ) : (
             <>
-              {/* Barre de contrôle du lecteur et du minuteur */}
               <div className="shrink-0 border-b border-white/10 bg-[#09090b]/95 backdrop-blur-2xl">
                 <div className="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3 px-4 sm:px-8 py-3.5">
                   <div className="min-w-0 flex items-center gap-3">
@@ -853,7 +897,6 @@ export default function WatchPage() {
                     >
                       <Icon name="back" />
                     </button>
-                    {/* Bannière supérieure de l'épisode en cours */}
                     <div className="min-w-0 overflow-hidden relative h-10 flex items-center">
                       <div className="transition-all duration-500 ease-in-out flex flex-col justify-center">
                         <p className="text-sm font-semibold truncate">{media.title}</p>
@@ -867,7 +910,6 @@ export default function WatchPage() {
                     </div>
                   </div>
 
-                  {/* Widget Minuteur synchronisé avec le bouton Play / Pause */}
                   {isSeries && (
                     <div className="flex items-center gap-2 bg-black/50 border border-white/10 px-3 py-1.5 rounded-2xl">
                       <div className="flex items-center gap-1.5 text-xs text-zinc-300 font-semibold px-2">
@@ -935,7 +977,6 @@ export default function WatchPage() {
                   ref={playerWrapperRef}
                   className="w-full h-full bg-black relative flex items-center justify-center group"
                 >
-                  {/* Widget de contrôle du chrono visible en permanence en haut en plein écran */}
                   {isFullscreen && isSeries && (
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[110] flex items-center gap-2 bg-black/85 backdrop-blur-md border border-white/20 px-4 py-2 rounded-full shadow-2xl">
                       <div className="flex items-center gap-1.5 text-xs text-zinc-300 font-semibold px-1">
@@ -955,7 +996,6 @@ export default function WatchPage() {
                     </div>
                   )}
 
-                  {/* Bouton pour quitter le plein écran en haut à droite */}
                   <button
                     onClick={exitFullscreenPlayer}
                     title="Quitter le plein écran"
@@ -987,7 +1027,6 @@ export default function WatchPage() {
         </section>
       )}
 
-      {/* Présentation du contenu */}
       <section className="relative w-full border-b border-white/[0.06]">
         <div className="relative h-[48svh] min-h-[360px] sm:h-[52vh] sm:min-h-[390px] w-full overflow-hidden">
           {mobileBg && (
@@ -1097,7 +1136,6 @@ export default function WatchPage() {
         </div>
       </section>
 
-      {/* Épisodes */}
       {isSeries && currentSeason && (
         <section className="max-w-7xl mx-auto px-4 sm:px-8 mt-10 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
@@ -1262,7 +1300,6 @@ export default function WatchPage() {
         </section>
       )}
 
-      {/* Commentaires */}
       <section className="max-w-7xl mx-auto px-4 sm:px-8 mt-14 space-y-8 border-t border-white/5 pt-10">
         <div>
           <h2 className="text-2xl font-black tracking-tight">Commentaires ({comments.length})</h2>

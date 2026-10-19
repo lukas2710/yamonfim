@@ -188,6 +188,7 @@ export default function Home() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [activeProfile, setActiveProfile] = useState<any>(null);
 
   const [isVip, setIsVip] = useState(false);
   const [watchCount, setWatchCount] = useState(0);
@@ -212,6 +213,22 @@ export default function Home() {
         setUserEmail(user.email || null);
         setCurrentUserId(user.id);
 
+        const profileStored = localStorage.getItem('active_profile');
+        if (!profileStored) {
+          router.push('/profiles');
+          return;
+        }
+
+        let currentProfile: any = null;
+        try {
+          currentProfile = JSON.parse(profileStored);
+        } catch (e) {
+          router.push('/profiles');
+          return;
+        }
+
+        setActiveProfile(currentProfile);
+
         const { data: profile } = await supabase
           .from('profiles')
           .select('is_vip, watch_count')
@@ -224,126 +241,74 @@ export default function Home() {
         setIsVip(userIsVip);
         setWatchCount(userWatchCount);
 
-        const [mediaRes, historyRes, bannerRes] = await Promise.all([
+        let watchedQuery = supabase
+          .from('user_watched')
+          .select('*')
+          .eq('user_id', user.id);
+
+        if (currentProfile?.id) {
+          watchedQuery = watchedQuery.eq('profile_id', currentProfile.id);
+        }
+
+        const [mediaRes, watchedRes, bannerRes] = await Promise.all([
           supabase.from('media').select('*').order('created_at', { ascending: false }),
-          supabase.from('watch_history').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }),
+          watchedQuery.order('watched_at', { ascending: false }),
           supabase.from('banners').select('*').eq('active', true).order('created_at', { ascending: false }),
         ]);
 
         const { data: mediaData, error: mediaError } = mediaRes;
-        const { data: historyData } = historyRes;
-        const { data: bannerData, error: bannerError } = bannerRes;
+        const { data: watchedData } = watchedRes;
+        const { data: bannerData } = bannerRes;
 
-        if (bannerError) console.error('Erreur SQL Bannières :', bannerError);
         if (bannerData) setCustomBanners(bannerData);
 
         if (!mediaError && mediaData) {
           setMediaList(mediaData);
 
-          if (historyData && historyData.length > 0) {
-            const continueList: MediaItem[] = [];
+          if (watchedData && watchedData.length > 0) {
+            const continueListMap = new Map<string, MediaItem>();
 
-            for (const historyItem of historyData) {
+            for (const watchedItem of watchedData) {
+              const mediaId = String(watchedItem.media_id);
+              if (continueListMap.has(mediaId)) continue;
+
               let foundMedia: MediaItem | undefined = undefined;
               for (const m of mediaData) {
-                if (String(m.id) === String(historyItem.media_id)) {
+                if (String(m.id) === mediaId) {
                   foundMedia = m;
                   break;
                 }
               }
 
               if (foundMedia) {
-                const currentTime = historyItem.current_time || 0;
-                const duration = historyItem.duration || foundMedia.runtime || 0;
-                const progressPercent = duration > 0 ? currentTime / duration : 0;
-                const isCompleted = duration > 0 && progressPercent >= 0.9;
+                let seasonIdx = 0;
+                let episodeIdx = 0;
+                let seasonNumber = 1;
+                let episodeNumber = 1;
 
-                if (!isCompleted) {
-                  continueList.push({
-                    ...foundMedia,
-                    progress: {
-                      seasonIdx: historyItem.season_idx ?? 0,
-                      episodeIdx: historyItem.episode_idx ?? 0,
-                      seasonNumber: historyItem.season_number ?? 1,
-                      episodeNumber: historyItem.episode_number ?? 1,
-                      currentTime,
-                      duration,
-                    },
-                  });
-                }
-              }
-            }
-            setContinueWatchingList(continueList);
-
-            let lastWatchedHistory = historyData[0];
-            let lastMedia: MediaItem | undefined = undefined;
-            for (const m of mediaData) {
-              if (String(m.id) === String(lastWatchedHistory?.media_id)) {
-                lastMedia = m;
-                break;
-              }
-            }
-
-            let lastMediaId: any = null;
-            if (lastMedia && lastMedia.genres && lastMedia.genres.length > 0) {
-              lastMediaId = lastMedia.id;
-              const similarMedia: MediaItem[] = [];
-              for (const m of mediaData) {
-                if (String(m.id) === String(lastMedia.id)) continue;
-                let commonCount = 0;
-                if (m.genres && lastMedia.genres) {
-                  for (const g of m.genres) {
-                    if (lastMedia.genres.includes(g)) commonCount++;
+                if (watchedItem.ep_key && watchedItem.ep_key !== 'movie_main') {
+                  const match = /^s(\d+)_e(\d+)$/.exec(watchedItem.ep_key);
+                  if (match) {
+                    seasonIdx = Number(match[1]);
+                    episodeIdx = Number(match[2]);
+                    seasonNumber = seasonIdx + 1;
+                    episodeNumber = episodeIdx + 1;
                   }
                 }
-                if (commonCount >= 1) similarMedia.push(m);
-              }
-              if (similarMedia.length > 0) {
-                setBecauseYouWatched({ parentTitle: lastMedia.title, list: similarMedia });
-              }
-            }
 
-            const genreFrequency: Record<string, number> = {};
-            for (const h of historyData) {
-              for (const m of mediaData) {
-                if (String(m.id) === String(h.media_id) && m.genres) {
-                  for (const g of m.genres) {
-                    genreFrequency[g] = (genreFrequency[g] || 0) + 1;
-                  }
-                }
+                continueListMap.set(mediaId, {
+                  ...foundMedia,
+                  progress: {
+                    seasonIdx,
+                    episodeIdx,
+                    seasonNumber,
+                    episodeNumber,
+                  },
+                });
               }
             }
 
-            const sortedGenres = Object.keys(genreFrequency).sort(
-              (a, b) => genreFrequency[b] - genreFrequency[a]
-            );
-
-            if (sortedGenres.length > 0) {
-              const recommended: MediaItem[] = [];
-              for (const m of mediaData) {
-                let alreadyWatched = false;
-                for (const h of historyData) {
-                  if (String(h.media_id) === String(m.id)) {
-                    alreadyWatched = true;
-                    break;
-                  }
-                }
-                if (alreadyWatched || (lastMediaId && String(m.id) === String(lastMediaId))) continue;
-
-                const targetGenres = sortedGenres.length > 3 ? sortedGenres.slice(1, 4) : sortedGenres;
-                let matches = false;
-                if (m.genres) {
-                  for (const g of m.genres) {
-                    if (targetGenres.includes(g)) {
-                      matches = true;
-                      break;
-                    }
-                  }
-                }
-                if (matches) recommended.push(m);
-              }
-              setRecommendedForYou(recommended);
-            }
+            setContinueWatchingList(Array.from(continueListMap.values()));
           }
         }
       } catch (err) {
@@ -372,14 +337,20 @@ export default function Home() {
 
   const handleRemoveFromContinue = async (e: React.MouseEvent, mediaId: any) => {
     e.stopPropagation();
-    if (!currentUserId) return;
+    if (!currentUserId || !activeProfile) return;
 
     try {
-      const { error } = await supabase
-        .from('watch_history')
+      let deleteQuery = supabase
+        .from('user_watched')
         .delete()
         .eq('user_id', currentUserId)
         .eq('media_id', String(mediaId));
+
+      if (activeProfile?.id) {
+        deleteQuery = deleteQuery.eq('profile_id', activeProfile.id);
+      }
+
+      const { error } = await deleteQuery;
 
       if (!error) {
         const updatedList: MediaItem[] = [];
@@ -396,6 +367,7 @@ export default function Home() {
   };
 
   const handleLogout = async () => {
+    localStorage.removeItem('active_profile');
     await supabase.auth.signOut();
     router.push('/login');
   };
@@ -427,16 +399,6 @@ export default function Home() {
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, [menuOpen]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      setShowVipModal(false);
-      setMenuOpen(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
 
   const dbGenres: string[] = [];
   for (const item of mediaList) {
@@ -678,6 +640,20 @@ export default function Home() {
               )}
             </div>
 
+            {activeProfile && (
+              <button
+                onClick={() => router.push('/profiles')}
+                className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 px-2.5 py-1.5 rounded-full transition cursor-pointer"
+              >
+                <img 
+                  src={activeProfile.avatar_url} 
+                  alt={activeProfile.name} 
+                  className="w-6 h-6 rounded-full object-cover" 
+                />
+                <span className="text-xs font-semibold text-white max-w-[100px] truncate hidden sm:inline">{activeProfile.name}</span>
+              </button>
+            )}
+
             {isVip ? (
               <button
                 onClick={() => router.push('/abonnement')}
@@ -714,6 +690,12 @@ export default function Home() {
                   </div>
                   <div className="p-1.5">
                     <button
+                      onClick={() => router.push('/profiles')}
+                      className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 transition hover:bg-white/5 hover:text-white"
+                    >
+                      <Icon name="user" /> Changer de profil
+                    </button>
+                    <button
                       onClick={() => router.push('/abonnement')}
                       className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-amber-300 transition hover:bg-amber-500/10"
                     >
@@ -743,30 +725,6 @@ export default function Home() {
                         className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 transition hover:bg-white/5 hover:text-white"
                       >
                         <Icon name="shield" /> Administration
-                      </button>
-                    )}
-                    {isAdmin && (
-                      <button
-                        onClick={() => router.push('/admin/stats')}
-                        className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 transition hover:bg-white/5 hover:text-white"
-                      >
-                        <Icon name="chart" /> Statistiques
-                      </button>
-                    )}
-                    {isAdmin && (
-                      <button
-                        onClick={() => router.push('/admin-vip')}
-                        className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 transition hover:bg-white/5 hover:text-white"
-                      >
-                        <Icon name="crown" /> Admin VIP
-                      </button>
-                    )}
-                    {isAdmin && (
-                      <button
-                        onClick={() => router.push('/admin/promotions')}
-                        className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 transition hover:bg-white/5 hover:text-white"
-                      >
-                        <Icon name="flame" /> Promotions
                       </button>
                     )}
                   </div>

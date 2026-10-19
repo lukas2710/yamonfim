@@ -105,8 +105,8 @@ export default function HistoryPage() {
 
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [activeProfile, setActiveProfile] = useState<any>(null);
   const [mediaById, setMediaById] = useState<Record<string, MediaItem>>({});
-  // Vus de CE compte : { [media_id]: { [ep_key]: date } }
   const [watched, setWatched] = useState<Record<string, Record<string, string>>>({});
   const [history, setHistory] = useState<HistoryRow[]>([]);
 
@@ -138,14 +138,23 @@ export default function HistoryPage() {
         const uid = session.user.id;
         setUserId(uid);
 
+        const profileStored = localStorage.getItem('active_profile');
+        if (!profileStored) {
+          router.push('/profiles');
+          return;
+        }
+        const profile = JSON.parse(profileStored);
+        setActiveProfile(profile);
+
+        // Requêtes isolées par profile_id
         const [watchedRes, historyRes] = await Promise.all([
-          supabase.from('user_watched').select('media_id, ep_key, watched_at').eq('user_id', uid),
-          supabase.from('watch_history').select('*').eq('user_id', uid).order('updated_at', { ascending: false }),
+          supabase.from('user_watched').select('media_id, ep_key, watched_at').eq('user_id', uid).eq('profile_id', profile.id),
+          supabase.from('watch_history').select('*').eq('user_id', uid).eq('profile_id', profile.id).order('updated_at', { ascending: false }),
         ]);
 
         if (watchedRes.error) {
           console.error('Erreur user_watched :', watchedRes.error);
-          setTableMissing(true); // le script SQL n'a pas encore été lancé
+          setTableMissing(true);
         }
 
         const w: Record<string, Record<string, string>> = {};
@@ -179,13 +188,12 @@ export default function HistoryPage() {
     load();
   }, [router]);
 
-  /* ---------------- Actions (propres au compte) ---------------- */
+  /* ---------------- Actions (propres au profil) ---------------- */
 
   const toggleWatched = async (mediaId: string, key: string) => {
-    if (!userId) return;
+    if (!userId || !activeProfile) return;
     const isWatched = !!watched[mediaId]?.[key];
 
-    // Mise à jour immédiate de l'écran
     setWatched(prev => {
       const next = { ...prev, [mediaId]: { ...(prev[mediaId] || {}) } };
       if (isWatched) delete next[mediaId][key];
@@ -195,17 +203,17 @@ export default function HistoryPage() {
 
     if (isWatched) {
       await supabase.from('user_watched').delete()
-        .eq('user_id', userId).eq('media_id', mediaId).eq('ep_key', key);
+        .eq('user_id', userId).eq('profile_id', activeProfile.id).eq('media_id', mediaId).eq('ep_key', key);
     } else {
       await supabase.from('user_watched').upsert(
-        { user_id: userId, media_id: mediaId, ep_key: key, watched_at: new Date().toISOString() },
-        { onConflict: 'user_id,media_id,ep_key' }
+        { user_id: userId, profile_id: activeProfile.id, media_id: mediaId, ep_key: key, watched_at: new Date().toISOString() },
+        { onConflict: 'user_id,profile_id,media_id,ep_key' }
       );
     }
   };
 
   const markSeasonWatched = async (mediaId: string, seasonIdx: number, value: boolean) => {
-    if (!userId) return;
+    if (!userId || !activeProfile) return;
     const season = mediaById[mediaId]?.seasons?.[seasonIdx];
     if (!season) return;
     const keys = season.episodes.map((_, eIdx) => `s${seasonIdx}_e${eIdx}`);
@@ -219,18 +227,17 @@ export default function HistoryPage() {
 
     if (value) {
       await supabase.from('user_watched').upsert(
-        keys.map(k => ({ user_id: userId, media_id: mediaId, ep_key: k, watched_at: now })),
-        { onConflict: 'user_id,media_id,ep_key' }
+        keys.map(k => ({ user_id: userId, profile_id: activeProfile.id, media_id: mediaId, ep_key: k, watched_at: now })),
+        { onConflict: 'user_id,profile_id,media_id,ep_key' }
       );
     } else {
       await supabase.from('user_watched').delete()
-        .eq('user_id', userId).eq('media_id', mediaId).in('ep_key', keys);
+        .eq('user_id', userId).eq('profile_id', activeProfile.id).eq('media_id', mediaId).in('ep_key', keys);
     }
   };
 
-  // Ajoute/retire une liste d'épisodes en une seule fois
   const setManyWatched = async (mediaId: string, keys: string[], value: boolean) => {
-    if (!userId || keys.length === 0) return;
+    if (!userId || !activeProfile || keys.length === 0) return;
     const now = new Date().toISOString();
     setWatched(prev => {
       const next = { ...prev, [mediaId]: { ...(prev[mediaId] || {}) } };
@@ -239,16 +246,15 @@ export default function HistoryPage() {
     });
     if (value) {
       await supabase.from('user_watched').upsert(
-        keys.map(k => ({ user_id: userId, media_id: mediaId, ep_key: k, watched_at: now })),
-        { onConflict: 'user_id,media_id,ep_key' }
+        keys.map(k => ({ user_id: userId, profile_id: activeProfile.id, media_id: mediaId, ep_key: k, watched_at: now })),
+        { onConflict: 'user_id,profile_id,media_id,ep_key' }
       );
     } else {
       await supabase.from('user_watched').delete()
-        .eq('user_id', userId).eq('media_id', mediaId).in('ep_key', keys);
+        .eq('user_id', userId).eq('profile_id', activeProfile.id).eq('media_id', mediaId).in('ep_key', keys);
     }
   };
 
-  // Tous les épisodes d'une série (ou jusqu'à un épisode précis, inclus)
   const episodeKeys = (mediaId: string, upTo?: { s: number; e: number }) => {
     const seasons = mediaById[mediaId]?.seasons || [];
     const keys: string[] = [];
@@ -271,27 +277,27 @@ export default function HistoryPage() {
   };
 
   const clearAll = async () => {
-    if (!userId) return;
+    if (!userId || !activeProfile) return;
     setConfirmClearAll(false);
     setWatched({});
     setHistory([]);
     await Promise.all([
-      supabase.from('user_watched').delete().eq('user_id', userId),
-      supabase.from('watch_history').delete().eq('user_id', userId),
+      supabase.from('user_watched').delete().eq('user_id', userId).eq('profile_id', activeProfile.id),
+      supabase.from('watch_history').delete().eq('user_id', userId).eq('profile_id', activeProfile.id),
     ]);
-    setToast('Historique effacé');
+    setToast('Historique du profil effacé');
   };
 
   const removeFromHistory = async (mediaId: string) => {
-    if (!userId) return;
+    if (!userId || !activeProfile) return;
     setConfirmRemoveId(null);
     setWatched(prev => { const n = { ...prev }; delete n[mediaId]; return n; });
     setHistory(prev => prev.filter(r => r.media_id !== mediaId));
     if (selectedSeriesId === mediaId) setSelectedSeriesId(null);
 
     await Promise.all([
-      supabase.from('user_watched').delete().eq('user_id', userId).eq('media_id', mediaId),
-      supabase.from('watch_history').delete().eq('user_id', userId).eq('media_id', mediaId),
+      supabase.from('user_watched').delete().eq('user_id', userId).eq('profile_id', activeProfile.id).eq('media_id', mediaId),
+      supabase.from('watch_history').delete().eq('user_id', userId).eq('profile_id', activeProfile.id).eq('media_id', mediaId),
     ]);
   };
 
@@ -342,7 +348,6 @@ export default function HistoryPage() {
     return { minutes, movies, episodes };
   }, [watched, mediaById]);
 
-  // "Reprendre" : séries pas encore terminées + films commencés
   const continueList = entries
     .filter(e => e.history && (e.media.type === 'movie' || e.seen < e.total))
     .slice(0, 10);
@@ -365,8 +370,6 @@ export default function HistoryPage() {
     }
   };
 
-  /* ---------------- Chargement ---------------- */
-
   if (loading) {
     return (
       <main className="min-h-screen bg-[#0a0a0b] text-white">
@@ -376,21 +379,15 @@ export default function HistoryPage() {
           <div className="grid grid-cols-3 gap-3">
             {[0, 1, 2].map(i => <div key={i} className="h-24 animate-pulse rounded-2xl bg-zinc-900" />)}
           </div>
-          <div className="flex gap-4 overflow-hidden">
-            {[0, 1, 2, 3].map(i => <div key={i} className="aspect-video w-64 shrink-0 animate-pulse rounded-2xl bg-zinc-900" />)}
-          </div>
         </div>
       </main>
     );
   }
 
-  /* ---------------- Rendu ---------------- */
-
   return (
     <main className="relative min-h-screen overflow-x-hidden bg-[#0a0a0b] pb-24 font-sans text-white antialiased selection:bg-red-600 selection:text-white">
       <div className="pointer-events-none absolute -top-56 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-red-600/10 blur-[140px]" />
 
-      {/* ================= Header ================= */}
       <header className="sticky top-0 z-40 border-b border-white/5 bg-[#0a0a0b]/85 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-8">
           <button
@@ -402,18 +399,29 @@ export default function HistoryPage() {
           <span className="select-none text-lg font-black tracking-[0.2em] text-red-600">
             YAMON<span className="text-white">FIM</span>
           </span>
-          <span className="hidden w-[100px] sm:block" />
+          {activeProfile ? (
+            <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-2.5 py-1.5 rounded-full">
+              <img 
+                src={activeProfile.avatar_url} 
+                alt={activeProfile.name} 
+                className="w-6 h-6 rounded-full object-cover" 
+              />
+              <span className="text-xs font-semibold text-white max-w-[90px] truncate">{activeProfile.name}</span>
+            </div>
+          ) : (
+            <span className="hidden w-[100px] sm:block" />
+          )}
         </div>
       </header>
 
       <div className="relative mx-auto max-w-6xl space-y-12 px-4 pt-10 sm:px-8">
-
-        {/* ================= Titre + stats ================= */}
         <section>
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-red-500">Mon historique</p>
-              <h1 className="text-3xl font-black tracking-tight sm:text-5xl">Ce que tu as regardé</h1>
+              <h1 className="text-3xl font-black tracking-tight sm:text-5xl">
+                {activeProfile ? `Profil : ${activeProfile.name}` : 'Mon historique'}
+              </h1>
             </div>
             {entries.length > 0 && (
               confirmClearAll ? (
@@ -432,15 +440,6 @@ export default function HistoryPage() {
               )
             )}
           </div>
-
-          {tableMissing && (
-            <div className="mt-6 flex items-start gap-3 rounded-2xl bg-amber-500/10 px-4 py-3 ring-1 ring-amber-500/30">
-              <Icon name="clock" className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-              <p className="text-sm text-amber-100">
-                Le suivi des épisodes vus n'est pas encore activé. Lance le script <span className="font-mono text-xs">supabase-historique-par-compte.sql</span> dans Supabase.
-              </p>
-            </div>
-          )}
 
           <div className="mt-8 grid grid-cols-3 gap-3 sm:gap-4">
             <div className="rounded-2xl bg-gradient-to-br from-red-600/20 to-red-600/5 p-4 ring-1 ring-red-500/30 sm:p-5">
@@ -476,18 +475,11 @@ export default function HistoryPage() {
             </span>
             <div>
               <p className="text-lg font-semibold">Ton historique est vide</p>
-              <p className="mt-1 text-sm text-zinc-500">Les films et épisodes que tu regardes apparaîtront ici.</p>
+              <p className="mt-1 text-sm text-zinc-500">Les films et épisodes que tu regardes apparaîtront ici pour ce profil.</p>
             </div>
-            <button
-              onClick={() => router.push('/')}
-              className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-black transition hover:bg-zinc-200"
-            >
-              <Icon name="play" /> Découvrir le catalogue
-            </button>
           </section>
         ) : (
           <>
-            {/* ================= Reprendre ================= */}
             {continueList.length > 0 && (
               <section>
                 <h2 className="mb-4 flex items-center gap-2 text-xl font-bold tracking-tight">
@@ -522,11 +514,6 @@ export default function HistoryPage() {
                             <span className="ml-2 font-medium normal-case tracking-normal text-zinc-400">{timeAgo(e.lastActivity)}</span>
                           </p>
                           <p className="truncate text-sm font-bold">{e.media.title}</p>
-                          {e.media.type === 'series' && (
-                            <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-white/15">
-                              <div className="h-full rounded-full bg-red-600" style={{ width: `${pct}%` }} />
-                            </div>
-                          )}
                         </div>
                       </button>
                     );
@@ -535,7 +522,6 @@ export default function HistoryPage() {
               </section>
             )}
 
-            {/* ================= Tout l'historique ================= */}
             <section>
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <h2 className="text-xl font-bold tracking-tight">Tout mon historique</h2>
@@ -569,288 +555,68 @@ export default function HistoryPage() {
                 ))}
               </div>
 
-              {visible.length === 0 ? (
-                <p className="rounded-2xl border border-dashed border-white/10 py-10 text-center text-sm text-zinc-500">
-                  Rien à afficher.
-                </p>
-              ) : (
-                <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {visible.map(e => {
-                    const isSeries = e.media.type === 'series';
-                    const pct = e.total ? Math.round((e.seen / e.total) * 100) : 0;
-                    const done = isSeries ? e.total > 0 && e.seen >= e.total : e.seen === 1;
-                    return (
-                      <li key={e.id} className="flex flex-col rounded-2xl bg-white/[0.03] p-3 ring-1 ring-white/10 transition hover:bg-white/[0.05]">
-                        <div className="flex gap-3">
-                          <button
-                            onClick={() => openWatch(e)}
-                            className="group relative h-24 w-16 shrink-0 overflow-hidden rounded-xl bg-zinc-900"
-                            aria-label={`Regarder ${e.media.title}`}
-                          >
-                            {e.media.poster && <img src={e.media.poster} alt="" loading="lazy" className="h-full w-full object-cover" />}
-                            <span className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition group-hover:opacity-100">
-                              <Icon name="play" className="h-5 w-5" />
-                            </span>
-                          </button>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-300">
-                                {isSeries ? 'Série' : 'Film'}
-                              </span>
-                              {done && (
-                                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300">
-                                  <Icon name="check" className="h-3 w-3" /> {isSeries ? 'Terminée' : 'Vu'}
-                                </span>
-                              )}
-                            </div>
-                            <p className="mt-1 truncate text-sm font-bold">{e.media.title}</p>
-                            <p className="text-xs text-zinc-500">{timeAgo(e.lastActivity)}</p>
-                            {isSeries && (
-                              <>
-                                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                                  <div className={`h-full rounded-full ${done ? 'bg-emerald-500' : 'bg-red-600'}`} style={{ width: `${pct}%` }} />
-                                </div>
-                                <p className="mt-1 text-[11px] text-zinc-500">{e.seen} / {e.total} épisodes</p>
-                              </>
+              <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {visible.map(e => {
+                  const isSeries = e.media.type === 'series';
+                  const pct = e.total ? Math.round((e.seen / e.total) * 100) : 0;
+                  const done = isSeries ? e.total > 0 && e.seen >= e.total : e.seen === 1;
+                  return (
+                    <li key={e.id} className="flex flex-col rounded-2xl bg-white/[0.03] p-3 ring-1 ring-white/10 transition hover:bg-white/[0.05]">
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => openWatch(e)}
+                          className="group relative h-24 w-16 shrink-0 overflow-hidden rounded-xl bg-zinc-900"
+                        >
+                          {e.media.poster && <img src={e.media.poster} alt="" loading="lazy" className="h-full w-full object-cover" />}
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          <p className="mt-1 truncate text-sm font-bold">{e.media.title}</p>
+                          <p className="text-xs text-zinc-500">{timeAgo(e.lastActivity)}</p>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center gap-2 border-t border-white/5 pt-3">
+                        {confirmRemoveId === e.id ? (
+                          <>
+                            <span className="flex-1 text-xs text-zinc-400">Retirer ?</span>
+                            <button onClick={() => removeFromHistory(e.id)} className="rounded-full bg-red-600 px-3 py-1.5 text-xs font-bold">Oui</button>
+                            <button onClick={() => setConfirmRemoveId(null)} className="rounded-full px-3 py-1.5 text-xs text-zinc-400">Non</button>
+                          </>
+                        ) : (
+                          <>
+                            {isSeries ? (
+                              <button
+                                onClick={() => { setSelectedSeriesId(e.id); setActiveSeasonIdx(0); }}
+                                className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-white/10 py-2 text-xs font-semibold"
+                              >
+                                Gérer les épisodes
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => toggleWatched(e.id, MOVIE_KEY)}
+                                className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-xs font-semibold ${
+                                  e.seen ? 'bg-emerald-500/15 text-emerald-300' : 'bg-white/10'
+                                }`}
+                              >
+                                {e.seen ? 'Vu' : 'Marquer comme vu'}
+                              </button>
                             )}
-                          </div>
-                        </div>
-
-                        <div className="mt-3 flex items-center gap-2 border-t border-white/5 pt-3">
-                          {confirmRemoveId === e.id ? (
-                            <>
-                              <span className="flex-1 text-xs text-zinc-400">Retirer de l'historique ?</span>
-                              <button onClick={() => removeFromHistory(e.id)} className="rounded-full bg-red-600 px-3 py-1.5 text-xs font-bold hover:bg-red-500">Oui</button>
-                              <button onClick={() => setConfirmRemoveId(null)} className="rounded-full px-3 py-1.5 text-xs text-zinc-400 hover:text-white">Non</button>
-                            </>
-                          ) : (
-                            <>
-                              {isSeries ? (
-                                <button
-                                  onClick={() => { setSelectedSeriesId(e.id); setActiveSeasonIdx(0); }}
-                                  className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-white/10 py-2 text-xs font-semibold transition hover:bg-white/15"
-                                >
-                                  <Icon name="list" className="h-3.5 w-3.5" /> Gérer les épisodes
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => toggleWatched(e.id, MOVIE_KEY)}
-                                  className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-xs font-semibold transition ${
-                                    e.seen ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25' : 'bg-white/10 hover:bg-white/15'
-                                  }`}
-                                >
-                                  <Icon name="check" className="h-3.5 w-3.5" /> {e.seen ? 'Vu' : 'Marquer comme vu'}
-                                </button>
-                              )}
-                              <button
-                                onClick={() => openWatch(e)}
-                                className="inline-flex items-center gap-1.5 rounded-full bg-white px-3.5 py-2 text-xs font-bold text-black transition hover:bg-zinc-200"
-                              >
-                                <Icon name="play" className="h-3.5 w-3.5" /> {e.history ? 'Reprendre' : 'Regarder'}
-                              </button>
-                              <button
-                                onClick={() => setConfirmRemoveId(e.id)}
-                                aria-label="Retirer de l'historique"
-                                className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 transition hover:bg-red-600/15 hover:text-red-400"
-                              >
-                                <Icon name="trash" className="h-3.5 w-3.5" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+                            <button
+                              onClick={() => setConfirmRemoveId(e.id)}
+                              className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 hover:text-red-400"
+                            >
+                              <Icon name="trash" className="h-3.5 w-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             </section>
           </>
         )}
       </div>
-
-      {/* ================= Notification ================= */}
-      {toast && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex justify-center px-4">
-          <div className="flex items-center gap-2 rounded-full bg-[#111113]/95 px-4 py-2.5 text-sm shadow-2xl ring-1 ring-emerald-500/30 backdrop-blur-xl">
-            <Icon name="check" className="h-4 w-4 text-emerald-400" /> {toast}
-          </div>
-        </div>
-      )}
-
-      {/* ================= Gestion des épisodes ================= */}
-      {selected && selectedSeriesId && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 p-0 backdrop-blur-md sm:items-center sm:p-4"
-          onClick={() => setSelectedSeriesId(null)}
-        >
-          <div
-            onClick={ev => ev.stopPropagation()}
-            className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-[#111113] shadow-2xl sm:rounded-3xl"
-          >
-            <div className="relative shrink-0 overflow-hidden">
-              {(selected.backdrop || selected.poster) && (
-                <img src={selected.backdrop || selected.poster} alt="" className="absolute inset-0 h-full w-full object-cover opacity-30" />
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-[#111113] to-[#111113]/40" />
-              <div className="relative flex items-start justify-between gap-3 p-5">
-                <div className="min-w-0">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-red-500">Mes épisodes vus</p>
-                  <h3 className="truncate text-lg font-bold">{selected.title}</h3>
-                </div>
-                <button
-                  onClick={() => setSelectedSeriesId(null)}
-                  aria-label="Fermer"
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 transition hover:bg-white/15"
-                >
-                  <Icon name="close" />
-                </button>
-              </div>
-
-              {selected.seasons && selected.seasons.length > 1 && (
-                <div className="relative flex gap-2 overflow-x-auto px-5 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  {selected.seasons.map((season, sIdx) => (
-                    <button
-                      key={sIdx}
-                      onClick={() => setActiveSeasonIdx(sIdx)}
-                      className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition ${
-                        activeSeasonIdx === sIdx ? 'bg-white text-black' : 'bg-white/10 text-zinc-300 hover:bg-white/15'
-                      }`}
-                    >
-                      Saison {season.seasonNumber}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {(() => {
-              const season = selected.seasons?.[activeSeasonIdx];
-              if (!season) return <p className="p-5 text-sm text-zinc-500">Aucun épisode.</p>;
-              const w = watched[selectedSeriesId] || {};
-              const seenInSeason = season.episodes.filter((_, eIdx) => !!w[`s${activeSeasonIdx}_e${eIdx}`]).length;
-              const allSeen = seenInSeason === season.episodes.length && season.episodes.length > 0;
-
-              const allKeys = episodeKeys(selectedSeriesId);
-              const seenTotal = allKeys.filter(k => !!w[k]).length;
-              const seriesDone = allKeys.length > 0 && seenTotal === allKeys.length;
-
-              // Position actuelle (Reprendre) → proposer de cocher tous les épisodes d'avant
-              const h = history.find(r => r.media_id === selectedSeriesId);
-              let prevPos: { s: number; e: number } | null = null;
-              if (h) {
-                const s = h.season_idx ?? 0;
-                const e = h.episode_idx ?? 0;
-                if (e > 0) prevPos = { s, e: e - 1 };
-                else if (s > 0) {
-                  const prevLen = selected.seasons?.[s - 1]?.episodes?.length || 0;
-                  if (prevLen > 0) prevPos = { s: s - 1, e: prevLen - 1 };
-                }
-              }
-              const prevKeys = prevPos ? episodeKeys(selectedSeriesId, prevPos) : [];
-              const prevAllSeen = prevKeys.length > 0 && prevKeys.every(k => !!w[k]);
-
-              return (
-                <>
-                  {/* Progression globale + actions rapides */}
-                  <div className="shrink-0 space-y-3 border-y border-white/5 px-5 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
-                        <div
-                          className={`h-full rounded-full transition-all ${seriesDone ? 'bg-emerald-500' : 'bg-red-600'}`}
-                          style={{ width: `${allKeys.length ? (seenTotal / allKeys.length) * 100 : 0}%` }}
-                        />
-                      </div>
-                      <span className="text-xs tabular-nums text-zinc-400">{seenTotal} / {allKeys.length}</span>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      {h && prevPos && !prevAllSeen && (
-                        <button
-                          onClick={() => markUpTo(selectedSeriesId, prevPos!.s, prevPos!.e)}
-                          className="inline-flex items-center gap-1.5 rounded-full bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-500"
-                        >
-                          <Icon name="check" className="h-3.5 w-3.5" />
-                          J'ai vu tout avant S{h.season_number ?? (h.season_idx ?? 0) + 1} · É{h.episode_number ?? (h.episode_idx ?? 0) + 1}
-                        </button>
-                      )}
-                      <button
-                        onClick={() => markSeasonWatched(selectedSeriesId, activeSeasonIdx, !allSeen)}
-                        className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold transition hover:bg-white/15"
-                      >
-                        {allSeen ? `Décocher la saison ${season.seasonNumber}` : `Saison ${season.seasonNumber} vue`}
-                      </button>
-                      <button
-                        onClick={() => markWholeSeries(selectedSeriesId, !seriesDone)}
-                        className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold transition hover:bg-white/15"
-                      >
-                        {seriesDone ? 'Tout décocher' : 'Série entière vue'}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Épisodes : clic = vu / pas vu · « Jusqu'ici » = coche tous les épisodes avant celui-ci */}
-                  <div className="flex-1 space-y-2 overflow-y-auto p-4">
-                    {season.episodes.map((ep, eIdx) => {
-                      const key = `s${activeSeasonIdx}_e${eIdx}`;
-                      const isWatched = !!w[key];
-                      const isCurrent = h && (h.season_idx ?? 0) === activeSeasonIdx && (h.episode_idx ?? 0) === eIdx;
-                      return (
-                        <div
-                          key={eIdx}
-                          className={`group flex items-center gap-3 rounded-2xl p-2.5 ring-1 transition ${
-                            isWatched ? 'bg-emerald-500/10 ring-emerald-500/30' : 'bg-white/[0.03] ring-white/10 hover:bg-white/[0.06]'
-                          }`}
-                        >
-                          <button
-                            onClick={() => toggleWatched(selectedSeriesId, key)}
-                            className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                            aria-pressed={isWatched}
-                          >
-                            <div className="relative aspect-video w-24 shrink-0 overflow-hidden rounded-lg bg-zinc-900">
-                              {(ep.still_path || season.poster_path) && (
-                                <img src={ep.still_path || season.poster_path} alt="" loading="lazy" className={`h-full w-full object-cover ${isWatched ? 'opacity-60' : ''}`} />
-                              )}
-                              {isCurrent && (
-                                <span className="absolute left-1 top-1 rounded bg-red-600 px-1 py-0.5 text-[9px] font-bold uppercase">En cours</span>
-                              )}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-[11px] font-semibold text-zinc-500">
-                                Épisode {ep.number}{ep.runtime ? ` · ${ep.runtime} min` : ''}
-                              </p>
-                              <p className="truncate text-sm font-medium">{ep.title || `Épisode ${ep.number}`}</p>
-                            </div>
-                          </button>
-
-                          {!isWatched && (eIdx > 0 || activeSeasonIdx > 0) && (
-                            <button
-                              onClick={() => markUpTo(selectedSeriesId, activeSeasonIdx, eIdx)}
-                              title="Marquer cet épisode et tous ceux d'avant comme vus"
-                              className="hidden shrink-0 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-zinc-300 transition hover:bg-white/15 hover:text-white group-hover:inline-flex sm:inline-flex"
-                            >
-                              Jusqu'ici
-                            </button>
-                          )}
-
-                          <button
-                            onClick={() => toggleWatched(selectedSeriesId, key)}
-                            aria-label={isWatched ? 'Marquer comme non vu' : 'Marquer comme vu'}
-                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-2 transition ${
-                              isWatched ? 'bg-emerald-500 text-white ring-emerald-500' : 'text-transparent ring-white/20 hover:text-white/40'
-                            }`}
-                          >
-                            <Icon name="check" className="h-4 w-4" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-        </div>
-      )}
     </main>
   );
 }
