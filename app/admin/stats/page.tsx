@@ -62,7 +62,6 @@ export default function AdminStatsPage() {
         const genresCount: Record<string, number> = {};
 
         historyData.forEach(h => {
-          // Recherche souple du média lié à l'historique
           const mediaId = h.media_id || h.movie_id || h.id;
           const media = mediaList.find(m => String(m.id) === String(mediaId));
           
@@ -77,7 +76,6 @@ export default function AdminStatsPage() {
             const title = media.title || media.name || 'Média sans titre';
             mediaViewsCount[title] = (mediaViewsCount[title] || 0) + 1;
 
-            // Gestion du tableau de genres (genres) ou string (genre)
             const mediaGenres = media.genres || media.genre;
             if (Array.isArray(mediaGenres) && mediaGenres.length > 0) {
               mediaGenres.forEach(g => {
@@ -194,6 +192,35 @@ export default function AdminStatsPage() {
     setMonthlyData(orderedMonths.map(m => ({ name: m, visions: monthsMap[m] })));
   };
 
+  const exportDatabase = async () => {
+    try {
+      const [profilesRes, mediaRes, historyRes, presenceRes] = await Promise.all([
+        supabase.from('profiles').select('*'),
+        supabase.from('media').select('*'),
+        supabase.from('watch_history').select('*'),
+        supabase.from('user_presence').select('*'),
+      ]);
+
+      const backupData = {
+        exportDate: new Date().toISOString(),
+        profiles: profilesRes.data || [],
+        media: mediaRes.data || [],
+        watch_history: historyRes.data || [],
+        user_presence: presenceRes.data || [],
+      };
+
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `yamonfilm_backup_${new Date().toISOString().split('T')[0]}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    } catch (err) {
+      console.error("Erreur lors de l'export de la base :", err);
+    }
+  };
+
   if (loading) {
     return (
       <main className="min-h-screen bg-[#0a0a0b] text-white flex items-center justify-center">
@@ -208,18 +235,26 @@ export default function AdminStatsPage() {
     <main className="min-h-screen bg-[#0a0a0b] text-white p-6 sm:p-10 font-sans pb-24">
       <div className="max-w-7xl mx-auto space-y-8">
         
-        {/* En-tête */}
-        <div className="flex items-center justify-between border-b border-white/10 pb-5">
+        {/* En-tête avec bouton de sauvegarde */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-white/10 pb-5 gap-4">
           <div>
             <h1 className="text-2xl font-black tracking-tight">Statistiques Globales & Historique YAMONFILM</h1>
             <p className="text-sm text-zinc-400 mt-1">Tableau de bord complet de l'activité du site</p>
           </div>
-          <button
-            onClick={() => router.push('/admin')}
-            className="bg-white/15 hover:bg-white/25 text-white px-4 py-2 rounded-full text-xs font-semibold transition cursor-pointer"
-          >
-            Retour Admin
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={exportDatabase}
+              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-full text-xs font-semibold transition cursor-pointer"
+            >
+              Sauvegarder la BDD (JSON)
+            </button>
+            <button
+              onClick={() => router.push('/admin')}
+              className="bg-white/15 hover:bg-white/25 text-white px-4 py-2 rounded-full text-xs font-semibold transition cursor-pointer"
+            >
+              Retour Admin
+            </button>
+          </div>
         </div>
 
         {/* Section EN DIRECT */}
