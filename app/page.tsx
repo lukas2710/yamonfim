@@ -38,7 +38,7 @@ const MAX_FREE_LIMIT = 5;
 type IconName =
   | 'play' | 'info' | 'search' | 'close' | 'home' | 'film' | 'tv'
   | 'request' | 'history' | 'crown' | 'lock' | 'logout' | 'shield'
-  | 'chevronLeft' | 'chevronRight' | 'check' | 'user' | 'flame' | 'trash' | 'alert' | 'sparkles';
+  | 'chevronLeft' | 'chevronRight' | 'check' | 'user' | 'flame' | 'trash' | 'alert' | 'sparkles' | 'chart';
 
 const ICONS: Record<IconName, React.ReactNode> = {
   play: <path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5Z" fill="currentColor" stroke="none" />,
@@ -62,6 +62,7 @@ const ICONS: Record<IconName, React.ReactNode> = {
   trash: <><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /></>,
   alert: <><circle cx="12" cy="12" r="9" /><path d="M12 8v4m0 4h.01" /></>,
   sparkles: <path d="m12 3 1.912 5.813a2 2 0 0 0 1.275 1.275L21 12l-5.813 1.912a2 2 0 0 0-1.275 1.275L12 21l-1.912-5.813a2 2 0 0 0-1.275-1.275L3 12l5.813-1.912a2 2 0 0 0 1.275-1.275L12 3Z" />,
+  chart: <><path d="M3 3v18h18" /><path d="m7 14 4-4 4 4 5-6" /></>,
 };
 
 function Icon({ name, className = 'w-4 h-4' }: { name: IconName; className?: string }) {
@@ -737,20 +738,36 @@ export default function Home() {
                       <Icon name="alert" /> Signaler un problème / Idée
                     </button>
                     {isAdmin && (
-                      <a
-                        href="/admin"
-                        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 transition hover:bg-white/5 hover:text-white"
+                      <button
+                        onClick={() => router.push('/admin')}
+                        className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 transition hover:bg-white/5 hover:text-white"
                       >
                         <Icon name="shield" /> Administration
-                      </a>
+                      </button>
                     )}
                     {isAdmin && (
-                      <a
-                        href="/admin/promotions"
-                        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 transition hover:bg-white/5 hover:text-white"
+                      <button
+                        onClick={() => router.push('/admin/stats')}
+                        className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 transition hover:bg-white/5 hover:text-white"
+                      >
+                        <Icon name="chart" /> Statistiques
+                      </button>
+                    )}
+                    {isAdmin && (
+                      <button
+                        onClick={() => router.push('/admin-vip')}
+                        className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 transition hover:bg-white/5 hover:text-white"
+                      >
+                        <Icon name="crown" /> Admin VIP
+                      </button>
+                    )}
+                    {isAdmin && (
+                      <button
+                        onClick={() => router.push('/admin/promotions')}
+                        className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 transition hover:bg-white/5 hover:text-white"
                       >
                         <Icon name="flame" /> Promotions
-                      </a>
+                      </button>
                     )}
                   </div>
                   <div className="border-t border-white/5 p-1.5">

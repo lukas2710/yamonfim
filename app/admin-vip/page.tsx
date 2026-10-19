@@ -261,6 +261,10 @@ export default function AdminVipPage() {
     return emailMatch || idMatch;
   });
 
+  const totalUsers = members.length;
+  const vipUsers = members.filter(m => m.is_vip).length;
+  const freeUsers = totalUsers - vipUsers;
+
   if (loading) {
     return (
       <main className="min-h-screen bg-[#0a0a0b] text-white flex items-center justify-center">
@@ -305,6 +309,24 @@ export default function AdminVipPage() {
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-zinc-500 outline-none focus:border-red-600"
             />
+          </div>
+        </div>
+
+        {/* Cartes de Statistiques Utilisateurs */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Total Inscrits</p>
+            <p className="mt-2 text-3xl font-black text-white">{totalUsers}</p>
+          </div>
+
+          <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-amber-400">Membres VIP</p>
+            <p className="mt-2 text-3xl font-black text-amber-300">{vipUsers}</p>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Comptes Gratuits</p>
+            <p className="mt-2 text-3xl font-black text-zinc-300">{freeUsers}</p>
           </div>
         </div>
 

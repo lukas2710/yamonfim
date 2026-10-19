@@ -41,7 +41,25 @@ const ADMIN_EMAIL = 'lukas.leclerc312@gmail.com';
 const MAX_FREE_LIMIT = 5;
 
 /* ------------------------------------------------------------------ */
-/* Composant Compte à Rebours VIP Visuel & Moderne[cite: 1]             */
+/* Avis Utilisateurs                                                  */
+/* ------------------------------------------------------------------ */
+
+interface Review {
+  id: string;
+  name: string;
+  rating: number;
+  comment: string;
+  date: string;
+}
+
+const INITIAL_REVIEWS: Review[] = [
+  { id: '1', name: 'Maxime L.', rating: 5, comment: 'L’accès VIP vaut vraiment le coup, zéro pub et le catalogue charge super vite !', date: 'Il y a 2 jours' },
+  { id: '2', name: 'Sonia K.', rating: 5, comment: 'Très bonne application. Les 5 visions gratuites m’ont permis de tester avant de prendre 3 mois.', date: 'Il y a 5 jours' },
+  { id: '3', name: 'Thomas B.', rating: 4, comment: 'Paiement Stripe rapide et le VIP s’est activé dans la minute. Au top.', date: 'Il y a 1 semaine' },
+];
+
+/* ------------------------------------------------------------------ */
+/* Composant Compte à Rebours VIP                                      */
 /* ------------------------------------------------------------------ */
 
 function VipCountdownClient({
@@ -108,15 +126,15 @@ function VipCountdownClient({
   }
 
   return (
-    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-500/20 via-[#16130f] to-amber-600/10 p-6 ring-1 ring-amber-500/40 shadow-[0_0_50px_-15px_rgba(245,158,11,0.3)]">
+    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-500/20 via-[#16130f] to-amber-600/10 p-6 shadow-[0_0_50px_-15px_rgba(245,158,11,0.3)] ring-1 ring-amber-500/40">
       <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-amber-500/10 blur-2xl" />
       
       <p className="mb-4 flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-[0.25em] text-amber-400">
-        <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+        <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
         Temps VIP Restant
       </p>
 
-      <div className="grid grid-cols-4 gap-2 sm:gap-4 text-center">
+      <div className="grid grid-cols-4 gap-2 text-center sm:gap-4">
         <div className="rounded-2xl bg-black/40 p-3 ring-1 ring-white/10">
           <span className="block text-2xl font-black tabular-nums text-white sm:text-3xl">{timeLeft.days}</span>
           <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Jours</span>
@@ -139,13 +157,55 @@ function VipCountdownClient({
 }
 
 /* ------------------------------------------------------------------ */
+/* Compte à Rebours Hebdomadaire (Gratuit)                            */
+/* ------------------------------------------------------------------ */
+
+function WeeklyResetCountdown() {
+  const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+
+  useEffect(() => {
+    // Calcul de la prochaine échéance (par exemple, chaque dimanche à minuit ou dans exactement 7 jours glissants)
+    const calculateTime = () => {
+      const now = new Date();
+      // On fixe la réinitialisation au prochain dimanche à 00:00 ou on simule un cycle de 7 jours basé sur la semaine
+      const nextReset = new Date();
+      nextReset.setDate(now.getDate() + ((7 - now.getDay()) % 7 || 7));
+      nextReset.setHours(0, 0, 0, 0);
+
+      const diff = nextReset.getTime() - now.getTime();
+      if (diff <= 0) return;
+
+      setTimeLeft({
+        days: Math.floor(diff / (1000 * 60 * 60 * 24)),
+        hours: Math.floor((diff / (1000 * 60 * 60)) % 24),
+        minutes: Math.floor((diff / 1000 / 60) % 60),
+        seconds: Math.floor((diff / 1000) % 60),
+      });
+    };
+
+    calculateTime();
+    const interval = setInterval(calculateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="mt-3 flex items-center justify-between rounded-xl bg-black/30 px-3.5 py-2.5 text-xs text-zinc-300 ring-1 ring-white/5">
+      <span className="text-zinc-400">Remise à zéro dans :</span>
+      <span className="font-bold tabular-nums text-amber-400">
+        {timeLeft.days}j {timeLeft.hours}h {timeLeft.minutes}m {timeLeft.seconds}s
+      </span>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Icônes                                                              */
 /* ------------------------------------------------------------------ */
 
 type IconName =
   | 'back' | 'crown' | 'check' | 'close' | 'lock' | 'infinity' | 'play'
   | 'zap' | 'tv' | 'shield' | 'chevron' | 'card' | 'sparkles' | 'refresh' | 'request'
-  | 'mail' | 'help' | 'copy';
+  | 'mail' | 'help' | 'copy' | 'star' | 'alert';
 
 const ICONS: Record<IconName, React.ReactNode> = {
   back: <path d="M19 12H5m6-7-7 7 7 7" />,
@@ -166,6 +226,8 @@ const ICONS: Record<IconName, React.ReactNode> = {
   mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>,
   help: <><circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14m0 3h.01" /></>,
   copy: <><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></>,
+  star: <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="currentColor" stroke="none" />,
+  alert: <><circle cx="12" cy="12" r="9" /><path d="M12 8v4m0 4h.01" /></>,
 };
 
 function Icon({ name, className = 'w-4 h-4' }: { name: IconName; className?: string }) {
@@ -185,7 +247,7 @@ const PERKS = [
 ];
 
 const COMPARE = [
-  { label: 'Nombre de visions', free: `${MAX_FREE_LIMIT} au total`, vip: 'Illimité' },
+  { label: 'Nombre de visions', free: `${MAX_FREE_LIMIT} / semaine`, vip: 'Illimité' },
   { label: 'Films et séries', free: true, vip: true },
   { label: 'Reprendre la lecture', free: true, vip: true },
   { label: 'Accès mobile, PC et TV', free: true, vip: true },
@@ -194,8 +256,8 @@ const COMPARE = [
 
 const FAQ = [
   {
-    q: 'Comment fonctionne le compte gratuit ?',
-    a: `Chaque compte gratuit dispose de ${MAX_FREE_LIMIT} visions. Une vision est comptée à chaque lancement de film ou d'épisode. Une fois la limite atteinte, le VIP permet de continuer sans limite.`,
+    q: 'Comment fonctionne le compte gratuit et la remise à zéro ?',
+    a: `Chaque compte gratuit dispose de ${MAX_FREE_LIMIT} visions par semaine. Une vision est comptée à chaque lancement de film ou d'épisode. Le compteur se remet automatiquement à zéro chaque semaine. Si tu as atteint ta limite, tu peux attendre le compte à rebours ou passer VIP.`,
   },
   {
     q: 'Quand mon accès VIP est-il activé ?',
@@ -203,7 +265,7 @@ const FAQ = [
   },
   {
     q: "J'ai payé mais je ne suis pas VIP, que faire ?",
-    a: "Contacte-nous depuis la section Aide en bas de page, avec ton identifiant client et ton reçu Stripe : on vérifie ton paiement et on active ton accès.",
+    a: "Contacte-nous depuis la section Signalement en bas de page, avec ton identifiant client et ton reçu Stripe : on vérifie ton paiement et on active ton accès.",
   },
   {
     q: 'Quelle différence entre les forfaits ?',
@@ -237,6 +299,12 @@ export default function AbonnementPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [selectedPlanId, setSelectedPlanId] = useState(DEFAULT_PLAN_ID);
   const [copied, setCopied] = useState(false);
+  const [reviewsList, setReviewsList] = useState<Review[]>(INITIAL_REVIEWS);
+  const [newReviewText, setNewReviewText] = useState('');
+  const [newReviewName, setNewReviewName] = useState('');
+  const [newReviewRating, setNewReviewRating] = useState(5);
+  const [reviewSubmitted, setReviewSubmitted] = useState(false);
+
   const selectedPlan = PLANS.find(p => p.id === selectedPlanId) || PLANS[0];
 
   const loadProfile = async () => {
@@ -285,9 +353,24 @@ export default function AbonnementPage() {
     } catch {}
   };
 
-  const supportMailto = SUPPORT_EMAIL
-    ? `mailto:${SUPPORT_EMAIL}?subject=Problème VIP / paiement&body=Bonjour,%0A%0AJ'ai un problème avec mon accès VIP.%0A%0AEmail du compte : ${userEmail || ''}%0AIdentifiant client : ${userId || ''}`
-    : '';
+  const handleAddReview = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newReviewText.trim()) return;
+
+    const reviewToAdd: Review = {
+      id: Date.now().toString(),
+      name: newReviewName.trim() || userEmail?.split('@')[0] || 'Utilisateur',
+      rating: newReviewRating,
+      comment: newReviewText.trim(),
+      date: 'À l’instant',
+    };
+
+    setReviewsList([reviewToAdd, ...reviewsList]);
+    setNewReviewText('');
+    setNewReviewName('');
+    setReviewSubmitted(true);
+    setTimeout(() => setReviewSubmitted(false), 3000);
+  };
 
   const remaining = Math.max(0, MAX_FREE_LIMIT - watchCount);
   const usedPct = Math.min(100, (watchCount / MAX_FREE_LIMIT) * 100);
@@ -360,7 +443,6 @@ export default function AbonnementPage() {
               Ton compte <span className="text-white">{userEmail}</span> possède un accès illimité actif.
             </p>
 
-            {/* Compte à rebours visuel & gros blocs */}
             <div className="mt-8">
               <VipCountdownClient startDate={vipStartedAt} duration={vipDuration} />
             </div>
@@ -432,9 +514,12 @@ export default function AbonnementPage() {
                 </div>
                 <p className={`mt-3 text-xs ${limitReached ? 'text-red-300' : 'text-zinc-500'}`}>
                   {limitReached
-                    ? 'Limite atteinte : passe au VIP pour continuer à regarder.'
-                    : `Il te reste ${remaining} vision${remaining > 1 ? 's' : ''} gratuite${remaining > 1 ? 's' : ''}.`}
+                    ? 'Limite atteinte : passe au VIP ou attends la remise à zéro ci-dessous.'
+                    : `Il te reste ${remaining} vision${remaining > 1 ? 's' : ''} gratuite${remaining > 1 ? 's' : ''} cette semaine.`}
                 </p>
+
+                {/* Compte à rebours avant remise à zéro */}
+                <WeeklyResetCountdown />
               </div>
             </section>
 
@@ -550,49 +635,77 @@ export default function AbonnementPage() {
               </p>
             </section>
 
-            <section className="mx-auto mt-24 max-w-5xl">
-              <h2 className="text-center text-2xl font-bold tracking-tight sm:text-3xl">Pourquoi passer au VIP ?</h2>
-              <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {PERKS.map(p => (
-                  <div key={p.title} className="rounded-2xl bg-white/[0.03] p-6 ring-1 ring-white/10 transition hover:bg-white/[0.05] hover:ring-amber-500/30">
-                    <span className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400">
-                      <Icon name={p.icon} className="h-5 w-5" />
-                    </span>
-                    <h3 className="font-semibold">{p.title}</h3>
-                    <p className="mt-1.5 text-sm leading-relaxed text-zinc-400">{p.text}</p>
-                  </div>
-                ))}
+            {/* Section Avis Utilisateurs */}
+            <section className="mx-auto mt-24 max-w-4xl">
+              <div className="text-center">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1 text-xs font-bold text-amber-400 ring-1 ring-amber-500/30">
+                  <Icon name="star" className="h-3.5 w-3.5" /> Témoignages
+                </span>
+                <h2 className="mt-4 text-2xl font-bold tracking-tight sm:text-3xl">Avis de nos utilisateurs</h2>
+                <p className="mt-2 text-sm text-zinc-400">Découvre ce que pensent la communauté et nos membres VIP.</p>
               </div>
-            </section>
 
-            <section className="mx-auto mt-24 max-w-3xl">
-              <h2 className="text-center text-2xl font-bold tracking-tight sm:text-3xl">Gratuit ou VIP</h2>
-              <div className="mt-8 overflow-hidden rounded-2xl ring-1 ring-white/10">
-                <div className="grid grid-cols-[1fr_auto_auto] bg-white/[0.04] text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                  <div className="px-5 py-4" />
-                  <div className="w-24 px-2 py-4 text-center sm:w-32">Gratuit</div>
-                  <div className="w-24 px-2 py-4 text-center text-amber-400 sm:w-32">VIP</div>
-                </div>
-                {COMPARE.map((row, i) => (
-                  <div
-                    key={row.label}
-                    className={`grid grid-cols-[1fr_auto_auto] items-center text-sm ${i % 2 ? 'bg-white/[0.015]' : ''} border-t border-white/5`}
-                  >
-                    <div className="px-5 py-4 text-zinc-300">{row.label}</div>
-                    {[row.free, row.vip].map((v, j) => (
-                      <div key={j} className="flex w-24 justify-center px-2 py-4 sm:w-32">
-                        {typeof v === 'string' ? (
-                          <span className={j === 1 ? 'font-semibold text-amber-300' : 'text-zinc-400'}>{v}</span>
-                        ) : v ? (
-                          <Icon name="check" className={`h-4 w-4 ${j === 1 ? 'text-amber-400' : 'text-zinc-400'}`} />
-                        ) : (
-                          <Icon name="close" className="h-4 w-4 text-zinc-700" />
-                        )}
+              <div className="mt-8 grid gap-4 sm:grid-cols-3">
+                {reviewsList.map(review => (
+                  <div key={review.id} className="flex flex-col justify-between rounded-2xl bg-white/[0.03] p-5 ring-1 ring-white/10">
+                    <div>
+                      <div className="mb-2 flex items-center gap-1 text-amber-400">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <Icon key={i} name="star" className={`h-4 w-4 ${i < review.rating ? 'text-amber-400' : 'text-zinc-700'}`} />
+                        ))}
                       </div>
-                    ))}
+                      <p className="text-sm leading-relaxed text-zinc-300">« {review.comment} »</p>
+                    </div>
+                    <div className="mt-4 border-t border-white/5 pt-3 flex items-center justify-between text-xs text-zinc-500">
+                      <span className="font-semibold text-zinc-300">{review.name}</span>
+                      <span>{review.date}</span>
+                    </div>
                   </div>
                 ))}
               </div>
+
+              {/* Formulaire pour ajouter un avis */}
+              <form onSubmit={handleAddReview} className="mt-8 rounded-2xl bg-white/[0.02] p-6 ring-1 ring-white/10">
+                <h3 className="mb-4 text-sm font-bold text-white">Donne ton avis sur YAMONFIM</h3>
+                {reviewSubmitted && (
+                  <p className="mb-4 text-xs font-semibold text-emerald-400">Merci ! Ton avis a été ajouté.</p>
+                )}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <input
+                    type="text"
+                    placeholder="Ton prénom / pseudo (optionnel)"
+                    value={newReviewName}
+                    onChange={e => setNewReviewName(e.target.value)}
+                    className="rounded-xl border border-white/10 bg-black/40 px-3.5 py-2 text-sm text-white outline-none focus:border-amber-400"
+                  />
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-zinc-400">Note :</span>
+                    <select
+                      value={newReviewRating}
+                      onChange={e => setNewReviewRating(Number(e.target.value))}
+                      className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none focus:border-amber-400"
+                    >
+                      <option value={5}>5 / 5 ⭐⭐⭐⭐⭐</option>
+                      <option value={4}>4 / 5 ⭐⭐⭐⭐</option>
+                      <option value={3}>3 / 5 ⭐⭐⭐</option>
+                    </select>
+                  </div>
+                </div>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="Écris ton commentaire ici..."
+                  value={newReviewText}
+                  onChange={e => setNewReviewText(e.target.value)}
+                  className="mt-3 w-full rounded-xl border border-white/10 bg-black/40 p-3.5 text-sm text-white outline-none focus:border-amber-400"
+                />
+                <button
+                  type="submit"
+                  className="mt-3 cursor-pointer rounded-full bg-white px-5 py-2 text-xs font-bold text-black hover:bg-zinc-200"
+                >
+                  Publier mon avis
+                </button>
+              </form>
             </section>
 
             <section className="mx-auto mt-24 max-w-2xl">
@@ -620,38 +733,6 @@ export default function AbonnementPage() {
                 })}
               </div>
             </section>
-
-            <section className="mx-auto mt-24 max-w-4xl">
-              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-500/20 via-[#16130f] to-red-600/10 p-8 text-center ring-1 ring-amber-500/30 sm:p-12">
-                <Icon name="sparkles" className="mx-auto mb-4 h-8 w-8 text-amber-400" />
-                <h2 className="text-2xl font-black tracking-tight sm:text-4xl">Prêt à tout regarder ?</h2>
-                <p className="mx-auto mt-3 max-w-md text-sm text-zinc-400 sm:text-base">
-                  Rejoins le VIP en moins d'une minute et reprends ta série là où tu l'as laissée.
-                </p>
-                <div className="mx-auto mt-7 inline-flex rounded-full bg-black/30 p-1 ring-1 ring-white/10">
-                  {PLANS.map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => setSelectedPlanId(p.id)}
-                      className={`cursor-pointer rounded-full px-4 py-2 text-xs font-semibold transition sm:text-sm ${
-                        p.id === selectedPlanId ? 'bg-white text-black' : 'text-zinc-400 hover:text-white'
-                      }`}
-                    >
-                      {p.name}
-                    </button>
-                  ))}
-                </div>
-                <div>
-                  <button
-                    onClick={() => handleSubscribe(selectedPlan)}
-                    disabled={!selectedPlan.stripeLink}
-                    className="mt-5 inline-flex cursor-pointer items-center gap-2 rounded-full bg-gradient-to-r from-amber-400 to-amber-500 px-8 py-3.5 text-sm font-bold text-zinc-950 shadow-lg shadow-amber-500/25 transition hover:from-amber-300 hover:to-amber-400 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Icon name="crown" /> Devenir VIP — {formatEuro(selectedPlan.price)} pour {selectedPlan.name}
-                  </button>
-                </div>
-              </div>
-            </section>
           </>
         )}
 
@@ -660,44 +741,26 @@ export default function AbonnementPage() {
             <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 text-zinc-300 ring-1 ring-white/10">
               <Icon name="help" className="h-6 w-6" />
             </span>
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Un problème avec ton paiement ?</h2>
+            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Un problème avec ton paiement ou ton compte ?</h2>
             <p className="mx-auto mt-2 max-w-lg text-sm text-zinc-400">
-              Tu as payé mais ton VIP ne s'active pas, ou autre chose ne fonctionne pas ? Contacte-nous : on vérifie ton paiement et on règle ça.
+              Tu as payé mais ton VIP ne s'active pas, ou tu souhaites signaler un problème ?
             </p>
           </div>
 
-          <div className={`mx-auto mt-10 grid gap-4 ${SUPPORT_EMAIL ? 'max-w-3xl md:grid-cols-2' : 'max-w-md'}`}>
-            {SUPPORT_EMAIL && (
-              <div className="flex flex-col rounded-2xl bg-white/[0.03] p-6 ring-1 ring-white/10">
-                <span className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-white">
-                  <Icon name="mail" className="h-5 w-5" />
-                </span>
-                <h3 className="font-semibold">Nous écrire par email</h3>
-                <p className="mt-1.5 flex-1 text-sm leading-relaxed text-zinc-400">
-                  Un email pré-rempli avec tes informations s'ouvre. Ajoute la date et le forfait payé.
-                </p>
-                <a
-                  href={supportMailto}
-                  className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white py-3 text-sm font-bold text-black transition hover:bg-zinc-200"
-                >
-                  <Icon name="mail" /> Envoyer un email
-                </a>
-              </div>
-            )}
-
+          <div className="mx-auto mt-10 max-w-md">
             <div className="flex flex-col rounded-2xl bg-white/[0.03] p-6 ring-1 ring-white/10">
               <span className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-white">
-                <Icon name="request" className="h-5 w-5" />
+                <Icon name="alert" className="h-5 w-5" />
               </span>
-              <h3 className="font-semibold">Envoyer un message</h3>
+              <h3 className="font-semibold">Signaler un problème / Idée</h3>
               <p className="mt-1.5 flex-1 text-sm leading-relaxed text-zinc-400">
-                Explique ton problème depuis la page Demandes, en indiquant ton identifiant client ci-dessous.
+                Redirige directement vers notre formulaire de signalement pour nous transmettre un problème ou une suggestion.
               </p>
               <button
-                onClick={() => router.push('/requests')}
-                className="mt-5 inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-white/10 py-3 text-sm font-semibold text-white ring-1 ring-white/10 transition hover:bg-white/15"
+                onClick={() => router.push('/report')}
+                className="mt-5 inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-red-600 py-3 text-sm font-bold text-white transition hover:bg-red-500"
               >
-                <Icon name="request" /> Contacter le support
+                <Icon name="alert" /> Aller sur la page Report
               </button>
             </div>
           </div>
@@ -727,9 +790,6 @@ export default function AbonnementPage() {
                   </div>
                 </div>
               </div>
-              <p className="mt-3 text-xs text-zinc-500">
-                Pense aussi à joindre le reçu Stripe reçu par email après ton paiement.
-              </p>
             </div>
           )}
         </section>

@@ -20,6 +20,7 @@ interface Season {
 
 interface MediaItem {
   id: any;
+  tmdb_id?: any;
   title: string;
   type: 'movie' | 'series';
   poster: string;
@@ -41,7 +42,7 @@ const EMPTY_SEASONS: Season[] = [
 
 type IconName =
   | 'search' | 'film' | 'tv' | 'plus' | 'edit' | 'trash' | 'close' | 'check'
-  | 'alert' | 'back' | 'image' | 'chevron' | 'layers' | 'save' | 'sparkles';
+  | 'alert' | 'back' | 'image' | 'chevron' | 'layers' | 'save' | 'sparkles' | 'refresh';
 
 const ICONS: Record<IconName, React.ReactNode> = {
   search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></>,
@@ -59,6 +60,7 @@ const ICONS: Record<IconName, React.ReactNode> = {
   layers: <><path d="m12 2 10 5-10 5L2 7l10-5Z" /><path d="m2 17 10 5 10-5M2 12l10 5 10-5" /></>,
   save: <><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" /><path d="M17 21v-8H7v8M7 3v5h8" /></>,
   sparkles: <path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3ZM19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15Z" />,
+  refresh: <><path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" /></>,
 };
 
 function Icon({ name, className = 'w-4 h-4' }: { name: IconName; className?: string }) {
@@ -193,10 +195,50 @@ export default function AdminPage() {
   const handleSelectTmdbItem = async (item: any) => {
     const tmdbId = item.id;
     setSelectedTmdbId(tmdbId);
-    setTitle(item.title || item.name || '');
+    
+    const releaseDate = item.release_date || item.first_air_date || '';
+    const year = releaseDate ? ` (${releaseDate.slice(0, 4)})` : '';
+    setTitle((item.title || item.name || '') + year);
+
     setSearchQuery('');
     setTmdbSearchResults([]);
 
+    await fetchAndApplyTmdbData(tmdbId, item.title || item.name || '');
+  };
+
+  const handleAutoReloadByName = async () => {
+    if (!title.trim()) {
+      setErrorMsg('Veuillez renseigner un titre pour lancer la recherche TMDb.');
+      return;
+    }
+
+    setLoading(true);
+    setErrorMsg('');
+    setMessage('');
+
+    try {
+      const endpoint = type === 'movie' ? 'movie' : 'tv';
+      const searchRes = await fetch(
+        `https://api.themoviedb.org/3/search/${endpoint}?api_key=${TMDB_KEY}&query=${encodeURIComponent(title.trim())}&language=fr-FR`
+      );
+      const searchData = await searchRes.json();
+
+      if (searchData.results && searchData.results.length > 0) {
+        const bestMatch = searchData.results[0];
+        setSelectedTmdbId(bestMatch.id);
+        await fetchAndApplyTmdbData(bestMatch.id, bestMatch.title || bestMatch.name);
+      } else {
+        setErrorMsg(`Aucun résultat TMDb trouvé pour le titre "${title}".`);
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error(err);
+      setErrorMsg('Erreur lors de la recherche automatique TMDb.');
+      setLoading(false);
+    }
+  };
+
+  const fetchAndApplyTmdbData = async (tmdbId: any, itemName: string) => {
     setLoading(true);
     setErrorMsg('');
     setMessage('');
@@ -239,7 +281,7 @@ export default function AdminPage() {
           const isAvailable = await checkUrlAvailable(streamUrl);
 
           if (!isAvailable) {
-            setErrorMsg(`⚠️ Le film "${item.title}" n'est pas encore disponible sur le lecteur externe.`);
+            setErrorMsg(`⚠️ Le film "${itemName}" n'est pas encore disponible sur le lecteur externe.`);
             setUrl('');
             setEmbedUrl('');
           } else {
@@ -277,7 +319,6 @@ export default function AdminPage() {
                     info: 'title,year,rating,duration,synopsis'
                   }).toString();
                   
-                  // Génération de l'iframe demandée pour chaque épisode de série
                   const autoEmbed = firstEpAvailable
                     ? `<iframe src="https://api.moviez.ac/serie/${tmdbId}/${sNum}/${ep.episode_number}?${seriesParams}" width="100%" height="100%" frameborder="0" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" referrerpolicy="origin" allowfullscreen></iframe>`
                     : '';
@@ -308,7 +349,7 @@ export default function AdminPage() {
           }
 
           if (!firstEpAvailable) {
-            setErrorMsg(`⚠️ La série "${item.name}" n'est pas encore disponible sur le lecteur externe.`);
+            setErrorMsg(`⚠️ La série "${itemName}" n'est pas encore disponible sur le lecteur externe.`);
           } else {
             setMessage('Informations TMDb récupérées et épisodes générés avec succès !');
           }
@@ -325,6 +366,7 @@ export default function AdminPage() {
 
   const handleEdit = (item: MediaItem) => {
     setEditingId(item.id);
+    setSelectedTmdbId(item.tmdb_id || '');
     setTitle(item.title || '');
     setType(item.type || 'movie');
     setPoster(item.poster || '');
@@ -400,7 +442,8 @@ export default function AdminPage() {
       embedUrl: type === 'movie' ? url : '',
       description,
       genres: genresArray,
-      seasons: type === 'series' ? seasons : null
+      seasons: type === 'series' ? seasons : null,
+      tmdb_id: selectedTmdbId ? String(selectedTmdbId) : null
     };
 
     if (editingId !== null && editingId !== undefined) {
@@ -454,10 +497,13 @@ export default function AdminPage() {
   }), [mediaList]);
 
   const duplicate = useMemo(() => {
-    if (editingId !== null || !title.trim()) return null;
-    const t = normalize(title.trim());
-    return mediaList.find(m => m.type === type && normalize(m.title || '') === t) || null;
-  }, [title, type, mediaList, editingId]);
+    if (editingId !== null || (!title.trim() && !selectedTmdbId)) return null;
+    return mediaList.find(m => {
+      if (selectedTmdbId && m.tmdb_id && String(m.tmdb_id) === String(selectedTmdbId)) return true;
+      if (title.trim() && normalize(m.title || '') === normalize(title.trim()) && m.type === type) return true;
+      return false;
+    }) || null;
+  }, [title, type, selectedTmdbId, mediaList, editingId]);
 
   if (loadingAuth) {
     return (
@@ -545,15 +591,33 @@ export default function AdminPage() {
                 </h1>
                 {isEditing && <p className="mt-0.5 truncate text-sm text-zinc-500">{title}</p>}
               </div>
-              {isEditing && (
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-zinc-200 transition hover:bg-white/15"
-                >
-                  <Icon name="close" className="h-3.5 w-3.5" /> Annuler
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {isEditing && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selectedTmdbId) {
+                        fetchAndApplyTmdbData(selectedTmdbId, title);
+                      } else {
+                        handleAutoReloadByName();
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-3 py-1.5 text-xs font-bold text-amber-300 ring-1 ring-amber-500/30 transition hover:bg-amber-500/25"
+                    title="Recharger ou trouver l'ID TMDb et les épisodes par le titre"
+                  >
+                    <Icon name="refresh" className="h-3.5 w-3.5" /> Recharger
+                  </button>
+                )}
+                {isEditing && (
+                  <button
+                    type="button"
+                    onClick={handleCancel}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-zinc-200 transition hover:bg-white/15"
+                  >
+                    <Icon name="close" className="h-3.5 w-3.5" /> Annuler
+                  </button>
+                )}
+              </div>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6 p-5 sm:p-6">
@@ -603,8 +667,12 @@ export default function AdminPage() {
                   <ul className="absolute left-4 right-4 z-30 mt-2 max-h-80 overflow-y-auto rounded-2xl border border-white/10 bg-[#141416]/95 p-1.5 shadow-2xl backdrop-blur-xl">
                     {tmdbSearchResults.map(item => {
                       const name = item.title || item.name;
+                      const releaseDate = item.release_date || item.first_air_date || '';
+                      const year = releaseDate ? `(${releaseDate.slice(0, 4)})` : '';
+                      const mediaTypeLabel = item.media_type === 'tv' || type === 'series' ? 'Série' : 'Film';
+                      
                       const already = mediaList.find(
-                        m => m.type === type && normalize(m.title || '') === normalize(name || '')
+                        m => (m.tmdb_id && String(m.tmdb_id) === String(item.id)) || (normalize(m.title || '') === normalize(`${name} ${year}`))
                       );
                       return (
                         <li key={item.id}>
@@ -619,9 +687,11 @@ export default function AdminPage() {
                               )}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-semibold">{name}</p>
+                              <p className="truncate text-sm font-semibold">
+                                {name} <span className="font-normal text-zinc-400">{year}</span>
+                              </p>
                               <p className="text-xs text-zinc-500">
-                                {item.release_date?.slice(0, 4) || item.first_air_date?.slice(0, 4) || 'Année inconnue'}
+                                ID TMDb : {item.id} · {mediaTypeLabel}
                               </p>
                             </div>
                             {already && (

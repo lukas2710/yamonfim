@@ -119,35 +119,6 @@ function Icon({ name, className = 'w-4 h-4' }: { name: IconName; className?: str
   );
 }
 
-const ActiveEpisodeBanner = React.memo(function ActiveEpisodeBanner({
-  mediaTitle,
-  seasons,
-  seasonIdx,
-  episodeIdx,
-}: {
-  mediaTitle: string;
-  seasons?: Season[];
-  seasonIdx: number;
-  episodeIdx: number;
-}) {
-  const season = seasons?.[seasonIdx];
-  const episode = season?.episodes?.[episodeIdx];
-
-  return (
-    <div className="min-w-0 overflow-hidden relative h-10 flex items-center">
-      <div className="transition-all duration-500 ease-in-out flex flex-col justify-center">
-        <p className="text-sm font-semibold truncate">{mediaTitle}</p>
-        {seasons && (
-          <p className="text-xs text-zinc-400 truncate">
-            Saison {season?.seasonNumber || 1} · Épisode {episode?.number || 1}
-            {episode?.title ? ` — ${episode.title}` : ''}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-});
-
 export default function WatchPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -164,8 +135,7 @@ export default function WatchPage() {
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const playerWrapperRef = useRef<HTMLDivElement | null>(null);
-  const [showExitFullBtn, setShowExitFullBtn] = useState(false);
-  const mouseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const [showVipModal, setShowVipModal] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
@@ -207,6 +177,14 @@ export default function WatchPage() {
   }, []);
 
   useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isPlaying) closePlayer();
     };
@@ -227,17 +205,9 @@ export default function WatchPage() {
     }
   };
 
-  const initTimer = (durationMinutes?: number) => {
+  const startTimerInterval = () => {
     clearTimer();
-    if (!autoPlayEnabled) return;
-
-    const mins = durationMinutes && durationMinutes > 0 ? durationMinutes : 21;
-    setRemainingSeconds(mins * 60);
-    setIsPlayerPaused(false);
-
     timerIntervalRef.current = setInterval(() => {
-      if (isPlayerPaused) return;
-
       setRemainingSeconds(prev => {
         if (prev <= 1) {
           clearTimer();
@@ -249,8 +219,26 @@ export default function WatchPage() {
     }, 1000);
   };
 
+  const initTimer = (durationMinutes?: number) => {
+    clearTimer();
+    if (!autoPlayEnabled) return;
+
+    const mins = durationMinutes && durationMinutes > 0 ? durationMinutes : 21;
+    setRemainingSeconds(mins * 60);
+    setIsPlayerPaused(false);
+    startTimerInterval();
+  };
+
   const togglePauseTimer = () => {
-    setIsPlayerPaused(prev => !prev);
+    setIsPlayerPaused(prev => {
+      const nextState = !prev;
+      if (nextState) {
+        clearTimer();
+      } else {
+        startTimerInterval();
+      }
+      return nextState;
+    });
   };
 
   const addTime = (seconds: number) => {
@@ -273,17 +261,6 @@ export default function WatchPage() {
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }
-  };
-
-  const handleMouseMove = () => {
-    if (!document.fullscreenElement) return;
-    setShowExitFullBtn(true);
-
-    if (mouseTimeoutRef.current) clearTimeout(mouseTimeoutRef.current);
-
-    mouseTimeoutRef.current = setTimeout(() => {
-      setShowExitFullBtn(false);
-    }, 2000);
   };
 
   const handleTimerFinished = async () => {
@@ -876,16 +853,21 @@ export default function WatchPage() {
                     >
                       <Icon name="back" />
                     </button>
-                    {/* Bannière supérieure isolée qui change sans toucher au lecteur */}
-                    <ActiveEpisodeBanner
-                      mediaTitle={media.title}
-                      seasons={media.seasons}
-                      seasonIdx={selectedSeasonIdx}
-                      episodeIdx={selectedEpisodeIdx}
-                    />
+                    {/* Bannière supérieure de l'épisode en cours */}
+                    <div className="min-w-0 overflow-hidden relative h-10 flex items-center">
+                      <div className="transition-all duration-500 ease-in-out flex flex-col justify-center">
+                        <p className="text-sm font-semibold truncate">{media.title}</p>
+                        {isSeries && (
+                          <p className="text-xs text-zinc-400 truncate">
+                            Saison {currentSeason?.seasonNumber || 1} · Épisode {currentEpisode?.number || 1}
+                            {currentEpisode?.title ? ` — ${currentEpisode.title}` : ''}
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Widget Minuteur Visible & Modifiable pour tout le monde */}
+                  {/* Widget Minuteur synchronisé avec le bouton Play / Pause */}
                   {isSeries && (
                     <div className="flex items-center gap-2 bg-black/50 border border-white/10 px-3 py-1.5 rounded-2xl">
                       <div className="flex items-center gap-1.5 text-xs text-zinc-300 font-semibold px-2">
@@ -898,7 +880,7 @@ export default function WatchPage() {
                         className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer ${
                           isPlayerPaused ? 'bg-amber-500 text-black' : 'bg-white/10 text-white hover:bg-white/20'
                         }`}
-                        title={isPlayerPaused ? 'Reprendre le minuteur' : 'Mettre en pause le minuteur'}
+                        title={isPlayerPaused ? 'Reprendre le minuteur (Play)' : 'Mettre en pause le minuteur (Pause)'}
                       >
                         <Icon name={isPlayerPaused ? 'play' : 'pause'} className="w-3.5 h-3.5" />
                       </button>
@@ -951,27 +933,37 @@ export default function WatchPage() {
               <div className="flex-1 w-full flex items-center justify-center bg-black relative">
                 <div 
                   ref={playerWrapperRef}
-                  onMouseMove={handleMouseMove}
                   className="w-full h-full bg-black relative flex items-center justify-center group"
                 >
-                  {/* Petite croix discrète en haut à droite en plein écran */}
+                  {/* Widget de contrôle du chrono visible en permanence en haut en plein écran */}
+                  {isFullscreen && isSeries && (
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[110] flex items-center gap-2 bg-black/85 backdrop-blur-md border border-white/20 px-4 py-2 rounded-full shadow-2xl">
+                      <div className="flex items-center gap-1.5 text-xs text-zinc-300 font-semibold px-1">
+                        <Icon name="clock" className="w-3.5 h-3.5 text-red-500" />
+                        <span className="font-mono text-white text-sm">{formatTimerDisplay(remainingSeconds)}</span>
+                      </div>
+                      <div className="h-4 w-[1px] bg-white/20" />
+                      <button
+                        onClick={togglePauseTimer}
+                        className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer ${
+                          isPlayerPaused ? 'bg-amber-500 text-black' : 'bg-white/20 text-white hover:bg-white/30'
+                        }`}
+                        title={isPlayerPaused ? 'Reprendre le minuteur' : 'Mettre en pause le minuteur'}
+                      >
+                        <Icon name={isPlayerPaused ? 'play' : 'pause'} className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Bouton pour quitter le plein écran en haut à droite */}
                   <button
                     onClick={exitFullscreenPlayer}
                     title="Quitter le plein écran"
                     aria-label="Quitter le plein écran"
-                    className="absolute top-4 right-4 z-40 w-9 h-9 rounded-full bg-black/60 hover:bg-black/90 text-white/70 hover:text-white border border-white/10 backdrop-blur-md flex items-center justify-center transition cursor-pointer opacity-80 hover:opacity-100"
+                    className="absolute top-4 right-4 z-[110] w-9 h-9 rounded-full bg-black/60 hover:bg-black/90 text-white/70 hover:text-white border border-white/10 backdrop-blur-md flex items-center justify-center transition cursor-pointer shadow-lg"
                   >
                     <Icon name="close" className="w-4 h-4" />
                   </button>
-
-                  <div className={`absolute bottom-6 inset-x-0 flex justify-center z-30 transition-opacity duration-300 pointer-events-none ${showExitFullBtn ? 'opacity-100' : 'opacity-0'}`}>
-                    <button
-                      onClick={exitFullscreenPlayer}
-                      className="pointer-events-auto inline-flex items-center gap-2 bg-black/80 hover:bg-red-600 text-white backdrop-blur-md px-5 py-2.5 rounded-full text-sm font-semibold shadow-2xl border border-white/20 transition cursor-pointer active:scale-95"
-                    >
-                      <Icon name="minimize" className="w-4 h-4" /> Retour en petit écran
-                    </button>
-                  </div>
 
                   {stableUrlRef.current ? (
                     <iframe
