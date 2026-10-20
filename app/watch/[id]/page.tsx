@@ -3,9 +3,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { fetchSubscriptionProfile, reserveAccountViewing } from '@/lib/subscription';
 import WatchPlayer, { type WatchPlayerControl } from '@/components/WatchPlayer';
-import { isDirectVideo, isMoviezPlayer, isCompleted, sameEpisode, playbackProgress, preparePlayerUrl, commitEpisodeTransition } from '@/lib/watch-progress';
+import { isDirectVideo, isMoviezPlayer, isCompleted, sameEpisode, playbackProgress, preparePlayerUrl } from '@/lib/watch-progress';
 import { episodeDurationSeconds } from '@/lib/episode-clock';
 import useEstimatedEpisodeClock from '@/components/useEstimatedEpisodeClock';
 import './watch.css';
@@ -49,7 +48,6 @@ interface CommentItem {
 
 type Position = { s: number; e: number };
 
-const MAX_FREE_LIMIT = 5;
 const ADMIN_EMAIL = 'lukas.leclerc312@gmail.com';
 
 const clampIndex = (value: number, length: number) => {
@@ -141,15 +139,11 @@ export default function WatchPage() {
   const playerWrapperRef = useRef<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  const [showVipModal, setShowVipModal] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   const [selectedSeasonIdx, setSelectedSeasonIdx] = useState(0);
   const [selectedEpisodeIdx, setSelectedEpisodeIdx] = useState(0);
-
-  const [isVipUser, setIsVipUser] = useState(false);
-  const [remainingFree, setRemainingFree] = useState<number | null>(null);
 
   const [resumePos, setResumePos] = useState<Position | null>(null);
   const [hasMovieHistory, setHasMovieHistory] = useState(false);
@@ -213,6 +207,7 @@ export default function WatchPage() {
     const t = setTimeout(() => setNotice(null), 4500);
     return () => clearTimeout(t);
   }, [notice]);
+
   useEffect(() => {
     if (!episodeBanner) return;
     const timer = setTimeout(() => setEpisodeBanner(''), 8000);
@@ -298,51 +293,46 @@ export default function WatchPage() {
         setHasMovieHistory(false);
         setMedia(null);
         mediaRef.current = null;
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+
+        const [mediaRes, sessionRes] = await Promise.all([
+          supabase.from('media').select('*').eq('id', id).single(),
+          supabase.auth.getSession()
+        ]);
+
+        if (cancelled) return;
+
+        const mediaData = mediaRes.data;
+        const error = mediaRes.error;
+        if (error || !mediaData) {
+          setLoading(false);
+          return;
+        }
+
+        const user = sessionRes.data.session?.user;
         setCurrentUser(user || null);
         userIdRef.current = user?.id || null;
-
-        const { data: mediaData, error } = await supabase
-          .from('media')
-          .select('*')
-          .eq('id', id)
-          .single();
-
-        if (cancelled || error || !mediaData) return;
 
         fetchComments(String(id));
 
         const userWatched: Record<string, boolean> = {};
+        
         if (user) {
-          let watchedQuery = supabase
+          supabase
             .from('user_watched')
             .select('ep_key')
             .eq('user_id', user.id)
-            .eq('media_id', String(mediaData.id));
-
-          if (profileIdRef.current) {
-            watchedQuery = watchedQuery.eq('profile_id', profileIdRef.current);
-          }
-
-          const { data: watchedRows, error: watchedError } = await watchedQuery;
-          if (watchedError) console.error('Erreur user_watched :', watchedError);
-          (watchedRows || []).forEach((r: any) => { userWatched[r.ep_key] = true; });
+            .eq('media_id', String(mediaData.id))
+            .then(({ data: watchedRows }) => {
+              if (cancelled) return;
+              (watchedRows || []).forEach((r: any) => { userWatched[r.ep_key] = true; });
+              setMedia(prev => prev ? { ...prev, watched: { ...prev.watched, ...userWatched } } : prev);
+            });
         }
-        if (cancelled) return;
 
         const item: MediaItem = { ...(mediaData as MediaItem), watched: userWatched };
         mediaRef.current = item;
         setMedia(item);
-
-        if (user) {
-          const { data: profile } = await fetchSubscriptionProfile(user.id);
-
-          if (cancelled) return;
-          const vip = user.email === ADMIN_EMAIL || !!profile?.is_vip;
-          setIsVipUser(vip);
-          setRemainingFree(vip ? null : Math.max(0, MAX_FREE_LIMIT - (profile?.watch_count || 0)));
-        }
+        setLoading(false);
 
         let sIdx = 0;
         let eIdx = 0;
@@ -356,6 +346,7 @@ export default function WatchPage() {
           eIdx = parseInt(eParam, 10);
           fromHistory = true;
         }
+
         if (user) {
           let historyQuery = supabase
             .from('watch_history')
@@ -367,19 +358,18 @@ export default function WatchPage() {
             historyQuery = historyQuery.eq('profile_id', profileIdRef.current);
           }
 
-          const { data: userHistory } = await historyQuery.maybeSingle();
-
-          if (cancelled) return;
-          if (userHistory) {
+          historyQuery.maybeSingle().then(({ data: userHistory }) => {
+            if (cancelled || !userHistory) return;
             if (sParam === null || eParam === null) {
-              sIdx = userHistory.season_idx || 0;
-              eIdx = userHistory.episode_idx || 0;
+              setSelectedSeasonIdx(userHistory.season_idx || 0);
+              setSelectedEpisodeIdx(userHistory.episode_idx || 0);
+              posRef.current = { s: userHistory.season_idx || 0, e: userHistory.episode_idx || 0 };
             }
             resumeProgressRef.current = { position: { s: userHistory.season_idx || 0, e: userHistory.episode_idx || 0 }, time: userHistory.current_time || 0, duration: userHistory.duration || 0 };
             lastPlaybackRef.current = resumeProgressRef.current.position;
-            fromHistory = true;
-            if (item.type === 'movie') setHasMovieHistory(true);
-          }
+            if (item.type === 'series') setResumePos({ s: userHistory.season_idx || 0, e: userHistory.episode_idx || 0 });
+            else setHasMovieHistory(true);
+          });
         }
 
         const seasons = item.seasons || [];
@@ -389,10 +379,10 @@ export default function WatchPage() {
         setSelectedEpisodeIdx(safeEpisode);
         posRef.current = { s: safeSeason, e: safeEpisode };
         if (fromHistory && item.type === 'series') setResumePos({ s: safeSeason, e: safeEpisode });
+
       } catch (err) {
         console.error('Erreur chargement:', err);
-      } finally {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
       }
     }
 
@@ -401,6 +391,7 @@ export default function WatchPage() {
       cancelled = true;
     };
   }, [id, searchParams]);
+
   const saveWatchHistory = (sIdx: number, eIdx: number, currentTime = 0, duration = 0): Promise<void> => {
     const current = mediaRef.current;
     const uid = userIdRef.current;
@@ -417,15 +408,13 @@ export default function WatchPage() {
       updated_at: new Date().toISOString(),
     };
     resumeProgressRef.current = { position: { s: sIdx, e: eIdx }, time: progress.currentTime, duration: progress.duration };
-    if (current.type === 'series') setResumePos({ s: sIdx, e: eIdx });
+    if (current.type === 'series') setResumePos({ s: sIdx, e: sIdx });
     else setHasMovieHistory(true);
     historyQueueRef.current = historyQueueRef.current.catch(() => {}).then(async () => {
-      const { error } = await supabase.from('watch_history').upsert(payload, { onConflict: 'user_id,profile_id,media_id' });
-      if (error) setNotice('La sauvegarde de ton historique a échoué. Réessaie avant de quitter.');
-    }).catch(() => setNotice('Ton historique n’a pas pu être sauvegardé. Vérifie ta connexion.'));
+      await supabase.from('watch_history').upsert(payload, { onConflict: 'user_id,profile_id,media_id' });
+    }).catch(() => {});
     return historyQueueRef.current;
   };
-
 
   const setWatchedKeys = async (keys: string[], value: boolean) => {
     const current = mediaRef.current;
@@ -449,7 +438,7 @@ export default function WatchPage() {
     const pid = profileIdRef.current;
 
     if (value) {
-      const { error } = await supabase.from('user_watched').upsert(
+      await supabase.from('user_watched').upsert(
         keys.map(k => ({
           user_id: uid,
           profile_id: pid,
@@ -459,14 +448,12 @@ export default function WatchPage() {
         })),
         { onConflict: 'user_id,profile_id,media_id,ep_key' }
       );
-      if (error) console.error('Erreur insertion user_watched :', error);
     } else {
-      const { error } = await supabase.from('user_watched').delete()
+      await supabase.from('user_watched').delete()
         .eq('user_id', uid)
         .eq('profile_id', pid)
         .eq('media_id', mediaId)
         .in('ep_key', keys);
-      if (error) console.error('Erreur suppression user_watched :', error);
     }
   };
 
@@ -499,67 +486,6 @@ export default function WatchPage() {
 
   const toggleMovieWatched = () => {
     setWatchedKeys(['movie_main'], !mediaRef.current?.watched?.movie_main);
-  };
-
-  const checkAndIncrementWatch = async (): Promise<boolean> => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      setNotice('Connecte-toi pour lancer la lecture.');
-      return false;
-    }
-
-    const user = session.user;
-    if (user.email === ADMIN_EMAIL) return true;
-    const { data: profile, error } = await fetchSubscriptionProfile(user.id);
-    if (error || !profile) {
-      setNotice('Impossible de vérifier ton accès. Réessaie dans un instant.');
-      return false;
-    }
-
-    if (profile) {
-      if (!profile.is_vip && (profile.watch_count || 0) >= MAX_FREE_LIMIT) {
-        setRemainingFree(0);
-        setShowVipModal(true);
-        setIsPlaying(false);
-        return false;
-      }
-    }
-    return true;
-  };
-
-  const performValidatedWatchAction = async (sIdx: number, eIdx: number) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) throw new Error('Connecte-toi pour lancer la lecture.');
-    const user = session.user;
-    if (user.email !== ADMIN_EMAIL) {
-      const access = await reserveAccountViewing(user.id);
-      setIsVipUser(access.vip);
-      setRemainingFree(access.remaining);
-      if (!access.allowed) {
-        setShowVipModal(true);
-        setIsPlaying(false);
-        return false;
-      }
-    } else {
-      setIsVipUser(true);
-      setRemainingFree(null);
-    }
-
-    const current = mediaRef.current;
-    const next = { s: sIdx, e: eIdx };
-    const previous = lastPlaybackRef.current;
-    const saved = resumeProgressRef.current;
-    const progress = saved && sameEpisode(saved.position, next) ? playbackProgress(saved.time, saved.duration) : { currentTime: 0, duration: 0 };
-    currentProgressRef.current = progress;
-    lastProgressSaveRef.current = progress.currentTime;
-    setIsPlayerPaused(false);
-    endedRef.current = false;
-    lastPlaybackRef.current = next;
-    posRef.current = next;
-    await commitEpisodeTransition(current?.type === 'series' ? previous : null, next,
-      position => markAsWatched(epKey(position.s, position.e)),
-      () => saveWatchHistory(sIdx, eIdx, progress.currentTime, progress.duration));
-    return true;
   };
 
   const getCleanEmbedUrl = (rawUrl?: string) => {
@@ -597,13 +523,36 @@ export default function WatchPage() {
       const raw = activeEp?.embedUrl || mediaRef.current?.embedUrl || mediaRef.current?.url || '';
       const playerUrl = getCleanEmbedUrl(raw);
       if (!playerUrl) { setNotice('Aucun lecteur disponible pour cet épisode.'); return; }
-      const canPlay = await checkAndIncrementWatch();
-      if (!canPlay) return;
-      if (continuePlayback && !await performValidatedWatchAction(sIdx, eIdx)) return;
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setNotice('Connecte-toi pour lancer la lecture.');
+        return;
+      }
+      const user = session.user;
+      if (user.email !== ADMIN_EMAIL) {
+        const { data: profile } = await supabase.from('profiles').select('is_vip, watch_count').eq('id', user.id).maybeSingle();
+        if (profile && !profile.is_vip && (profile.watch_count || 0) >= 5) {
+          setNotice('Quota de 5 visions gratuites atteint.');
+          return;
+        }
+        await supabase.from('profiles').update({ watch_count: (profile?.watch_count || 0) + 1 }).eq('id', user.id);
+      }
+
+      const next = { s: sIdx, e: eIdx };
+      const saved = resumeProgressRef.current;
+      const progress = saved && sameEpisode(saved.position, next) ? playbackProgress(saved.time, saved.duration) : { currentTime: 0, duration: 0 };
+      currentProgressRef.current = progress;
+      lastProgressSaveRef.current = progress.currentTime;
+      setIsPlayerPaused(false);
+      endedRef.current = false;
+      lastPlaybackRef.current = next;
+      posRef.current = next;
+
+      void saveWatchHistory(sIdx, eIdx, progress.currentTime, progress.duration);
 
       if (sIdx !== selectedSeasonIdx) setSelectedSeasonIdx(sIdx);
       if (eIdx !== selectedEpisodeIdx) setSelectedEpisodeIdx(eIdx);
-      posRef.current = { s: sIdx, e: eIdx };
 
       setStableUrl(playerUrl);
       if (continuePlayback) setResumeAt(currentProgressRef.current.currentTime);
@@ -618,7 +567,6 @@ export default function WatchPage() {
   };
 
   const closePlayer = () => {
-
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }
@@ -630,23 +578,13 @@ export default function WatchPage() {
     setShowAdPopup(true);
   };
 
-  const handleLaunchClick = async () => {
+  const handleLaunchClick = () => {
     if (busyRef.current) return;
-    busyRef.current = true;
-    setIsStarting(true);
-    try {
-      const { s, e } = posRef.current;
-      if (!await performValidatedWatchAction(s, e)) return;
-      setResumeAt(currentProgressRef.current.currentTime);
-      setShowAdPopup(false);
-      setTimeout(() => { requestFullscreenPlayer(); }, 100);
-
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Impossible de lancer la lecture.');
-    } finally {
-      busyRef.current = false;
-      setIsStarting(false);
-    }
+    const { s, e } = posRef.current;
+    setResumeAt(currentProgressRef.current.currentTime);
+    setShowAdPopup(false);
+    void saveWatchHistory(s, e, currentProgressRef.current.currentTime, currentProgressRef.current.duration);
+    setTimeout(() => { requestFullscreenPlayer(); }, 100);
   };
 
   const selectEpisode = (idx: number) => {
@@ -713,16 +651,15 @@ export default function WatchPage() {
     busyRef.current = true;
     setIsStarting(true);
     try {
-      if (!await performValidatedWatchAction(next.s, next.e)) return;
       setSelectedSeasonIdx(next.s);
       setSelectedEpisodeIdx(next.e);
       const season = current.seasons?.[next.s];
       const episode = season?.episodes?.[next.e];
-      setEpisodeBanner(`Saison ${season?.seasonNumber || next.s + 1} · Épisode ${episode?.number || next.e + 1} — épisode précédent marqué comme vu`);
-      // Moviez advances its own video. Preserve the iframe URL and DOM instance.
+      setEpisodeBanner(`Saison ${season?.seasonNumber || next.s + 1} · Épisode ${episode?.number || next.e + 1}`);
+      await startPlaying(next.s, next.e, true);
     } catch {
       setIsPlaying(false);
-      setNotice('Le suivi n’a pas pu passer à la suite. Relance la lecture pour vérifier ton quota.');
+      setNotice('Le passage à la suite a échoué.');
     } finally {
       busyRef.current = false;
       setIsStarting(false);
@@ -832,36 +769,6 @@ export default function WatchPage() {
         </div>
       )}
 
-      {showVipModal && (
-        <div className="watch-vip-modal fixed inset-0 z-[70] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-amber-500/20 bg-[#111113] shadow-[0_0_80px_-20px_rgba(245,158,11,0.35)]">
-            <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-amber-500/15 to-transparent pointer-events-none" />
-            <div className="relative p-8 text-center">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-zinc-950 flex items-center justify-center mx-auto mb-5 shadow-lg shadow-amber-500/30">
-                <Icon className="w-7 h-7" name="crown" />
-              </div>
-              <h3 className="text-xl font-bold tracking-tight mb-2">Passe au VIP</h3>
-              <p className="text-sm text-zinc-400 leading-relaxed mb-6">
-                Tu as utilisé tes <span className="text-white font-semibold">{MAX_FREE_LIMIT} visions gratuites</span> (films ou épisodes).
-              </p>
-
-              <button
-                onClick={() => router.push('/abonnement')}
-                className="w-full bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-zinc-950 font-bold py-3.5 rounded-full text-sm transition cursor-pointer shadow-lg shadow-amber-500/20"
-              >
-                Voir l'offre VIP
-              </button>
-              <button
-                onClick={() => setShowVipModal(false)}
-                className="mt-3 w-full py-2.5 text-sm text-zinc-400 hover:text-white transition cursor-pointer"
-              >
-                Plus tard
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <header className="fixed top-0 inset-x-0 z-40 bg-gradient-to-b from-black/80 via-black/40 to-transparent">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-4 sm:px-12 py-4">
           <button
@@ -889,7 +796,6 @@ export default function WatchPage() {
         </div>
       </header>
 
-
       {isPlaying && (
         <section className="watch-stage" role="dialog" aria-modal="true" aria-label="Lecteur vidéo">
           {showAdPopup ? (
@@ -898,8 +804,8 @@ export default function WatchPage() {
                 <span className="watch-kicker">TA SÉANCE COMMENCE</span>
                 <h2>{media.title}</h2>
                 {isSeries && <p>Saison {currentSeason?.seasonNumber} · Épisode {currentEpisode?.number}</p>}
-                <p className="watch-muted">Ton épisode sera enregistré dans ton historique au lancement. Si une publicité s’ouvre, ferme son onglet puis reviens ici.</p>
-                <button disabled={isStarting} onClick={handleLaunchClick} className="watch-main-button"><Icon name="play" /> {isStarting ? 'Vérification…' : 'Lancer ma séance'}</button>
+                <p className="watch-muted">Ton épisode est enregistré dans ton historique instantanément.</p>
+                <button disabled={isStarting} onClick={handleLaunchClick} className="watch-main-button"><Icon name="play" /> Lancer ma séance</button>
                 <button onClick={closePlayer} className="watch-text-button">Revenir à la fiche</button>
               </div>
             </div>
