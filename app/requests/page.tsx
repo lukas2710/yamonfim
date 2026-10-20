@@ -5,6 +5,8 @@ import PageHero from '@/components/PageHero';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { findContentDuplicate, duplicateErrorMessage } from '@/lib/content-identity';
+import { checkContentDuplicate } from '@/lib/content-duplicates';
 
 interface RequestItem {
   id: string;
@@ -22,6 +24,7 @@ interface MediaItem {
   id: any;
   title: string;
   type: 'movie' | 'series';
+  tmdb_id?: string | number | null;
 }
 
 interface TmdbResult {
@@ -104,9 +107,6 @@ function StatusBadge({ status }: { status: Status }) {
   );
 }
 
-const normalize = (s: string) =>
-  s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-
 export default function RequestsPage() {
   const router = useRouter();
 
@@ -126,6 +126,7 @@ export default function RequestsPage() {
 
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const submitLock = useRef(false);
   const [msg, setMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -135,11 +136,12 @@ export default function RequestsPage() {
   const fetchData = async () => {
     const [reqRes, catRes] = await Promise.all([
       supabase.from('requests').select('*').order('created_at', { ascending: false }),
-      supabase.from('media').select('id, title, type')
+      supabase.from('media').select('id, title, type, tmdb_id')
     ]);
 
     if (!reqRes.error && reqRes.data) setRequests(reqRes.data);
     if (!catRes.error && catRes.data) setCatalogMedia(catRes.data);
+    if (reqRes.error || catRes.error) setErrorMsg('Certaines données n’ont pas pu être chargées. Actualise la page pour réessayer.');
   };
 
   useEffect(() => {
@@ -237,22 +239,16 @@ export default function RequestsPage() {
     }
 
     if (!titleToCheck) return null;
-    const q = normalize(titleToCheck);
+    const candidate = { title: titleToCheck, tmdb_id: tmdbIdToCheck, type };
 
     // 1. Vérification dans le catalogue général (table media)
-    const inCatalog = catalogMedia.find(
-      m => m.type === type && normalize(m.title || '') === q
-    );
+    const inCatalog = findContentDuplicate(candidate, catalogMedia);
     if (inCatalog) {
       return { type: 'catalog', label: 'déjà présent dans le catalogue' };
     }
 
     // 2. Vérification dans les demandes en cours / acceptées
-    const inRequests = requests.find(r => {
-      if (r.type !== type || r.status === 'refuse') return false;
-      if (tmdbIdToCheck && r.tmdb_id === tmdbIdToCheck) return true;
-      return normalize(r.title) === q;
-    });
+    const inRequests = findContentDuplicate(candidate, requests.filter(row => row.status !== 'refuse')) as RequestItem | null;
 
     if (inRequests) {
       if (inRequests.status === 'ajoute') {
@@ -267,7 +263,8 @@ export default function RequestsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedMedia && !searchQuery.trim()) return;
-    if (duplicateInfo || submitting) return;
+    if (duplicateInfo || submitting || submitLock.current) return;
+    submitLock.current = true;
 
     setSubmitting(true);
     setMsg('');
@@ -277,6 +274,13 @@ export default function RequestsPage() {
     const mediaTmdbId = selectedMedia ? String(selectedMedia.id) : null;
     const mediaPoster = selectedMedia?.poster_path ? `https://image.tmdb.org/t/p/w500${selectedMedia.poster_path}` : null;
 
+    try {
+    const existing = await checkContentDuplicate(supabase, { title: mediaTitle, type, tmdb_id: mediaTmdbId }, 'requests');
+    if (existing) {
+      setErrorMsg(existing.source === 'catalogue' ? 'Ce titre est déjà disponible dans le catalogue. Aucune demande ajoutée.' : 'Ce titre a déjà été demandé. Aucune demande en double ajoutée.');
+      void fetchData();
+      return;
+    }
     const { error } = await supabase.from('requests').insert([
       {
         user_id: currentUser?.id || null,
@@ -291,7 +295,7 @@ export default function RequestsPage() {
     ]);
 
     if (error) {
-      setErrorMsg(`Erreur : ${error.message}`);
+      setErrorMsg(duplicateErrorMessage(error, `Erreur : ${error.message}`));
     } else {
       setMsg(`« ${mediaTitle} » a bien été demandé. Tu pourras suivre son statut ci-dessous.`);
       setSearchQuery('');
@@ -300,7 +304,12 @@ export default function RequestsPage() {
       setTmdbResults([]);
       fetchData();
     }
-    setSubmitting(false);
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : 'Impossible de vérifier et d’enregistrer cette demande. Réessaie.');
+    } finally {
+      submitLock.current = false;
+      setSubmitting(false);
+    }
   };
 
   const handleStatusChange = async (id: string, newStatus: string) => {
@@ -479,9 +488,9 @@ export default function RequestsPage() {
                     <div role="listbox" className="absolute left-0 right-0 top-full z-50 mt-2 max-h-80 overflow-y-auto rounded-2xl border border-white/10 bg-[#141416]/95 p-1.5 shadow-2xl backdrop-blur-xl">
                       {tmdbResults.map((item, i) => {
                         const name = item.title || item.name || '';
-                        const qName = normalize(name);
-                        const inCat = catalogMedia.find(m => m.type === type && normalize(m.title || '') === qName);
-                        const inReq = requests.find(r => r.type === type && r.status !== 'refuse' && (r.tmdb_id === String(item.id) || normalize(r.title) === qName));
+                        const candidate = { title: name, type, tmdb_id: item.id };
+                        const inCat = findContentDuplicate(candidate, catalogMedia);
+                        const inReq = findContentDuplicate(candidate, requests.filter(row => row.status !== 'refuse'));
 
                         return (
                           <button

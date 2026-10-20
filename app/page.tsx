@@ -321,11 +321,6 @@ export default function Home() {
 
   const handleMediaClick = (item: MediaItem) => {
     if (item.id === undefined || item.id === null) return;
-    if (!isVip && watchCount >= MAX_FREE_LIMIT) {
-      setShowVipModal(true);
-      return;
-    }
-
     if (item.type === 'series' && item.progress) {
       router.push(`/watch/${item.id}?s=${item.progress.seasonIdx}&e=${item.progress.episodeIdx}`);
     } else {
@@ -578,7 +573,7 @@ export default function Home() {
               YAMON<span className="text-white">FIM</span>
             </button>
 
-            <nav className="hidden items-center gap-1 md:flex">
+            <nav className="hidden items-center gap-1 lg:flex">
               {navItems.map(n => {
                 const active = selectedType === n.key && !(n.key === 'all' && searchQuery);
                 return (
@@ -605,7 +600,7 @@ export default function Home() {
 
           <div className="flex items-center gap-2 sm:gap-3">
             <div
-              className={`flex items-center overflow-hidden rounded-full border transition-all duration-300 ${
+              className={`flex items-center overflow-hidden rounded-full border transition-all duration-300 ${searchOpen || searchQuery ? 'yf-mobile-search' : ''} ${
                 searchOpen || searchQuery
                   ? 'w-40 border-white/15 bg-black/60 sm:w-64'
                   : 'w-9 border-transparent bg-transparent'
@@ -664,7 +659,7 @@ export default function Home() {
                 aria-controls="account-menu"
                 className={`flex max-w-[180px] cursor-pointer items-center gap-2 rounded-full border px-2 py-1.5 text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 ${menuOpen ? 'border-red-400/60 bg-red-500/15' : 'border-white/15 bg-white/5 hover:border-red-400/40 hover:bg-white/10'}`}
               >
-                {activeProfile?.avatar_url ? (
+                {activeProfile?.avatar_url?.startsWith('http') ? (
                   <img src={activeProfile.avatar_url} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" />
                 ) : (
                   <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-600 text-xs font-bold uppercase">
@@ -1079,7 +1074,7 @@ export default function Home() {
         )}
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-white/5 bg-[#0a0a0b]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-white/5 bg-[#0a0a0b]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
         <div className="flex items-stretch justify-around px-2">
           {([
             { label: 'Accueil', icon: 'home', active: selectedType === 'all' && !searchQuery, onClick: () => selectType('all') },

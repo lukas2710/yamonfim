@@ -1,0 +1,28 @@
+export interface PlaybackPosition { s: number; e: number }
+export function sameEpisode(a: PlaybackPosition | null, b: PlaybackPosition) { return !!a && a.s === b.s && a.e === b.e; }
+export function isDirectVideo(value: string) {
+  try { return /\.(mp4|webm|ogg|m4v|m3u8)$/i.test(new URL(value, 'https://local.invalid').pathname); } catch { return false; }
+}
+export function isMoviezPlayer(value: string) {
+  try { return new URL(value).hostname === 'api.moviez.ac'; } catch { return false; }
+}
+export function playbackProgress(currentTime: number, duration: number) {
+  const total = Number.isFinite(duration) && duration > 0 ? duration : 0;
+  return { currentTime: Number.isFinite(currentTime) ? Math.max(0, total ? Math.min(currentTime, total) : currentTime) : 0, duration: total };
+}
+export function isCompleted(currentTime: number, duration: number) { return duration > 0 && currentTime / duration >= .95; }
+
+export async function commitEpisodeTransition(previous: PlaybackPosition | null, next: PlaybackPosition, markPrevious: (position: PlaybackPosition) => Promise<void>, saveCurrent: () => Promise<void>) {
+  if (previous && !sameEpisode(previous, next)) await markPrevious(previous);
+  await saveCurrent();
+}
+
+export function preparePlayerUrl(value: string, origin: string) {
+  const url = new URL(value, origin);
+  if (!['http:', 'https:'].includes(url.protocol)) return '';
+  if (isDirectVideo(url.href)) return url.href;
+  if (url.hostname === 'api.moviez.ac') url.searchParams.set('next', '1');
+  url.searchParams.set('autoplay', '1');
+  url.searchParams.set('color', 'e8213f');
+  return url.href;
+}

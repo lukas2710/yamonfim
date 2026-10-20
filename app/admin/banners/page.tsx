@@ -56,20 +56,22 @@ export default function AdminBannersPage() {
     init();
   }, [router]);
 
-  const fetchMedia = async () => {
-    const { data } = await supabase
+  async function fetchMedia() {
+    const { data, error } = await supabase
       .from('media')
       .select('id, title, type, poster')
       .order('created_at', { ascending: false });
     if (data) setMediaList(data);
+    if (error) setErrorMsg('Impossible de charger les titres du catalogue. Actualise la page pour réessayer.');
   };
 
-  const fetchBanners = async () => {
-    const { data } = await supabase
+  async function fetchBanners() {
+    const { data, error } = await supabase
       .from('banners')
       .select('*')
       .order('created_at', { ascending: false });
     if (data) setBanners(data);
+    if (error) setErrorMsg('Impossible de charger les bannières. Actualise la page pour réessayer.');
   };
 
   const handleMediaToggle = (mediaId: string) => {
@@ -117,6 +119,7 @@ export default function AdminBannersPage() {
     if (!error) {
       fetchBanners();
     }
+    else setErrorMsg('La bannière n’a pas été supprimée. Réessaie.');
   };
 
   const toggleActive = async (id: string, currentActive: boolean) => {
@@ -125,6 +128,7 @@ export default function AdminBannersPage() {
       .update({ active: !currentActive })
       .eq('id', id);
     if (!error) fetchBanners();
+    else setErrorMsg('Le statut de la bannière n’a pas été enregistré. Réessaie.');
   };
 
   if (loadingAuth) {

@@ -157,7 +157,8 @@ export default function LoginPage() {
         if (error) {
           setErrorMsg('Email ou mot de passe incorrect.');
         } else {
-          router.push('/');
+          localStorage.removeItem('active_profile');
+          router.push('/profiles');
         }
       }
     } catch {

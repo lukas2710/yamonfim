@@ -1,7 +1,7 @@
 'use client';
 
 import PageHero from '@/components/PageHero';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
@@ -47,14 +47,17 @@ export default function ProfilesPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const [showModal, setShowModal] = useState(false);
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
   const [profileName, setProfileName] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState(AVATAR_CATEGORIES[0].avatars[0].url);
 
-  const fetchProfiles = async () => {
+  const fetchProfiles = useCallback(async () => {
     try {
+      setErrorMsg('');
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         router.push('/login');
@@ -68,19 +71,21 @@ export default function ProfilesPage() {
         .eq('user_id', session.user.id)
         .order('created_at', { ascending: true });
 
-      if (!error && data) {
-        setProfiles(data);
-      }
+      if (error) throw error;
+      setProfiles(data || []);
     } catch (err) {
       console.error('Erreur chargement profils:', err);
+      setErrorMsg('Impossible de charger tes profils. Réessaie dans un instant.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [router]);
 
   useEffect(() => {
+    // Initial synchronization with the authenticated account.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchProfiles();
-  }, [router]);
+  }, [fetchProfiles]);
 
   const selectProfile = (profile: Profile) => {
     localStorage.setItem('active_profile', JSON.stringify(profile));
@@ -104,13 +109,17 @@ export default function ProfilesPage() {
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!profileName.trim() || !userId) return;
+    if (!profileName.trim() || !userId || saving) return;
+    setSaving(true);
+    setErrorMsg('');
+    try {
 
     if (editingProfile) {
       const { error } = await supabase
         .from('user_profiles')
         .update({ name: profileName.trim(), avatar_url: selectedAvatar })
-        .eq('id', editingProfile.id);
+        .eq('id', editingProfile.id).eq('user_id', userId);
+      if (error) throw error;
 
       if (!error) {
         const active = localStorage.getItem('active_profile');
@@ -129,11 +138,17 @@ export default function ProfilesPage() {
       const { error } = await supabase
         .from('user_profiles')
         .insert([{ user_id: userId, name: profileName.trim(), avatar_url: selectedAvatar }]);
+      if (error) throw error;
 
       if (!error) {
         setShowModal(false);
         fetchProfiles();
       }
+    }
+    } catch {
+      setErrorMsg('Le profil n’a pas été enregistré. Réessaie.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -143,7 +158,8 @@ export default function ProfilesPage() {
       return;
     }
     if (confirm('Voulez-vous vraiment supprimer ce profil et tout son historique ?')) {
-      const { error } = await supabase.from('user_profiles').delete().eq('id', profileId);
+      const { error } = await supabase.from('user_profiles').delete().eq('id', profileId).eq('user_id', userId);
+      if (error) { setErrorMsg('Impossible de supprimer ce profil.'); return; }
       if (!error) {
         const active = localStorage.getItem('active_profile');
         if (active) {
@@ -155,6 +171,7 @@ export default function ProfilesPage() {
           } catch {}
         }
         fetchProfiles();
+        setShowModal(false);
       }
     }
   };
@@ -176,6 +193,10 @@ export default function ProfilesPage() {
           {profiles.map(profile => (
             <div
               key={profile.id}
+              role="button"
+              tabIndex={0}
+              aria-label={`Regarder avec le profil ${profile.name}`}
+              onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); selectProfile(profile); } }}
               onClick={() => selectProfile(profile)}
               className="group flex flex-col items-center gap-3 cursor-pointer transition-transform duration-300 hover:scale-105"
             >
@@ -190,7 +211,7 @@ export default function ProfilesPage() {
                 
                 <button
                   onClick={(e) => handleOpenEdit(e, profile)}
-                  className="absolute top-2 right-2 bg-black/60 hover:bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition backdrop-blur-md"
+                  className="absolute top-2 right-2 bg-black/60 hover:bg-red-600 text-white p-2 rounded-full opacity-100 sm:opacity-0 group-hover:opacity-100 focus:opacity-100 transition backdrop-blur-md"
                   title="Modifier le profil"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -207,6 +228,9 @@ export default function ProfilesPage() {
           {profiles.length < 5 && (
             <div
               onClick={handleOpenCreate}
+              role="button"
+              tabIndex={0}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpenCreate(); } }}
               className="group flex flex-col items-center gap-3 cursor-pointer transition-transform duration-300 hover:scale-105"
             >
               <div className="w-28 h-28 sm:w-36 sm:h-36 rounded-2xl border-2 border-dashed border-zinc-700 hover:border-white flex items-center justify-center bg-white/[0.02] hover:bg-white/[0.06] transition">
@@ -220,11 +244,12 @@ export default function ProfilesPage() {
             </div>
           )}
         </div>
+        {errorMsg && !showModal && <div role="alert" className="text-sm text-red-300"><p>{errorMsg}</p><button onClick={() => void fetchProfiles()} className="mt-3 underline">Réessayer</button></div>}
       </div>
 
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="yf-surface bg-[#141416] border border-white/10 rounded-3xl w-full max-w-xl p-6 sm:p-8 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto [scrollbar-width:none]">
+          <div role="dialog" aria-modal="true" aria-label={editingProfile ? 'Modifier le profil' : 'Créer un profil'} className="yf-surface bg-[#141416] border border-white/10 rounded-3xl w-full max-w-xl p-6 sm:p-8 shadow-2xl space-y-6 max-h-[90dvh] overflow-y-auto [scrollbar-width:none]">
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-bold">
                 {editingProfile ? 'Modifier le profil' : 'Créer un profil'}
@@ -242,6 +267,7 @@ export default function ProfilesPage() {
                 <label className="block text-xs uppercase tracking-wider text-zinc-400 mb-2">Nom du profil</label>
                 <input
                   type="text"
+                  maxLength={40}
                   required
                   placeholder="Ex: Thomas, Enfants..."
                   value={profileName}
@@ -258,7 +284,10 @@ export default function ProfilesPage() {
                     <p className="text-xs font-semibold text-zinc-300">{cat.category}</p>
                     <div className="grid grid-cols-4 gap-3">
                       {cat.avatars.map((avatar, idx) => (
-                        <div
+                        <button
+                          type="button"
+                          aria-label={avatar.name}
+                          aria-pressed={selectedAvatar === avatar.url}
                           key={idx}
                           onClick={() => setSelectedAvatar(avatar.url)}
                           className={`relative aspect-square rounded-xl overflow-hidden cursor-pointer ring-2 transition ${
@@ -266,18 +295,19 @@ export default function ProfilesPage() {
                           }`}
                         >
                           <img src={avatar.url} alt={avatar.name} className="w-full h-full object-cover" />
-                        </div>
+                        </button>
                       ))}
                     </div>
                   </div>
                 ))}
               </div>
 
-              <div className="flex items-center justify-between pt-2">
+              {errorMsg && <p role="alert" className="text-sm text-red-300">{errorMsg}</p>}
+              <div className="flex flex-wrap gap-3 items-center justify-between pt-2">
                 {editingProfile && profiles.length > 1 ? (
                   <button
                     type="button"
-                    onClick={() => { handleDeleteProfile(editingProfile.id); setShowModal(false); }}
+                    onClick={() => void handleDeleteProfile(editingProfile.id)}
                     className="text-red-500 hover:text-red-400 text-sm font-medium transition cursor-pointer"
                   >
                     Supprimer le profil
@@ -294,9 +324,10 @@ export default function ProfilesPage() {
                   </button>
                   <button
                     type="submit"
+                    disabled={saving}
                     className="yf-primary bg-red-600 hover:bg-red-500 text-white font-bold px-6 py-2.5 rounded-full text-sm shadow-lg shadow-red-600/30 transition cursor-pointer"
                   >
-                    Enregistrer
+                    {saving ? 'Enregistrement…' : 'Enregistrer'}
                   </button>
                 </div>
               </div>

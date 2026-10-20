@@ -23,6 +23,23 @@ interface VipMember {
 const ADMIN_EMAIL = 'lukas.leclerc312@gmail.com';
 const MAX_FREE_LIMIT = 5;
 
+async function readAll<T>(table: string, order: string, signal: AbortSignal): Promise<T[]> {
+  const rows: T[] = [];
+  let total = Infinity;
+  while (rows.length < total) {
+    const { data, error, count } = await supabase.from(table).select('*', { count: 'exact' }).order(order).range(rows.length, rows.length + 499).abortSignal(signal);
+    if (error) throw new Error(error.message);
+    if (signal.aborted) throw new Error('Chargement annulé');
+    if (count !== null) total = count;
+    if (!data?.length) {
+      if (total !== Infinity && rows.length < total) throw new Error('Lecture incomplète. Actualise les membres.');
+      break;
+    }
+    rows.push(...data as T[]);
+  }
+  return rows;
+}
+
 const formatDate = (isoString?: string) => {
   if (!isoString) return '—';
   const date = new Date(isoString);
@@ -128,11 +145,7 @@ export default function AdminVipPage() {
       }
       setAuthorized(true);
 
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select('*');
-
-      if (profilesError) throw profilesError;
+      const profilesData = await readAll<VipMember>('profiles', 'id', controller.signal);
       if (controller.signal.aborted) return;
 
       // Détection stricte True / False pour chaque compte
@@ -141,16 +154,14 @@ export default function AdminVipPage() {
         is_vip: checkIsVip(member.is_vip),
       }));
 
-      const { data: visitsData, error: visitsErr } = await supabase
-        .from('vip_page_visits')
-        .select('*');
-
-      if (!mounted.current || controller.signal.aborted) return;
-
-      if (visitsErr) {
-        setVisitsError(visitsErr.message);
-      } else if (visitsData) {
+      try {
+        const visitsData = await readAll<{user_id: string; first_visited_at: string; last_visited_at: string}>('vip_page_visits', 'user_id', controller.signal);
+        if (!mounted.current || controller.signal.aborted) return;
         setVisitByUser(Object.fromEntries(visitsData.map(v => [v.user_id, v])));
+        setVisitsError('');
+      } catch (error) {
+        if (!mounted.current || controller.signal.aborted) return;
+        setVisitsError(error instanceof Error ? error.message : 'Suivi indisponible');
       }
 
       rows.sort((a, b) => Number(b.is_vip) - Number(a.is_vip) || (a.email || a.id).localeCompare(b.email || b.id));
@@ -264,9 +275,9 @@ export default function AdminVipPage() {
   if (!authorized) return errorMsg ? <main className="grid min-h-screen place-items-center p-8 bg-[#0a0a0b] text-white"><div role="alert"><p>{errorMsg}</p><button className="mt-4 rounded-full bg-red-600 px-5 py-3 text-sm font-bold" onClick={() => void fetchProfiles()}>Réessayer</button></div></main> : null;
 
   return (
-    <main className="min-h-screen bg-[#0a0a0b] pb-24 text-white font-sans antialiased">
+    <main className="yf-page yf-admin-vip min-h-screen bg-[#0a0a0b] pb-24 text-white font-sans antialiased">
       <header className="sticky top-0 z-40 border-b border-white/5 bg-[#0a0a0b]/85 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-10">
+        <div className="mx-auto flex min-h-16 flex-wrap gap-3 py-3 max-w-7xl items-center justify-between px-4 sm:px-10">
           <button
             onClick={() => router.push('/')}
             className="cursor-pointer rounded-full border border-white/10 bg-white/5 py-2 pl-3 pr-4 text-sm font-medium text-zinc-200 transition hover:bg-white/10 hover:text-white"
@@ -377,7 +388,7 @@ export default function AdminVipPage() {
 
         <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="yf-vip-table w-full text-left text-sm">
               <thead className="border-b border-white/10 bg-white/[0.02] text-xs uppercase tracking-wider text-zinc-400">
                 <tr>
                   <th className="px-6 py-4">Utilisateur</th>
@@ -405,11 +416,11 @@ export default function AdminVipPage() {
 
                     return (
                       <tr key={member.id} className="transition hover:bg-white/[0.02]">
-                        <td className="px-6 py-4 font-medium text-white">
+                        <td data-label="Utilisateur" className="px-6 py-4 font-medium text-white">
                           <p>{member.email || member.id}</p>
                           <p className="text-[11px] text-zinc-500">ID: {member.id}</p>
                         </td>
-                        <td className="px-6 py-4">
+                        <td data-label="Statut" className="px-6 py-4">
                           {member.is_vip ? (
                             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400 ring-1 ring-emerald-500/30">
                               VIP Actif
@@ -420,7 +431,7 @@ export default function AdminVipPage() {
                             </span>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-xs">
+                        <td data-label="Page VIP visitée" className="px-6 py-4 text-xs">
                           {visitsError ? (
                             <span className="text-zinc-500">Indisponible</span>
                           ) : visitByUser[member.id] ? (
@@ -432,7 +443,7 @@ export default function AdminVipPage() {
                             <span className="text-zinc-500">Aucune visite enregistrée</span>
                           )}
                         </td>
-                        <td className="px-6 py-4">
+                        <td data-label="Visions consommées" className="px-6 py-4">
                           <div className="flex items-center gap-2">
                             <input
                               type="number"
@@ -452,17 +463,17 @@ export default function AdminVipPage() {
                               title="Enregistrer le quota"
                               className="cursor-pointer rounded-xl bg-white/10 px-2.5 py-1.5 text-xs font-semibold text-zinc-200 transition hover:bg-white/20 hover:text-white"
                             >
-                              Save
+                              Enregistrer
                             </button>
                           </div>
                           <p className="mt-1 text-[11px] text-zinc-400">
                             {remainingFree} restante{remainingFree > 1 ? 's' : ''} sur {MAX_FREE_LIMIT}
                           </p>
                         </td>
-                        <td className="px-6 py-4 text-xs text-zinc-300">
+                        <td data-label="Date d’activation" className="px-6 py-4 text-xs text-zinc-300">
                           {member.is_vip ? formatDate(member.vip_started_at) : <span className="text-zinc-600">—</span>}
                         </td>
-                        <td className="px-6 py-4">
+                        <td data-label="Temps VIP restant" className="px-6 py-4">
                           {member.is_vip && member.vip_started_at ? (
                             <VipCountdown
                               startDate={member.vip_started_at}
@@ -472,7 +483,7 @@ export default function AdminVipPage() {
                             <span className="text-xs text-zinc-600">—</span>
                           )}
                         </td>
-                        <td className="px-6 py-4">
+                        <td data-label="Durée attribuée" className="px-6 py-4">
                           <select
                             value={currentDuration}
                             onChange={e =>
@@ -488,7 +499,7 @@ export default function AdminVipPage() {
                             <option value="1y">1 An</option>
                           </select>
                         </td>
-                        <td className="px-6 py-4 text-right">
+                        <td data-label="Actions VIP" className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => handleActivateVip(member.id, currentDuration)}

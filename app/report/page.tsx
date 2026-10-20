@@ -72,6 +72,7 @@ export default function ReportPage() {
       .order('created_at', { ascending: false });
 
     if (!error && data) setReports(data);
+    if (error) setErrorMsg('Impossible de charger les signalements. Actualise la page pour réessayer.');
   };
 
   useEffect(() => {

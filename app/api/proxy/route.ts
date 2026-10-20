@@ -1,38 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { fetchPublicRemote, readRemoteText } from '@/lib/public-remote';
+import { rewritePlaylist } from '@/lib/remote-stream';
 
 export async function GET(req: NextRequest) {
-  const url = req.nextUrl.searchParams.get('url');
-  if (!url) {
-    return new NextResponse('URL manquante', { status: 400 });
-  }
-
+  const target = req.nextUrl.searchParams.get('url');
+  if (!target) return new NextResponse('URL manquante', { status: 400 });
   try {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': 'https://iptv-org.github.io/'
-      },
-      signal: AbortSignal.timeout(5000) // Timeout de 5 secondes pour éviter le blocage
-    });
-
-    if (!response.ok) {
-      return new NextResponse('Flux distant inaccessible', { status: response.status });
+    const headers: Record<string, string> = { 'User-Agent': 'Mozilla/5.0', Referer: 'https://iptv-org.github.io/' };
+    const range = req.headers.get('range');
+    if (range) headers.Range = range;
+    const { response, url } = await fetchPublicRemote(target, AbortSignal.any([req.signal, AbortSignal.timeout(15000)]), headers);
+    if (!response.ok) { await response.body?.cancel(); return new NextResponse('Flux distant inaccessible', { status: 502 }); }
+    const contentType = response.headers.get('content-type') || 'application/octet-stream';
+    const playlist = /mpegurl/i.test(contentType) || /\.m3u8?$/i.test(url.pathname);
+    if (playlist) {
+      const text = await readRemoteText(response, 2_000_000);
+      if (text.length > 2_000_000 || !text.trimStart().startsWith('#EXTM3U')) return new NextResponse('Liste de lecture invalide', { status: 502 });
+      return new NextResponse(rewritePlaylist(text, url.href), { headers: { 'Content-Type': 'application/vnd.apple.mpegurl', 'Cache-Control': 'no-store' } });
     }
-
-    const contentType = response.headers.get('content-type') || 'application/vnd.apple.mpegurl';
-    
-    // Si c'est un fichier M3U8, on peut intercepter le texte pour réécrire les URLs relatives si besoin, 
-    // sinon on le transmet directement en ArrayBuffer (plus propre pour les flux vidéo binaires).
-    const data = await response.arrayBuffer();
-
-    return new NextResponse(data, {
-      status: 200,
-      headers: {
-        'Content-Type': contentType,
-        'Access-Control-Allow-Origin': '*'
-      }
-    });
-  } catch (error) {
-    return new NextResponse('Erreur de connexion au flux', { status: 504 });
+    if (!/^(video\/|audio\/|application\/(octet-stream|mp4|vnd\.apple\.mpegurl|x-mpegurl))/i.test(contentType)) {
+      await response.body?.cancel();
+      return new NextResponse('Format de flux non accepté', { status: 415 });
+    }
+    const outgoing = new Headers({ 'Content-Type': contentType, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" });
+    for (const key of ['content-range', 'accept-ranges']) { const value = response.headers.get(key); if (value) outgoing.set(key, value); }
+    return new NextResponse(response.body, { status: response.status, headers: outgoing });
+  } catch {
+    return new NextResponse('Adresse invalide ou flux inaccessible', { status: 502 });
   }
 }

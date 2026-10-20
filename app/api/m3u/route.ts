@@ -6,7 +6,8 @@ export async function GET() {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       },
-      cache: 'no-store'
+      cache: 'no-store',
+      signal: AbortSignal.timeout(10000),
     });
 
     if (!res.ok) {
@@ -16,7 +17,7 @@ export async function GET() {
     const text = await res.text();
     const lines = text.split('\n');
     const channels = [];
-    let currentChannel: any = {};
+    let currentChannel: { id?: string; name?: string; logo?: string; category?: string; streamUrl?: string } = {};
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
@@ -45,7 +46,7 @@ export async function GET() {
     }
 
     return NextResponse.json({ success: true, count: channels.length, channels });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch {
+    return NextResponse.json({ success: false, error: 'La liste des chaînes est temporairement indisponible.' }, { status: 502 });
   }
 }

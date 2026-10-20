@@ -22,31 +22,49 @@ export default function TvPage() {
   const [selectedCategory, setSelectedCategory] = useState('Toutes');
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
   const [streamError, setStreamError] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [retry, setRetry] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
+    if (!activeChannel) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setActiveChannel(null); };
+    window.addEventListener('keydown', close);
+    return () => { document.body.style.overflow = previousOverflow; window.removeEventListener('keydown', close); };
+  }, [activeChannel]);
+
+  useEffect(() => {
+    const controller = new AbortController();
     async function loadChannels() {
       try {
-        const res = await fetch('/api/m3u');
+        setLoading(true);
+        setLoadError(false);
+        const res = await fetch('/api/m3u', { signal: controller.signal });
         const data = await res.json();
-        if (data.success) {
-          setChannels(data.channels);
-        }
+        if (!res.ok || !data.success || !Array.isArray(data.channels)) throw new Error('Liste indisponible');
+        setChannels(data.channels);
       } catch (err) {
+        if (controller.signal.aborted) return;
+        setLoadError(true);
         console.error('Erreur chargement M3U:', err);
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }
     loadChannels();
-  }, []);
+    return () => controller.abort();
+  }, [retry]);
 
   useEffect(() => {
     if (!activeChannel || !videoRef.current) return;
 
-    setStreamError(false);
     const video = videoRef.current;
+    const play = () => { void video.play().catch(() => {}); };
+    const fail = () => setStreamError(true);
+    video.addEventListener('error', fail);
     
     // Si l'URL est un flux YouTube ou Dailymotion externe, on gère l'affichage direct ou via proxy
     const isEmbeddable = activeChannel.streamUrl.includes('youtube.com') || activeChannel.streamUrl.includes('dailymotion.com');
@@ -72,13 +90,18 @@ export default function TvPage() {
       });
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = proxiedUrl;
-      video.addEventListener('loadedmetadata', () => {
-        video.play().catch(() => {});
-      });
+      video.addEventListener('loadedmetadata', play);
+    } else {
+      queueMicrotask(fail);
     }
 
     return () => {
       if (hls) hls.destroy();
+      video.removeEventListener('loadedmetadata', play);
+      video.removeEventListener('error', fail);
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
     };
   }, [activeChannel]);
 
@@ -106,7 +129,7 @@ export default function TvPage() {
       <SectionNavigation />
 
       {activeChannel && (
-        <div className="fixed inset-0 z-50 bg-black/98 backdrop-blur-2xl flex flex-col items-center justify-center p-2 sm:p-6">
+        <div role="dialog" aria-modal="true" aria-label={`Lecteur TV : ${activeChannel.name}`} className="fixed inset-0 z-50 bg-black/98 backdrop-blur-2xl flex flex-col items-center justify-center p-2 sm:p-6">
           <div className="w-full max-w-6xl flex flex-col h-full justify-center space-y-3">
             <div className="w-full flex justify-between items-center px-1">
               <div className="flex items-center gap-3">
@@ -132,12 +155,13 @@ export default function TvPage() {
               ) : activeChannel.streamUrl.includes('youtube.com') || activeChannel.streamUrl.includes('dailymotion.com') ? (
                 <iframe 
                   src={activeChannel.streamUrl.replace('/watch?v=', '/embed/').replace('/video/', '/embed/video/')} 
+                  title={`Direct : ${activeChannel.name}`}
                   className="w-full h-full border-0" 
                   allow="autoplay; encrypted-media; picture-in-picture"
                   allowFullScreen
                 />
               ) : (
-                <video ref={videoRef} controls autoPlay className="w-full h-full object-contain" />
+                <video ref={videoRef} controls autoPlay playsInline className="w-full h-full object-contain" />
               )}
             </div>
           </div>
@@ -161,17 +185,25 @@ export default function TvPage() {
             className="bg-zinc-900 border border-zinc-800 text-xs text-white px-4 py-2.5 rounded-xl w-full sm:w-64 focus:outline-none focus:border-red-600 font-medium"
           />
         </div>
+        <select aria-label="Catégorie de chaînes" value={selectedCategory} onChange={event => setSelectedCategory(event.target.value)} className="w-full sm:w-64 rounded-xl border border-zinc-800 px-4 py-3 text-sm">
+          {categories.map(category => <option key={category} value={category}>{category}</option>)}
+        </select>
       </div>
 
       <div className="px-6 sm:px-12 max-w-7xl mx-auto">
         {loading ? (
           <div className="text-center py-20 text-zinc-500 text-xs">Chargement des chaînes...</div>
+        ) : loadError ? (
+          <div role="alert" className="py-12 text-center text-sm text-red-300"><p>Impossible de charger les chaînes.</p><button onClick={() => setRetry(value => value + 1)} className="mt-4 rounded-full bg-red-600 px-5 py-3 text-white">Réessayer</button></div>
+        ) : filteredChannels.length === 0 ? (
+          <p role="status" className="py-12 text-center text-sm text-zinc-400">Aucune chaîne ne correspond à ta recherche.</p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {filteredChannels.map((channel) => (
-              <div
+              <button
+                type="button"
                 key={channel.id}
-                onClick={() => setActiveChannel(channel)}
+                onClick={() => { setStreamError(false); setActiveChannel(channel); }}
                 className="yf-channel-card bg-zinc-900/60 border border-zinc-800/80 hover:border-red-600/50 rounded-xl p-3 flex flex-col items-center justify-between gap-3 cursor-pointer transition transform hover:-translate-y-1 group"
               >
                 <div className="w-full aspect-video flex items-center justify-center p-2 bg-zinc-950 rounded-lg border border-zinc-800/50">
@@ -188,12 +220,12 @@ export default function TvPage() {
                 </div>
 
                 <div className="w-full flex items-center justify-between">
-                  <span className="text-xs font-bold text-zinc-200 truncate group-hover:text-white">{channel.name}</span>
+                  <span className="min-w-0 text-left text-xs font-bold text-zinc-200 truncate group-hover:text-white">{channel.name}</span>
                   <span className="text-[9px] font-extrabold text-red-500 bg-red-600/10 px-1.5 py-0.5 rounded border border-red-500/20">
                     LIVE
                   </span>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}

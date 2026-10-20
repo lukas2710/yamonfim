@@ -40,16 +40,18 @@ const DISMISS_KEY = 'yf_dismissed_promos';
 /* ------------------------------------------------------------------ */
 
 function useNow(intervalMs = 1000) {
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(0);
   useEffect(() => {
+    const initial = setTimeout(() => setNow(Date.now()), 0);
     const t = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(t);
+    return () => { clearTimeout(initial); clearInterval(t); };
   }, [intervalMs]);
   return now;
 }
 
 export function Countdown({ endsAt }: { endsAt: string }) {
   const now = useNow();
+  if (!now) return null;
   const diff = Math.max(0, new Date(endsAt).getTime() - now);
   if (!Number.isFinite(diff) || diff <= 0) return null;
   const d = Math.floor(diff / 86400000);
@@ -132,6 +134,7 @@ export default function PromoBanner({ isVip, isAdmin = false }: { isVip: boolean
   const [paused, setPaused] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const now = useNow();
 
   useEffect(() => {
     // La croix ne masque la promo que le temps de la visite :
@@ -155,7 +158,6 @@ export default function PromoBanner({ isVip, isAdmin = false }: { isVip: boolean
   }, []);
 
   const visible = useMemo(() => {
-    const now = Date.now();
     return promos.filter(p => {
       if (dismissed.includes(p.id)) return false;
       if (p.audience === 'vip' && !isVip) return false;
@@ -164,11 +166,7 @@ export default function PromoBanner({ isVip, isAdmin = false }: { isVip: boolean
       if (p.ends_at && new Date(p.ends_at).getTime() <= now) return false;
       return true;
     });
-  }, [promos, dismissed, isVip]);
-
-  useEffect(() => {
-    if (index >= visible.length) setIndex(0);
-  }, [visible.length, index]);
+  }, [promos, dismissed, isVip, now]);
 
   // Défilement automatique toutes les 7 s
   useEffect(() => {
@@ -180,7 +178,6 @@ export default function PromoBanner({ isVip, isAdmin = false }: { isVip: boolean
   if (visible.length === 0) {
     // Les visiteurs ne voient rien ; l'admin voit pourquoi aucune promo ne s'affiche
     if (!isAdmin || !loaded) return null;
-    const now = Date.now();
     let reason = 'Aucune promotion active. Crée-en une depuis /admin/promotions.';
     if (loadError) {
       reason = /does not exist|relation/i.test(loadError)

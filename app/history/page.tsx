@@ -403,11 +403,11 @@ export default function HistoryPage() {
           </span>
           {activeProfile ? (
             <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-2.5 py-1.5 rounded-full">
-              <img 
+              {activeProfile.avatar_url?.startsWith('http') ? <img
                 src={activeProfile.avatar_url} 
                 alt={activeProfile.name} 
                 className="w-6 h-6 rounded-full object-cover" 
-              />
+              /> : <span aria-hidden="true" className="flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-xs">{activeProfile.avatar_url || activeProfile.name?.[0]}</span>}
               <span className="text-xs font-semibold text-white max-w-[90px] truncate">{activeProfile.name}</span>
             </div>
           ) : (

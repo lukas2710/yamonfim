@@ -13,6 +13,33 @@
   color-scheme: dark;
 }
 body { margin: 0; min-width: 320px; background: var(--yf-bg); color: var(--yf-foreground); font-family: var(--font-geist-sans, Arial), Arial, sans-serif; }
+html { scroll-padding-top: 85px; }
+.yf-page { min-width: 0; overflow-wrap: break-word; }
+.yf-page img,.yf-page video { max-width: 100%; }
+.yf-section-nav-inner>div { min-width: 0; }
+.yf-page :where(input,select,textarea) { max-width: 100%; }
+.yf-page :where(button,a) { touch-action: manipulation; }
+.yf-page :where(p,td) { overflow-wrap: anywhere; }
+.yf-page [role='dialog'] { overscroll-behavior: contain; }
+@media(max-width:767px) {
+  .yf-page :where(input,select,textarea) { font-size: 16px; }
+  .yf-home>header>div { gap: 8px; }
+  .yf-home>header>div>div:first-child>button { font-size: 14px; letter-spacing: .08em; }
+  .yf-mobile-search { position: absolute; top: 69px; left: 16px; right: 16px; width: auto; background: #111113; box-shadow: 0 8px 20px #0008; }
+  .yf-mobile-search input { min-height: 44px; }
+  .yf-vip-table,.yf-vip-table tbody,.yf-vip-table tr,.yf-vip-table td { display: block; width: 100%; }
+  .yf-vip-table thead { display: none; }
+  .yf-vip-table tbody { padding: 12px; }
+  .yf-vip-table tr { border: 1px solid #ffffff15; border-radius: 16px; padding: 8px 0; margin-bottom: 14px; background: #111113; }
+  .yf-vip-table td { padding: 10px 16px; text-align: left; }
+  .yf-vip-table td[data-label]::before { content: attr(data-label); display: block; font-size: 10px; font-weight: 600; color: #a1a1aa; margin-bottom: 7px; }
+  .yf-vip-table td:last-child>div { justify-content: flex-start; flex-wrap: wrap; }
+  .yf-vip-table :where(button,input,select) { min-height: 42px; }
+  .yf-vip-table td>p { overflow-wrap: anywhere; }
+}
+@media(max-width:380px) {
+  .yf-history .grid-cols-3,.yf-admin .grid-cols-3 { grid-template-columns: 1fr; }
+}
 ::selection { background: #dc2626; color: white; }
 .yf-page { background-color: var(--yf-bg); color: var(--yf-foreground); font-family: var(--font-geist-sans, Arial), Arial, sans-serif; }
 .yf-page :where(h1,h2,h3) { text-wrap: balance; }

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
-import axios from 'axios';
+import { fetchPublicRemote, readRemoteText } from '@/lib/public-remote';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,17 +26,10 @@ export async function POST(req: Request) {
       );
     }
 
-    const response = await axios.get(url, {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-      },
-      timeout: 8000,
-      validateStatus: (status) => status < 500,
-    });
+    const { response, url: finalUrl } = await fetchPublicRemote(url, AbortSignal.timeout(8000), { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'fr-FR,fr;q=0.9' });
 
     if (response.status !== 200) {
+      await response.body?.cancel();
       return NextResponse.json(
         {
           success: false,
@@ -46,7 +39,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const $ = cheerio.load(response.data);
+    const html = await readRemoteText(response, 5_000_000);
+    const $ = cheerio.load(html);
 
     const iframeSrc = $('iframe').first().attr('src');
     const sourceSrc = $('video source').first().attr('src');
@@ -61,21 +55,16 @@ export async function POST(req: Request) {
       );
     }
 
-    let videoUrl = rawSrc;
-    if (videoUrl.startsWith('//')) {
-      videoUrl = `https:${videoUrl}`;
-    } else if (videoUrl.startsWith('/')) {
-      const parsedUrl = new URL(url);
-      videoUrl = `${parsedUrl.origin}${videoUrl}`;
-    }
+    const resolved = new URL(rawSrc, finalUrl);
+    if (!['http:', 'https:'].includes(resolved.protocol)) throw new Error('Lecteur invalide');
+    const videoUrl = resolved.href;
 
     return NextResponse.json({ success: true, videoUrl });
-  } catch (error: any) {
+  } catch {
     return NextResponse.json(
       {
         success: false,
         error: 'Erreur lors du scraping de la page.',
-        details: error?.message || 'Erreur inconnue',
       },
       { status: 500 }
     );

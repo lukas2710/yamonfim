@@ -5,6 +5,8 @@ import PageHero from '@/components/PageHero';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { findContentDuplicate, duplicateErrorMessage } from '@/lib/content-identity';
+import { checkContentDuplicate } from '@/lib/content-duplicates';
 
 interface Episode {
   number: number;
@@ -125,6 +127,7 @@ export default function AdminPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<any>(null);
 
   const formRef = useRef<HTMLDivElement>(null);
+  const submitLock = useRef(false);
   const tmdbTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -147,6 +150,7 @@ export default function AdminPage() {
       .order('created_at', { ascending: false });
 
     if (!error && data) setMediaList(data);
+    if (error) setErrorMsg('Impossible de charger le catalogue. Actualise la page pour réessayer.');
   };
 
   useEffect(() => {
@@ -426,17 +430,19 @@ export default function AdminPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loading) return;
+    if (loading || submitLock.current) return;
+    submitLock.current = true;
     setLoading(true);
     setMessage('');
     setErrorMsg('');
 
+    try {
     const genresArray = genresInput
       ? genresInput.split(',').map(g => g.trim()).filter(Boolean)
       : [];
 
     const payload = {
-      title,
+      title: title.trim(),
       type,
       poster,
       backdrop,
@@ -448,10 +454,16 @@ export default function AdminPage() {
       tmdb_id: selectedTmdbId ? String(selectedTmdbId) : null
     };
 
+    const existing = await checkContentDuplicate(supabase, payload, 'media', editingId);
+    if (existing) {
+      setErrorMsg(`« ${existing.item.title} » est déjà dans le catalogue. Modifie sa fiche plutôt que d’ajouter un doublon.`);
+      void fetchMedia();
+      return;
+    }
     if (editingId !== null && editingId !== undefined) {
       const { error } = await supabase.from('media').update(payload).eq('id', editingId);
       if (error) {
-        setErrorMsg(`Erreur modification : ${error.message}`);
+        setErrorMsg(duplicateErrorMessage(error, `Erreur modification : ${error.message}`));
       } else {
         setMessage(`« ${title} » a été mis à jour.`);
         handleCancel();
@@ -460,13 +472,13 @@ export default function AdminPage() {
     } else {
       const { error } = await supabase.from('media').insert([payload]);
       if (error) {
-        setErrorMsg(`Erreur enregistrement Supabase : ${error.message}`);
+        setErrorMsg(duplicateErrorMessage(error, `Erreur enregistrement Supabase : ${error.message}`));
       } else {
         if (selectedTmdbId) {
           await supabase
             .from('requests')
             .update({ status: 'ajoute' })
-            .eq('tmdb_id', selectedTmdbId);
+            .eq('tmdb_id', selectedTmdbId).eq('type', type);
         }
 
         setMessage(`« ${title} » a été ajouté au catalogue.`);
@@ -474,7 +486,12 @@ export default function AdminPage() {
         fetchMedia();
       }
     }
-    setLoading(false);
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : 'Impossible de vérifier et d’enregistrer ce titre. Réessaie.');
+    } finally {
+      submitLock.current = false;
+      setLoading(false);
+    }
   };
 
   const normalize = (s: string) =>
@@ -499,12 +516,8 @@ export default function AdminPage() {
   }), [mediaList]);
 
   const duplicate = useMemo(() => {
-    if (editingId !== null || (!title.trim() && !selectedTmdbId)) return null;
-    return mediaList.find(m => {
-      if (selectedTmdbId && m.tmdb_id && String(m.tmdb_id) === String(selectedTmdbId)) return true;
-      if (title.trim() && normalize(m.title || '') === normalize(title.trim()) && m.type === type) return true;
-      return false;
-    }) || null;
+    if (!title.trim() && !selectedTmdbId) return null;
+    return findContentDuplicate({ title, type, tmdb_id: selectedTmdbId }, mediaList, editingId) as MediaItem | null;
   }, [title, type, selectedTmdbId, mediaList, editingId]);
 
   if (loadingAuth) {
@@ -635,6 +648,7 @@ export default function AdminPage() {
                     type="button"
                     onClick={() => {
                       setType(t.key);
+                      if (t.key !== type) setSelectedTmdbId('');
                       setSearchQuery('');
                       setTmdbSearchResults([]);
                     }}
@@ -859,7 +873,7 @@ export default function AdminPage() {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || !!duplicate}
                 className="yf-primary flex w-full items-center justify-center gap-2 rounded-full bg-red-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-red-600/25 transition hover:bg-red-500 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? (
