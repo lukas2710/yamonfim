@@ -1,5 +1,7 @@
 'use client';
 
+import SectionNavigation from '@/components/SectionNavigation';
+import PageHero from '@/components/PageHero';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -507,7 +509,7 @@ export default function AdminPage() {
 
   if (loadingAuth) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#0a0a0b] text-white">
+      <main className="yf-page yf-admin flex min-h-screen items-center justify-center bg-[#0a0a0b] text-white">
         <div className="flex items-center gap-3 text-sm text-zinc-400">
           <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-red-600" />
           Vérification des accès…
@@ -520,8 +522,8 @@ export default function AdminPage() {
   const totalEpisodes = episodeCount(seasons);
 
   return (
-    <main className="min-h-screen bg-[#0a0a0b] pb-24 font-sans text-white antialiased selection:bg-red-600 selection:text-white">
-      <header className="sticky top-0 z-40 border-b border-white/5 bg-[#0a0a0b]/85 backdrop-blur-xl">
+    <main className="yf-page yf-admin min-h-screen bg-[#0a0a0b] pb-24 font-sans text-white antialiased selection:bg-red-600 selection:text-white">
+      <header className="yf-topbar sticky top-0 z-40 border-b border-white/5 bg-[#0a0a0b]/85 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-8">
           <div className="flex items-center gap-3">
             <span className="select-none text-lg font-black tracking-[0.2em] text-red-600">
@@ -547,6 +549,7 @@ export default function AdminPage() {
           </div>
         </div>
       </header>
+      <SectionNavigation admin />
 
       <div className="pointer-events-none fixed inset-x-0 top-20 z-50 flex flex-col items-center gap-2 px-4">
         {message && (
@@ -566,13 +569,14 @@ export default function AdminPage() {
       </div>
 
       <div className="mx-auto max-w-7xl px-4 pt-8 sm:px-8">
+        <PageHero eyebrow="DERRIÈRE LES PROJECTEURS" title="Un grand catalogue." accent="Ça se programme." description="Ajoute les prochaines découvertes, organise tes séries et donne une place à chaque film dans l’univers Yamonfim." cardLabel="LE CATALOGUE" cardTitle="La prochaine belle séance." cardDetail={`${counts.all} TITRES AU CATALOGUE`} variant="collection" />
         <section className="mb-8 grid grid-cols-3 gap-3 sm:gap-4">
           {[
             { label: 'Total', value: counts.all, icon: 'layers' as IconName },
             { label: 'Films', value: counts.movie, icon: 'film' as IconName },
             { label: 'Séries', value: counts.series, icon: 'tv' as IconName },
           ].map(s => (
-            <div key={s.label} className="rounded-2xl bg-white/[0.03] p-4 ring-1 ring-white/10 sm:p-5">
+            <div key={s.label} className="yf-surface rounded-2xl bg-white/[0.03] p-4 ring-1 ring-white/10 sm:p-5">
               <div className="flex items-center justify-between text-zinc-500">
                 <span className="text-xs font-semibold uppercase tracking-wider">{s.label}</span>
                 <Icon name={s.icon} className="h-4 w-4" />
@@ -586,9 +590,9 @@ export default function AdminPage() {
           <section ref={formRef} className="scroll-mt-24 rounded-3xl bg-white/[0.03] ring-1 ring-white/10">
             <div className="flex items-center justify-between gap-3 border-b border-white/5 px-5 py-4 sm:px-6">
               <div>
-                <h1 className="text-lg font-bold tracking-tight">
+                <h2 className="text-lg font-bold tracking-tight">
                   {isEditing ? 'Modifier le média' : 'Ajouter un film ou une série'}
-                </h1>
+                </h2>
                 {isEditing && <p className="mt-0.5 truncate text-sm text-zinc-500">{title}</p>}
               </div>
               <div className="flex items-center gap-2">
@@ -856,7 +860,7 @@ export default function AdminPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex w-full items-center justify-center gap-2 rounded-full bg-red-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-red-600/25 transition hover:bg-red-500 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+                className="yf-primary flex w-full items-center justify-center gap-2 rounded-full bg-red-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-red-600/25 transition hover:bg-red-500 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? (
                   <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Enregistrement…</>
@@ -961,7 +965,7 @@ export default function AdminPage() {
                         <div className="flex shrink-0 items-center gap-1">
                           <button
                             onClick={() => handleDelete(item.id)}
-                            className="rounded-full bg-red-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-red-500"
+                            className="yf-primary rounded-full bg-red-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-red-500"
                           >
                             Supprimer
                           </button>

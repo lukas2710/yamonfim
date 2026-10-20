@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import SectionNavigation from '@/components/SectionNavigation';
+import PageHero from '@/components/PageHero';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { reconcileMemberDrafts, newlyActivatedMembers } from './member-sync';
+import { expirationDate } from '@/app/abonnement/plans';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-
-/* ------------------------------------------------------------------ */
-/* Types & Interfaces                                                  */
-/* ------------------------------------------------------------------ */
 
 type VipDurationType = '15d' | '3m' | '1y';
 
@@ -23,10 +23,6 @@ interface VipMember {
 const ADMIN_EMAIL = 'lukas.leclerc312@gmail.com';
 const MAX_FREE_LIMIT = 5;
 
-/* ------------------------------------------------------------------ */
-/* Fonction de formatage de date                                       */
-/* ------------------------------------------------------------------ */
-
 const formatDate = (isoString?: string) => {
   if (!isoString) return '—';
   const date = new Date(isoString);
@@ -40,9 +36,18 @@ const formatDate = (isoString?: string) => {
   }).format(date);
 };
 
-/* ------------------------------------------------------------------ */
-/* Composant Compte à Rebours VIP                                      */
-/* ------------------------------------------------------------------ */
+/**
+ * Helper de détection VIP
+ * Vérifie si la valeur de is_vip équivaut à true (booléen, string, ou nombre)
+ */
+function checkIsVip(value: unknown): boolean {
+  if (value === true || value === 1) return true;
+  if (typeof value === 'string') {
+    const cleanValue = value.trim().toLowerCase();
+    return cleanValue === 'true' || cleanValue === '1' || cleanValue === 't' || cleanValue === 'yes';
+  }
+  return false;
+}
 
 function VipCountdown({
   startDate,
@@ -51,66 +56,21 @@ function VipCountdown({
   startDate?: string;
   duration?: VipDurationType;
 }) {
-  const [status, setStatus] = useState<{ expired: boolean; text: string }>({
-    expired: false,
-    text: 'Calcul...',
-  });
-
+  const [clock, setClock] = useState<number | null>(null);
   useEffect(() => {
-    if (!startDate || !duration) {
-      setStatus({ expired: false, text: 'Durée non définie' });
-      return;
-    }
-
-    const start = new Date(startDate).getTime();
-    if (isNaN(start)) {
-      setStatus({ expired: false, text: 'Date invalide' });
-      return;
-    }
-
-    const expiration = new Date(start);
-
-    if (duration === '15d') {
-      expiration.setDate(expiration.getDate() + 15);
-    } else if (duration === '3m') {
-      expiration.setMonth(expiration.getMonth() + 3);
-    } else if (duration === '1y') {
-      expiration.setFullYear(expiration.getFullYear() + 1);
-    }
-
-    const expTime = expiration.getTime();
-
-    const updateTimer = () => {
-      const now = new Date().getTime();
-      const difference = expTime - now;
-
-      if (difference <= 0) {
-        setStatus({ expired: true, text: 'Expiré' });
-        return;
-      }
-
-      const days = Math.floor(difference / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((difference % (1000 * 60)) / 1000);
-
-      if (days > 0) {
-        setStatus({
-          expired: false,
-          text: `${days}j ${hours}h ${minutes}m restants`,
-        });
-      } else {
-        setStatus({
-          expired: false,
-          text: `${hours}h ${minutes}m ${seconds}s restants`,
-        });
-      }
-    };
-
-    updateTimer();
-    const interval = setInterval(updateTimer, 1000);
-    return () => clearInterval(interval);
-  }, [startDate, duration]);
+    const timer = setInterval(() => setClock(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const end = expirationDate(startDate, duration);
+  const difference = end !== null && clock !== null ? end - clock : null;
+  const seconds = Math.max(0, Math.floor((difference ?? 0) / 1000));
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor(seconds / 3600) % 24;
+  const minutes = Math.floor(seconds / 60) % 60;
+  const status = {
+    expired: difference !== null && difference <= 0,
+    text: end === null ? 'Durée non définie' : difference === null ? 'Calcul…' : difference <= 0 ? 'Expiré' : days > 0 ? `${days}j ${hours}h ${minutes}m restants` : `${hours}h ${minutes}m ${seconds % 60}s restants`,
+  };
 
   return (
     <span
@@ -130,82 +90,126 @@ function VipCountdown({
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Page Principale                                                     */
-/* ------------------------------------------------------------------ */
-
 export default function AdminVipPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [members, setMembers] = useState<VipMember[]>([]);
+  const [visitByUser, setVisitByUser] = useState<Record<string, { user_id: string; first_visited_at: string; last_visited_at: string }>>({});
+  const [visitsError, setVisitsError] = useState('');
+  const [memberFilter, setMemberFilter] = useState<'all' | 'vip' | 'visited' | 'free'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [selectedDurations, setSelectedDurations] = useState<Record<string, VipDurationType>>({});
   const [watchCounts, setWatchCounts] = useState<Record<string, number>>({});
 
-  const fetchProfiles = async () => {
+  const [authorized, setAuthorized] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+  const previousMembers = useRef<VipMember[]>([]);
+  const initialized = useRef(false);
+  const mounted = useRef(false);
+  const busy = useRef(false);
+  const activeController = useRef<AbortController | null>(null);
+  const notificationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchProfiles = useCallback(async () => {
+    if (busy.current) return;
+    busy.current = true;
+    const controller = new AbortController();
+    activeController.current = controller;
     try {
-      const { data: profiles, error } = await supabase
+      const { data: { session }, error: authError } = await supabase.auth.getSession();
+      if (!mounted.current || controller.signal.aborted) return;
+      if (authError) throw authError;
+      if (session?.user.email !== ADMIN_EMAIL) {
+        setAuthorized(false);
+        router.replace(session ? '/' : '/login');
+        return;
+      }
+      setAuthorized(true);
+
+      const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('*')
-        .order('is_vip', { ascending: false });
+        .select('*');
 
-      if (error) {
-        setErrorMsg(`Erreur SQL : ${error.message}`);
-      } else if (profiles) {
-        setMembers(profiles);
-        const initialDurations: Record<string, VipDurationType> = {};
-        const initialWatchCounts: Record<string, number> = {};
+      if (profilesError) throw profilesError;
+      if (controller.signal.aborted) return;
 
-        profiles.forEach(p => {
-          initialDurations[p.id] = p.vip_duration || '15d';
-          initialWatchCounts[p.id] = p.watch_count || 0;
-        });
+      // Détection stricte True / False pour chaque compte
+      const rows: VipMember[] = (profilesData || []).map(member => ({
+        ...member,
+        is_vip: checkIsVip(member.is_vip),
+      }));
 
-        setSelectedDurations(initialDurations);
-        setWatchCounts(initialWatchCounts);
+      const { data: visitsData, error: visitsErr } = await supabase
+        .from('vip_page_visits')
+        .select('*');
+
+      if (!mounted.current || controller.signal.aborted) return;
+
+      if (visitsErr) {
+        setVisitsError(visitsErr.message);
+      } else if (visitsData) {
+        setVisitByUser(Object.fromEntries(visitsData.map(v => [v.user_id, v])));
       }
-    } catch (err) {
-      console.error('Erreur lors de la récupération des membres:', err);
+
+      rows.sort((a, b) => Number(b.is_vip) - Number(a.is_vip) || (a.email || a.id).localeCompare(b.email || b.id));
+      
+      const before = previousMembers.current;
+      const added = newlyActivatedMembers(before, rows, initialized.current);
+      setSelectedDurations(drafts => reconcileMemberDrafts(drafts, Object.fromEntries(before.map(m => [m.id, m.vip_duration || '15d'])), Object.fromEntries(rows.map(m => [m.id, m.vip_duration || '15d']))));
+      setWatchCounts(drafts => reconcileMemberDrafts(drafts, Object.fromEntries(before.map(m => [m.id, m.watch_count || 0])), Object.fromEntries(rows.map(m => [m.id, m.watch_count || 0]))));
+      previousMembers.current = rows;
+      initialized.current = true;
+      setMembers(rows);
+      setLastUpdated(Date.now());
+      setErrorMsg('');
+
+      if (added.length) {
+        if (notificationTimer.current) clearTimeout(notificationTimer.current);
+        setSuccessMsg(added.length === 1 ? `${added[0].email || 'Un membre'} vient de passer VIP.` : `${added.length} membres viennent de passer VIP.`);
+        notificationTimer.current = setTimeout(() => { if (mounted.current) setSuccessMsg(''); }, 10000);
+      }
+    } catch (error) {
+      if (mounted.current && !controller.signal.aborted) {
+        setErrorMsg(error instanceof Error ? error.message : 'Impossible d’actualiser les membres.');
+      }
     } finally {
-      setLoading(false);
+      if (activeController.current === controller) busy.current = false;
+      if (mounted.current && !controller.signal.aborted) setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    async function checkAdminAndFetch() {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push('/login');
-        return;
-      }
-
-      if (session.user.email !== ADMIN_EMAIL) {
-        router.push('/');
-        return;
-      }
-
-      await fetchProfiles();
-    }
-
-    checkAdminAndFetch();
   }, [router]);
 
+  useEffect(() => {
+    mounted.current = true;
+    void fetchProfiles();
+    return () => {
+      mounted.current = false;
+      activeController.current?.abort();
+      busy.current = false;
+      if (notificationTimer.current) clearTimeout(notificationTimer.current);
+    };
+  }, [fetchProfiles]);
+
+  useEffect(() => {
+    if (!authorized) return;
+    const refresh = () => { if (document.visibilityState === 'visible') void fetchProfiles(); };
+    const timer = setInterval(refresh, 10000);
+    document.addEventListener('visibilitychange', refresh);
+    const channel = supabase.channel('admin-vip-member-updates').on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, refresh).on('postgres_changes', { event: '*', schema: 'public', table: 'vip_page_visits' }, refresh).subscribe();
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', refresh); void supabase.removeChannel(channel); };
+  }, [authorized, fetchProfiles]);
+
   const showNotification = (msg: string) => {
+    if (notificationTimer.current) clearTimeout(notificationTimer.current);
     setSuccessMsg(msg);
-    setTimeout(() => setSuccessMsg(''), 3000);
+    notificationTimer.current = setTimeout(() => { if (mounted.current) setSuccessMsg(''); }, 3000);
   };
 
   const handleUpdateWatchCount = async (userId: string) => {
     setErrorMsg('');
     const newCount = watchCounts[userId] ?? 0;
-
-    const { error } = await supabase
-      .from('profiles')
-      .update({ watch_count: newCount })
-      .eq('id', userId);
-
+    const { error } = await supabase.from('profiles').update({ watch_count: newCount }).eq('id', userId);
     if (!error) {
       showNotification('Quota de visions mis à jour !');
       await fetchProfiles();
@@ -217,15 +221,7 @@ export default function AdminVipPage() {
   const handleActivateVip = async (userId: string, duration: VipDurationType) => {
     setErrorMsg('');
     const now = new Date().toISOString();
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        is_vip: true,
-        vip_started_at: now,
-        vip_duration: duration,
-      })
-      .eq('id', userId);
-
+    const { error } = await supabase.from('profiles').update({ is_vip: true, vip_started_at: now, vip_duration: duration }).eq('id', userId);
     if (!error) {
       showNotification('Statut VIP mis à jour !');
       await fetchProfiles();
@@ -236,15 +232,7 @@ export default function AdminVipPage() {
 
   const handleRemoveVip = async (userId: string) => {
     setErrorMsg('');
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        is_vip: false,
-        vip_started_at: null,
-        vip_duration: null,
-      })
-      .eq('id', userId);
-
+    const { error } = await supabase.from('profiles').update({ is_vip: false, vip_started_at: null, vip_duration: null }).eq('id', userId);
     if (!error) {
       showNotification('Accès VIP retiré');
       await fetchProfiles();
@@ -253,12 +241,12 @@ export default function AdminVipPage() {
     }
   };
 
-  // Filtrage des membres selon la recherche
   const filteredMembers = members.filter(member => {
     const query = searchQuery.toLowerCase();
     const emailMatch = member.email?.toLowerCase().includes(query) || false;
     const idMatch = member.id.toLowerCase().includes(query);
-    return emailMatch || idMatch;
+    const inFilter = memberFilter === 'all' || (memberFilter === 'vip' && member.is_vip) || (memberFilter === 'free' && !member.is_vip) || (memberFilter === 'visited' && !!visitByUser[member.id]);
+    return (emailMatch || idMatch) && inFilter;
   });
 
   const totalUsers = members.length;
@@ -272,6 +260,8 @@ export default function AdminVipPage() {
       </main>
     );
   }
+
+  if (!authorized) return errorMsg ? <main className="grid min-h-screen place-items-center p-8 bg-[#0a0a0b] text-white"><div role="alert"><p>{errorMsg}</p><button className="mt-4 rounded-full bg-red-600 px-5 py-3 text-sm font-bold" onClick={() => void fetchProfiles()}>Réessayer</button></div></main> : null;
 
   return (
     <main className="min-h-screen bg-[#0a0a0b] pb-24 text-white font-sans antialiased">
@@ -291,13 +281,17 @@ export default function AdminVipPage() {
           </span>
         </div>
       </header>
+      <SectionNavigation admin />
 
       <div className="mx-auto max-w-7xl space-y-8 px-4 pt-10 sm:px-10">
+        <PageHero eyebrow="LES MEMBRES, AU PREMIER PLAN" title="Ils passent au VIP." accent="Tu gardes le fil." description="Retrouve les nouveaux membres VIP, leurs accès et les quotas. Une vue claire pour accompagner chaque abonnement." cardLabel="LES MEMBRES VIP" cardTitle="Le premier rang se remplit." cardDetail={`${vipUsers} VIP · ${totalUsers} COMPTES`} variant="collection" />
+        
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-black tracking-tight sm:text-4xl">Administration Membres & VIP</h1>
+            <p className="text-xs font-bold uppercase tracking-[0.25em] text-red-500">LES MEMBRES, AU PREMIER PLAN</p>
+            <h2 className="text-lg font-semibold mt-1">Gérer les membres</h2>
             <p className="mt-1 text-sm text-zinc-400">
-              Gère les abonnements, les dates d'activation, les comptes à rebours et modifie les quotas.
+              Gère les abonnements, les dates d’activation, les comptes à rebours et modifie les quotas.
             </p>
           </div>
 
@@ -312,7 +306,15 @@ export default function AdminVipPage() {
           </div>
         </div>
 
-        {/* Cartes de Statistiques Utilisateurs */}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.02] px-5 py-3 text-xs text-zinc-400">
+          <span className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            Mise à jour automatique · 10 secondes
+          </span>
+          <span>{lastUpdated ? `Dernier relevé : ${new Date(lastUpdated).toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris' })}` : 'En attente du premier relevé'}</span>
+          <button type="button" onClick={() => void fetchProfiles()} className="rounded-lg bg-white/10 px-3 py-1 font-semibold text-white hover:bg-white/20 transition">Actualiser ↻</button>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
             <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Total Inscrits</p>
@@ -342,6 +344,37 @@ export default function AdminVipPage() {
           </div>
         )}
 
+        <div className="flex flex-wrap gap-2" aria-label="Filtrer les membres">
+          {([
+            { id: 'all', label: `Tous les comptes (${totalUsers})` },
+            { id: 'vip', label: `Comptes VIP (${vipUsers})` },
+            { id: 'visited', label: `Passés sur /vip (${visitsError ? '—' : Object.keys(visitByUser).length})` },
+            { id: 'free', label: `Gratuits (${freeUsers})` },
+          ] as const).map(filter => (
+            <button
+              key={filter.id}
+              type="button"
+              aria-pressed={memberFilter === filter.id}
+              onClick={() => setMemberFilter(filter.id)}
+              className={`rounded-full px-4 py-2 text-xs font-semibold transition cursor-pointer ${
+                memberFilter === filter.id
+                  ? 'bg-white text-black'
+                  : 'bg-white/5 text-zinc-400 ring-1 ring-white/10 hover:text-white'
+              }`}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+
+        <p className="text-xs leading-6 text-zinc-500">La colonne « Page VIP visitée » indique un passage enregistré. Le badge VIP indique le statut du compte ; aucun paiement n’est confirmé par une simple visite.</p>
+
+        {visitsError && (
+          <p role="status" className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs leading-6 text-amber-200">
+            Le suivi des passages est indisponible. Installe le script <code>20261020_vip_page_visits.sql</code> dans Supabase. Les anciens passages ne sont pas récupérables sans traces conservées.
+          </p>
+        )}
+
         <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -349,8 +382,9 @@ export default function AdminVipPage() {
                 <tr>
                   <th className="px-6 py-4">Utilisateur</th>
                   <th className="px-6 py-4">Statut</th>
+                  <th className="px-6 py-4">Page VIP visitée</th>
                   <th className="px-6 py-4">Visions consommées</th>
-                  <th className="px-6 py-4">Date d'activation</th>
+                  <th className="px-6 py-4">Date d’activation</th>
                   <th className="px-6 py-4">Compte à rebours VIP</th>
                   <th className="px-6 py-4">Durée attribuée</th>
                   <th className="px-6 py-4 text-right">Actions VIP</th>
@@ -359,7 +393,7 @@ export default function AdminVipPage() {
               <tbody className="divide-y divide-white/5">
                 {filteredMembers.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-zinc-500">
+                    <td colSpan={8} className="px-6 py-12 text-center text-zinc-500">
                       Aucun membre trouvé pour « {searchQuery} »
                     </td>
                   </tr>
@@ -384,6 +418,18 @@ export default function AdminVipPage() {
                             <span className="inline-flex items-center gap-1.5 rounded-full bg-zinc-800 px-3 py-1 text-xs font-semibold text-zinc-400 ring-1 ring-white/10">
                               Gratuit
                             </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-xs">
+                          {visitsError ? (
+                            <span className="text-zinc-500">Indisponible</span>
+                          ) : visitByUser[member.id] ? (
+                            <>
+                              <span className="inline-flex rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-red-300">Passage enregistré</span>
+                              <p className="mt-2 whitespace-nowrap text-zinc-400">{formatDate(visitByUser[member.id].last_visited_at)}</p>
+                            </>
+                          ) : (
+                            <span className="text-zinc-500">Aucune visite enregistrée</span>
                           )}
                         </td>
                         <td className="px-6 py-4">

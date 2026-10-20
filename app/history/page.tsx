@@ -1,5 +1,7 @@
 'use client';
 
+import SectionNavigation from '@/components/SectionNavigation';
+import PageHero from '@/components/PageHero';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -372,7 +374,7 @@ export default function HistoryPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#0a0a0b] text-white">
+      <main className="yf-page yf-history min-h-screen bg-[#0a0a0b] text-white">
         <div className="h-16 border-b border-white/5" />
         <div className="mx-auto max-w-6xl space-y-6 px-4 pt-10 sm:px-8">
           <div className="h-10 w-56 animate-pulse rounded-xl bg-zinc-800" />
@@ -385,10 +387,10 @@ export default function HistoryPage() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-x-hidden bg-[#0a0a0b] pb-24 font-sans text-white antialiased selection:bg-red-600 selection:text-white">
+    <main className="yf-page yf-history relative min-h-screen overflow-x-hidden bg-[#0a0a0b] pb-24 font-sans text-white antialiased selection:bg-red-600 selection:text-white">
       <div className="pointer-events-none absolute -top-56 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-red-600/10 blur-[140px]" />
 
-      <header className="sticky top-0 z-40 border-b border-white/5 bg-[#0a0a0b]/85 backdrop-blur-xl">
+      <header className="yf-topbar sticky top-0 z-40 border-b border-white/5 bg-[#0a0a0b]/85 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-8">
           <button
             onClick={() => router.push('/')}
@@ -413,21 +415,23 @@ export default function HistoryPage() {
           )}
         </div>
       </header>
+      <SectionNavigation />
 
       <div className="relative mx-auto max-w-6xl space-y-12 px-4 pt-10 sm:px-8">
+        <PageHero eyebrow="CHAQUE SÉANCE LAISSE UNE TRACE" title="Les bonnes histoires" accent="ne s’oublient pas." description="Tes découvertes, les films déjà vus et les épisodes qui t’attendent : retrouve le fil de ton cinéma, au même endroit." cardLabel="TON HISTORIQUE" cardTitle="La suite, quand tu veux." cardDetail={activeProfile ? `PROFIL · ${activeProfile.name}` : "TON PARCOURS DE SPECTATEUR"} variant="collection" />
         <section>
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-red-500">Mon historique</p>
-              <h1 className="text-3xl font-black tracking-tight sm:text-5xl">
+              <h2 className="text-lg font-semibold tracking-tight">
                 {activeProfile ? `Profil : ${activeProfile.name}` : 'Mon historique'}
-              </h1>
+              </h2>
             </div>
             {entries.length > 0 && (
               confirmClearAll ? (
                 <div className="flex items-center gap-2 rounded-full bg-red-600/10 py-1 pl-4 pr-1 ring-1 ring-red-500/30">
                   <span className="text-xs text-red-200">Tout effacer ?</span>
-                  <button onClick={clearAll} className="rounded-full bg-red-600 px-3 py-1.5 text-xs font-bold hover:bg-red-500">Oui</button>
+                  <button onClick={clearAll} className="yf-primary rounded-full bg-red-600 px-3 py-1.5 text-xs font-bold hover:bg-red-500">Oui</button>
                   <button onClick={() => setConfirmClearAll(false)} className="rounded-full px-3 py-1.5 text-xs text-zinc-300 hover:text-white">Non</button>
                 </div>
               ) : (
@@ -451,14 +455,14 @@ export default function HistoryPage() {
                 {duration.value}<span className="ml-1 text-sm font-semibold text-red-300 sm:text-base">{duration.unit}</span>
               </p>
             </div>
-            <div className="rounded-2xl bg-white/[0.03] p-4 ring-1 ring-white/10 sm:p-5">
+            <div className="yf-surface rounded-2xl bg-white/[0.03] p-4 ring-1 ring-white/10 sm:p-5">
               <div className="flex items-center justify-between text-zinc-500">
                 <span className="text-[11px] font-semibold uppercase tracking-wider sm:text-xs">Films</span>
                 <Icon name="film" className="h-4 w-4" />
               </div>
               <p className="mt-2 text-2xl font-black tabular-nums sm:text-4xl">{stats.movies}</p>
             </div>
-            <div className="rounded-2xl bg-white/[0.03] p-4 ring-1 ring-white/10 sm:p-5">
+            <div className="yf-surface rounded-2xl bg-white/[0.03] p-4 ring-1 ring-white/10 sm:p-5">
               <div className="flex items-center justify-between text-zinc-500">
                 <span className="text-[11px] font-semibold uppercase tracking-wider sm:text-xs">Épisodes</span>
                 <Icon name="tv" className="h-4 w-4" />
@@ -578,7 +582,7 @@ export default function HistoryPage() {
                         {confirmRemoveId === e.id ? (
                           <>
                             <span className="flex-1 text-xs text-zinc-400">Retirer ?</span>
-                            <button onClick={() => removeFromHistory(e.id)} className="rounded-full bg-red-600 px-3 py-1.5 text-xs font-bold">Oui</button>
+                            <button onClick={() => removeFromHistory(e.id)} className="yf-primary rounded-full bg-red-600 px-3 py-1.5 text-xs font-bold">Oui</button>
                             <button onClick={() => setConfirmRemoveId(null)} className="rounded-full px-3 py-1.5 text-xs text-zinc-400">Non</button>
                           </>
                         ) : (

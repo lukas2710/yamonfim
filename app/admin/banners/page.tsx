@@ -1,11 +1,14 @@
 'use client';
 
+import SectionNavigation from '@/components/SectionNavigation';
+import PageHero from '@/components/PageHero';
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import styles from './banners.module.css';
 
 interface MediaItem {
-  id: any;
+  id: string | number;
   title: string;
   type: 'movie' | 'series';
   poster: string;
@@ -30,6 +33,7 @@ export default function AdminBannersPage() {
   const [banners, setBanners] = useState<BannerItem[]>([]);
 
   // Formulaire
+  const [search, setSearch] = useState('');
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
   const [backdrop, setBackdrop] = useState('');
@@ -124,178 +128,64 @@ export default function AdminBannersPage() {
   };
 
   if (loadingAuth) {
-    return (
-      <div className="min-h-screen bg-[#141414] text-white flex items-center justify-center text-sm">
-        Vérification des accès Administrateur...
-      </div>
-    );
+    return <main className={`yf-page yf-banners ${styles.page}`}><div className={styles.loading}>Vérification de votre accès administrateur…</div></main>;
   }
 
+  const filteredMedia = mediaList.filter(item => item.title.toLocaleLowerCase('fr').includes(search.toLocaleLowerCase('fr')));
+  const selectedMedia = mediaList.filter(item => selectedMediaIds.includes(String(item.id)));
+
   return (
-    <main className="min-h-screen bg-[#141414] text-white p-4 sm:p-10 font-sans pb-24">
-      <header className="flex justify-between items-center mb-8 pb-4 border-b border-zinc-800">
-        <div>
-          <span className="font-black text-xl tracking-wider text-red-600">
-            YAMON<span className="text-white">FIM</span>
-          </span>
-          <h1 className="text-sm font-bold text-zinc-400 mt-1">Gestion des Bannières Thématiques</h1>
-        </div>
-
-        <div className="flex gap-2">
-          <button
-            onClick={() => router.push('/admin')}
-            className="text-xs bg-zinc-900 border border-zinc-800 px-3 py-2 rounded-lg hover:text-white transition cursor-pointer"
-          >
-            Espace Admin
-          </button>
-          <button
-            onClick={() => router.push('/')}
-            className="text-xs bg-zinc-900 border border-zinc-800 px-3 py-2 rounded-lg hover:text-red-500 transition cursor-pointer"
-          >
-            Retour au site
-          </button>
-        </div>
-      </header>
-
-      <div className="max-w-4xl mx-auto space-y-10">
-        
-        {/* Formulaire de création */}
-        <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-5 sm:p-8 shadow-xl">
-          <h2 className="text-base sm:text-lg font-bold mb-4 text-red-500 flex items-center gap-2">
-            <span>🎯</span> Créer une bannière (Ex: Halloween 🎃, Soirée Action 💥)
-          </h2>
-
-          {message && <div className="bg-green-600/20 border border-green-500/40 text-green-400 text-xs p-3 rounded-lg mb-4">{message}</div>}
-          {errorMsg && <div className="bg-red-600/20 border border-red-500/40 text-red-400 text-xs p-3 rounded-lg mb-4">{errorMsg}</div>}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-400 mb-1">Titre de la bannière</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: Spécial Halloween 🎃"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-zinc-400 mb-1">Sous-titre (optionnel)</label>
-                <input
-                  type="text"
-                  placeholder="Ex: Les meilleurs films d'horreur du site..."
-                  value={subtitle}
-                  onChange={(e) => setSubtitle(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-zinc-400 mb-1">Image de fond (Backdrop Landscape URL)</label>
-              <input
-                type="text"
-                required
-                placeholder="Ex: https://image.tmdb.org/t/p/original/..."
-                value={backdrop}
-                onChange={(e) => setBackdrop(e.target.value)}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-red-600"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-zinc-400 mb-2">
-                Sélectionne les films / séries à intégrer ({selectedMediaIds.length} sélectionné(s))
-              </label>
-              
-              <div className="max-h-56 overflow-y-auto bg-zinc-950 border border-zinc-800 p-3 rounded-xl grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {mediaList.map((m) => {
-                  const isSelected = selectedMediaIds.includes(String(m.id));
-                  return (
-                    <div
-                      key={m.id}
-                      onClick={() => handleMediaToggle(String(m.id))}
-                      className={`flex items-center gap-3 p-2 rounded-lg border transition cursor-pointer ${
-                        isSelected
-                          ? 'bg-red-600/20 border-red-500/50 text-white'
-                          : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
-                      }`}
-                    >
-                      <div className="w-8 h-10 bg-zinc-800 rounded overflow-hidden shrink-0">
-                        {m.poster && <img src={m.poster} alt="" className="w-full h-full object-cover" />}
-                      </div>
-                      <div className="truncate text-xs font-medium">
-                        <p className="truncate">{m.title}</p>
-                        <span className="text-[10px] text-zinc-500 uppercase">{m.type === 'movie' ? 'Film' : 'Série'}</span>
-                      </div>
-                    </div>
-                  );
+    <main className={`yf-page yf-banners ${styles.page}`}>
+      <nav className={styles.nav} aria-label="Navigation administration">
+        <a className={styles.brand} href="/">YAMON<span>FIM</span><small>STUDIO</small></a>
+        <div className={styles.navLinks}><a href="/admin">← Administration</a><a href="/">Voir le site ↗</a></div>
+      </nav>
+      <SectionNavigation admin />
+      <div className={styles.container}>
+        <PageHero eyebrow="VOTRE VITRINE, VOTRE UNIVERS" title="Crée l’ambiance." accent="Donne envie de cliquer." description="Une sélection, un beau visuel et des titres à découvrir : compose les bannières qui donnent le ton à la page d’accueil." cardLabel="LES BANNIÈRES" cardTitle="Une sélection. Une ambiance." cardDetail={`${banners.filter(b => b.active).length} BANNIÈRES EN LIGNE`} variant="collection" />
+        {message && <p className={styles.success} role="status">{message}</p>}
+        {errorMsg && <p className={styles.error} role="alert">{errorMsg}</p>}
+        <div className={styles.workspace}>
+          <section className={styles.panel}>
+            <div className={styles.sectionTitle}><span className={styles.number}>01</span><div><h2>Composer une bannière</h2><p>Une ambiance. Une sélection. Une nouvelle découverte.</p></div></div>
+            <form onSubmit={handleSubmit} className={styles.form}>
+              <label htmlFor="banner-title">Titre de la sélection<input id="banner-title" required placeholder="Ex. Les nuits du frisson" value={title} onChange={e => setTitle(e.target.value)} /></label>
+              <label htmlFor="banner-subtitle">Sous-titre <span>Facultatif</span><input id="banner-subtitle" placeholder="Des films à regarder les lumières éteintes…" value={subtitle} onChange={e => setSubtitle(e.target.value)} /></label>
+              <label htmlFor="banner-backdrop">Image de couverture<input id="banner-backdrop" type="url" required placeholder="https://image.tmdb.org/t/p/original/…" value={backdrop} onChange={e => setBackdrop(e.target.value)} /><small>Choisissez une image panoramique pour un rendu cinématographique.</small></label>
+              <div className={styles.divider} />
+              <div className={styles.selectionHeading}><h3>Votre casting</h3><span>{selectedMediaIds.length} sélectionné{selectedMediaIds.length > 1 ? 's' : ''}</span></div>
+              <input aria-label="Rechercher un film ou une série" type="search" placeholder="Rechercher un film, une série…" value={search} onChange={e => setSearch(e.target.value)} />
+              <div className={styles.mediaList}>
+                {filteredMedia.map(m => {
+                  const selected = selectedMediaIds.includes(String(m.id));
+                  return <button type="button" key={m.id} aria-pressed={selected} onClick={() => handleMediaToggle(String(m.id))} className={`${styles.media} ${selected ? styles.selected : ''}`}>
+                    <div className={styles.poster}>{m.poster && <img src={m.poster} alt="" />}</div><span className={styles.mediaName}><strong>{m.title}</strong><small>{m.type === 'movie' ? 'FILM' : 'SÉRIE'}</small></span><span className={styles.check}>{selected ? '✓' : '+'}</span>
+                  </button>;
                 })}
+                {filteredMedia.length === 0 && <p className={styles.empty}>{search ? 'Aucun titre ne correspond à votre recherche.' : 'Votre catalogue est encore vide.'}</p>}
               </div>
+              <button type="submit" className={styles.publish} disabled={submitting}>{submitting ? 'Publication en cours…' : 'Publier la bannière'}<span aria-hidden="true">↗</span></button>
+              <p className={styles.formNote}>La bannière sera visible sur la page d’accueil dès sa publication.</p>
+            </form>
+          </section>
+          <aside className={styles.previewColumn}>
+            <div className={styles.previewLabel}><span className={styles.liveDot} /> APERÇU EN DIRECT<span>PAGE D’ACCUEIL</span></div>
+            <div className={styles.preview}>
+              {backdrop && <img className={styles.cover} src={backdrop} alt="Aperçu de la couverture" />}
+              <div className={styles.previewContent}><span className={styles.badge}>LA SÉLECTION YAMONFIM</span><h2>{title || 'Votre prochaine obsession.'}</h2><p>{subtitle || 'Une collection à votre image. Ajoutez un titre et laissez la magie opérer.'}</p><span className={styles.discover}>Découvrir la sélection <span>→</span></span></div>
             </div>
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-lg text-xs transition cursor-pointer shadow-lg shadow-red-600/20"
-            >
-              {submitting ? 'Publication...' : 'Publier la bannière'}
-            </button>
-          </form>
+            <div className={styles.filmstrip}>{selectedMedia.slice(0, 5).map(m => <div key={m.id} className={styles.miniPoster}>{m.poster ? <img src={m.poster} alt={m.title} /> : <span>{m.title}</span>}</div>)}{selectedMedia.length === 0 && <p>Les affiches de votre sélection apparaîtront ici.</p>}</div>
+            <div className={styles.tip}><span>✦</span><div><h3>Le détail qui change tout</h3><p>Un titre court, une belle image et des films qui partagent la même énergie : les meilleures sélections racontent déjà une histoire.</p></div></div>
+          </aside>
         </div>
-
-        {/* Liste des bannières */}
-        <div>
-          <h2 className="text-base font-bold mb-4">Bannières existantes ({banners.length})</h2>
-
-          {banners.length === 0 ? (
-            <p className="text-xs text-zinc-500 py-6 text-center border border-dashed border-zinc-800 rounded-xl">
-              Aucune bannière créée pour le moment.
-            </p>
-          ) : (
-            <div className="space-y-4">
-              {banners.map((b) => (
-                <div key={b.id} className="relative bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-4 z-10">
-                    <div className="w-20 h-12 bg-zinc-800 rounded-lg overflow-hidden shrink-0 border border-zinc-700">
-                      <img src={b.backdrop} alt="" className="w-full h-full object-cover" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-sm text-white">{b.title}</h3>
-                      {b.subtitle && <p className="text-xs text-zinc-400">{b.subtitle}</p>}
-                      <p className="text-[10px] text-zinc-500 mt-1">
-                        {b.media_ids?.length || 0} média(s) associé(s)
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 z-10">
-                    <button
-                      onClick={() => toggleActive(b.id, b.active)}
-                      className={`text-xs px-3 py-1.5 rounded-lg font-bold border transition cursor-pointer ${
-                        b.active
-                          ? 'bg-green-500/10 text-green-400 border-green-500/30'
-                          : 'bg-zinc-800 text-zinc-500 border-zinc-700'
-                      }`}
-                    >
-                      {b.active ? 'Active' : 'Masquée'}
-                    </button>
-                    <button
-                      onClick={() => handleDeleteBanner(b.id)}
-                      className="text-xs bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 px-3 py-1.5 rounded-lg transition cursor-pointer"
-                    >
-                      Supprimer
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
+        <section className={styles.library}>
+          <div className={styles.libraryHeading}><div className={styles.sectionTitle}><span className={styles.number}>02</span><div><h2>Vos sélections</h2><p>Gérez ce qui passe sous les projecteurs.</p></div></div><span className={styles.total}>{banners.length} au total</span></div>
+          {banners.length === 0 ? <div className={styles.emptyLibrary}><span>✧</span><h3>Le début d’une belle programmation.</h3><p>Votre première bannière trouvera sa place ici.</p></div> : <div className={styles.cards}>{banners.map(b => <article key={b.id} className={styles.card}>
+            <div className={styles.cardVisual}><img src={b.backdrop} alt="" /><span className={`${styles.status} ${b.active ? styles.active : ''}`}>{b.active ? '● En ligne' : '○ Masquée'}</span><div><h3>{b.title}</h3>{b.subtitle && <p>{b.subtitle}</p>}</div></div>
+            <footer><span>{b.media_ids?.length || 0} titres associés</span><div><button type="button" onClick={() => toggleActive(b.id, b.active)}>{b.active ? 'Masquer' : 'Afficher'}</button><button type="button" className={styles.delete} aria-label={`Supprimer ${b.title}`} onClick={() => handleDeleteBanner(b.id)}>Supprimer</button></div></footer>
+          </article>)}</div>}
+        </section>
+        <footer className={styles.bottom}>YAMONFIM STUDIO<span>Le cinéma commence par une bonne sélection.</span></footer>
       </div>
     </main>
   );

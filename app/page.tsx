@@ -1,8 +1,10 @@
 'use client';
 
+import DiscoveryLinks from '@/components/DiscoveryLinks';
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { fetchSubscriptionProfile } from '@/lib/subscription';
 import PromoBanner from '@/components/PromoBanner';
 
 interface MediaItem {
@@ -93,7 +95,7 @@ function PosterCard({
     <div
       {...activateProps(onOpen)}
       aria-label={item.title}
-      className={`group relative aspect-[2/3] shrink-0 cursor-pointer overflow-hidden rounded-xl bg-zinc-900 ring-1 ring-white/5 transition duration-300 hover:-translate-y-1 hover:ring-white/25 hover:shadow-2xl hover:shadow-black/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-600 active:scale-[0.97] ${className}`}
+      className={`yf-poster-card group relative aspect-[2/3] shrink-0 cursor-pointer overflow-hidden rounded-xl bg-zinc-900 ring-1 ring-white/5 transition duration-300 hover:-translate-y-1 hover:ring-white/25 hover:shadow-2xl hover:shadow-black/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-600 active:scale-[0.97] ${className}`}
     >
       {item.poster ? (
         <img
@@ -109,7 +111,7 @@ function PosterCard({
       )}
 
       {!locked && (
-        <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/90 via-black/20 to-transparent p-3 opacity-0 transition duration-300 group-hover:opacity-100">
+        <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/90 via-black/20 to-transparent p-3 opacity-100 transition duration-300 group-hover:opacity-100">
           <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-white text-black shadow-lg">
             <Icon name="play" className="h-4 w-4 translate-x-[1px]" />
           </div>
@@ -229,11 +231,7 @@ export default function Home() {
 
         setActiveProfile(currentProfile);
 
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('is_vip, watch_count')
-          .eq('id', user.id)
-          .single();
+        const { data: profile } = await fetchSubscriptionProfile(user.id);
 
         const userIsVip = user.email === ADMIN_EMAIL || (profile ? !!profile.is_vip : false);
         const userWatchCount = profile ? profile.watch_count || 0 : 0;
@@ -464,7 +462,7 @@ export default function Home() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#0a0a0b] text-white">
+      <main className="yf-page yf-home min-h-screen bg-[#0a0a0b] text-white">
         <div className="h-16 border-b border-white/5" />
         <div className="h-[72svh] w-full animate-pulse bg-gradient-to-b from-zinc-900 to-[#0a0a0b] sm:h-[55vh]" />
         <div className="space-y-10 px-4 sm:px-10 -mt-10">
@@ -490,7 +488,7 @@ export default function Home() {
   ];
 
   return (
-    <main className="min-h-screen max-w-[100vw] overflow-x-hidden bg-[#0a0a0b] pb-28 font-sans text-white antialiased selection:bg-red-600 selection:text-white sm:pb-16">
+    <main className="yf-page yf-home min-h-screen max-w-[100vw] overflow-x-hidden bg-[#0a0a0b] pb-28 font-sans text-white antialiased selection:bg-red-600 selection:text-white sm:pb-16">
 
       {showVipModal && (
         <div
@@ -640,20 +638,6 @@ export default function Home() {
               )}
             </div>
 
-            {activeProfile && (
-              <button
-                onClick={() => router.push('/profiles')}
-                className="flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 px-2.5 py-1.5 rounded-full transition cursor-pointer"
-              >
-                <img 
-                  src={activeProfile.avatar_url} 
-                  alt={activeProfile.name} 
-                  className="w-6 h-6 rounded-full object-cover" 
-                />
-                <span className="text-xs font-semibold text-white max-w-[100px] truncate hidden sm:inline">{activeProfile.name}</span>
-              </button>
-            )}
-
             {isVip ? (
               <button
                 onClick={() => router.push('/abonnement')}
@@ -677,13 +661,22 @@ export default function Home() {
                 onClick={() => setMenuOpen(o => !o)}
                 aria-label="Menu du compte"
                 aria-expanded={menuOpen}
-                className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-gradient-to-br from-red-500 to-red-700 text-sm font-bold uppercase text-white ring-2 ring-transparent transition hover:ring-white/30 focus:outline-none focus-visible:ring-white/50"
+                aria-controls="account-menu"
+                className={`flex max-w-[180px] cursor-pointer items-center gap-2 rounded-full border px-2 py-1.5 text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 ${menuOpen ? 'border-red-400/60 bg-red-500/15' : 'border-white/15 bg-white/5 hover:border-red-400/40 hover:bg-white/10'}`}
               >
-                {userEmail ? userEmail[0] : <Icon name="user" />}
+                {activeProfile?.avatar_url ? (
+                  <img src={activeProfile.avatar_url} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" />
+                ) : (
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-600 text-xs font-bold uppercase">
+                    {activeProfile?.name?.[0] || userEmail?.[0] || <Icon name="user" />}
+                  </span>
+                )}
+                <span className="hidden min-w-0 truncate text-xs font-semibold sm:block">{activeProfile?.name || 'Mon compte'}</span>
+                <Icon name="chevronRight" className={`h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform ${menuOpen ? '-rotate-90' : 'rotate-90'}`} />
               </button>
 
               {menuOpen && (
-                <div className="absolute right-0 mt-2 w-64 overflow-hidden rounded-2xl border border-white/10 bg-[#141416]/95 shadow-2xl backdrop-blur-xl">
+                <div id="account-menu" className="absolute right-0 mt-2 w-64 overflow-hidden rounded-2xl border border-white/10 bg-[#141416]/95 shadow-2xl backdrop-blur-xl">
                   <div className="border-b border-white/5 px-4 py-3">
                     <p className="text-[11px] uppercase tracking-wider text-zinc-500">Connecté</p>
                     <p className="truncate text-sm font-medium text-white">{userEmail}</p>
@@ -720,12 +713,19 @@ export default function Home() {
                       <Icon name="alert" /> Signaler un problème / Idée
                     </button>
                     {isAdmin && (
-                      <button
-                        onClick={() => router.push('/admin')}
-                        className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 transition hover:bg-white/5 hover:text-white"
-                      >
-                        <Icon name="shield" /> Administration
-                      </button>
+                      <div className="mt-2 border-t border-white/10 pt-2">
+                        <p className="px-3 pb-2 pt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-red-400">Administration</p>
+                        {([
+                          { href: '/admin', label: 'Gestion du catalogue', icon: 'shield' },
+                          { href: '/admin/banners', label: 'Bannières', icon: 'sparkles' },
+                          { href: '/admin-vip', label: 'Administration VIP', icon: 'crown' },
+                          { href: '/admin/stats', label: 'Statistiques', icon: 'chart' },
+                        ] as { href: string; label: string; icon: IconName }[]).map(link => (
+                          <a key={link.href} href={link.href} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 transition hover:bg-red-500/10 hover:text-white focus-visible:outline-2 focus-visible:outline-red-400">
+                            <Icon name={link.icon} />{link.label}
+                          </a>
+                        ))}
+                      </div>
                     )}
                   </div>
                   <div className="border-t border-white/5 p-1.5">
@@ -744,101 +744,65 @@ export default function Home() {
       </header>
 
       {showHero ? (
-        <section className="relative h-[72svh] min-h-[480px] w-full overflow-hidden bg-zinc-950 sm:h-[78vh] sm:min-h-[440px]">
-          {(carouselItems.length > 0 ? carouselItems : [featured]).map((m, i) => {
-            const desktopImg = getHeroImage(m);
-            const mobileImg = getMobileHeroImage(m);
-            const mobileIsPoster = hasText(m.poster);
-            const active = carouselItems.length === 0 || i === currentIndex;
-            const fade = active ? 'scale-100 opacity-100' : 'scale-105 opacity-0';
-
-            if (!desktopImg && !mobileImg) {
-              return <div key={i} className="absolute inset-0 bg-gradient-to-br from-zinc-900 to-zinc-950" />;
-            }
-
+        <section className="yf-catalogue-hero relative isolate min-h-[760px] overflow-hidden bg-[#0a0a0b] sm:min-h-[830px]">
+          {(carouselItems.length > 0 ? carouselItems : [featured]).map((item, index) => {
+            const active = carouselItems.length === 0 || index === currentIndex;
+            const desktopImage = getHeroImage(item);
+            const mobileImage = getMobileHeroImage(item);
             return (
-              <React.Fragment key={String(m.id ?? 'default') + i}>
-                {mobileImg && (
-                  <img
-                    src={mobileImg}
-                    alt=""
-                    loading={i === 0 ? 'eager' : 'lazy'}
-                    className={`absolute inset-0 h-full w-full object-cover transition-all duration-[1200ms] ease-out sm:hidden ${
-                      mobileIsPoster ? 'object-[center_15%]' : 'object-center'
-                    } ${fade}`}
-                  />
-                )}
-                {desktopImg && (
-                  <img
-                    src={desktopImg}
-                    alt=""
-                    loading={i === 0 ? 'eager' : 'lazy'}
-                    className={`absolute inset-0 hidden h-full w-full object-cover object-center transition-all duration-[1200ms] ease-out sm:block ${fade}`}
-                  />
-                )}
-              </React.Fragment>
+              <picture key={`${item.id ?? 'default'}-${index}`} className={`absolute inset-0 -z-20 transition-opacity duration-1000 motion-reduce:transition-none ${active ? 'opacity-100' : 'opacity-0'}`}>
+                {mobileImage && <source media="(max-width: 639px)" srcSet={mobileImage} />}
+                {(desktopImage || mobileImage) && <img src={desktopImage || mobileImage} alt="" loading={index === 0 ? 'eager' : 'lazy'} className="h-full w-full object-cover object-[center_20%] sm:object-center" />}
+              </picture>
             );
           })}
-
-          <div className="absolute inset-0 hidden bg-gradient-to-r from-[#0a0a0b] via-[#0a0a0b]/60 to-transparent sm:block" />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0b] via-[#0a0a0b]/20 to-black/40 sm:via-transparent sm:to-black/30" />
-          <div className="absolute inset-x-0 bottom-0 h-3/5 bg-gradient-to-t from-[#0a0a0b] via-[#0a0a0b]/70 to-transparent sm:hidden" />
-
-          <div className="absolute inset-x-0 bottom-0 px-4 pb-12 text-center sm:px-10 sm:pb-20 sm:text-left">
-            <div key={String(featured.id ?? 'default')} className="mx-auto max-w-2xl animate-[fadeUp_.6s_ease-out] sm:mx-0">
-              <div className="mb-3 flex items-center justify-center gap-2 sm:justify-start">
-                <span className="rounded-md bg-red-600 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-white">
-                  {featured.type === 'movie' ? 'Film' : 'Série'}
-                </span>
-                <span className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-300">À la une</span>
+          <div className="pointer-events-none absolute inset-0 -z-10 bg-black/20" />
+          <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-r from-[#0a0a0b]/95 via-[#0a0a0b]/50 to-transparent" />
+          <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-t from-[#0a0a0b] via-[#0a0a0b]/20 to-black/30" />
+          <div className="mx-auto flex min-h-[760px] max-w-[1600px] flex-col justify-end px-5 pb-12 pt-32 sm:min-h-[830px] sm:px-10 lg:px-16">
+            <div className="max-w-3xl">
+              <div className="mb-6 flex flex-wrap items-center gap-3">
+                <span className="flex items-center gap-2 rounded-full border border-red-400/25 bg-red-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-red-200 backdrop-blur-md"><Icon name="sparkles" className="h-3.5 w-3.5" />Sous les projecteurs</span>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-300">La sélection Yamonfim</span>
               </div>
-              <h1 className="mb-3 line-clamp-2 text-3xl font-black leading-[1.05] tracking-tight drop-shadow-xl sm:text-6xl">
-                {featured.title}
-              </h1>
-              {featured.description && (
-                <p className="mx-auto mb-6 line-clamp-2 max-w-xl text-sm leading-relaxed text-zinc-300 sm:mx-0 sm:line-clamp-3 sm:text-base">
-                  {featured.description}
-                </p>
-              )}
-
+              <h1 className="max-w-3xl break-words text-5xl font-black leading-[0.98] tracking-[-0.04em] text-white drop-shadow-xl sm:text-7xl lg:text-8xl">{featured.title}</h1>
+              <div className="mt-6 flex flex-wrap items-center gap-3 text-xs text-zinc-300">
+                <span className="font-semibold text-white">{featured.type === 'movie' ? 'Film' : 'Série'}</span>
+                {(featured.genres ?? []).slice(0, 3).map(genre => <span key={genre} className="rounded-md border border-white/15 bg-black/15 px-2.5 py-1 backdrop-blur-sm">{genre}</span>)}
+                {!!featured.runtime && <span>{featured.runtime} min</span>}
+              </div>
+              {featured.description && <p className="mt-5 line-clamp-3 max-w-xl text-sm leading-7 text-zinc-300 sm:text-base sm:leading-8">{featured.description}</p>}
               {featured.id !== null && featured.id !== undefined && (
-                <div className="flex items-center justify-center gap-3 sm:justify-start">
-                  <button
-                    onClick={() => handleMediaClick(featured)}
-                    className="flex cursor-pointer items-center gap-2.5 rounded-full bg-white py-3 pl-5 pr-6 text-sm font-bold text-black shadow-xl shadow-black/40 transition hover:bg-zinc-200 active:scale-[0.97] focus:outline-none focus-visible:ring-4 focus-visible:ring-red-600 sm:py-3.5"
-                  >
-                    {userLimitReached ? <Icon name="lock" className="h-5 w-5" /> : <Icon name="play" className="h-5 w-5" />}
-                    Regarder
-                  </button>
-                  <button
-                    onClick={() => handleMediaClick(featured)}
-                    className="flex cursor-pointer items-center gap-2 rounded-full bg-white/15 py-3 pl-4 pr-5 text-sm font-semibold text-white ring-1 ring-white/20 backdrop-blur-md transition hover:bg-white/25 focus:outline-none focus-visible:ring-4 focus-visible:ring-red-600 sm:py-3.5"
-                  >
-                    <Icon name="info" className="h-5 w-5" /> Détails
-                  </button>
+                <div className="mt-8 flex flex-wrap gap-3">
+                  <button type="button" onClick={() => handleMediaClick(featured)} className="yf-primary inline-flex cursor-pointer items-center gap-3 rounded-xl bg-red-600 px-7 py-4 text-sm font-bold text-white shadow-lg shadow-red-950/40 transition hover:bg-red-500 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-red-400"><Icon name={userLimitReached ? 'lock' : 'play'} className="h-5 w-5" />{userLimitReached ? 'Découvrir le VIP' : 'Regarder maintenant'}</button>
+                  <button type="button" onClick={() => document.getElementById('catalogue-accueil')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })} className="inline-flex cursor-pointer items-center gap-3 rounded-xl border border-white/20 bg-white/5 px-6 py-4 text-sm font-semibold text-white backdrop-blur-md transition hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">Explorer le catalogue<Icon name="chevronRight" className="h-4 w-4" /></button>
                 </div>
               )}
             </div>
+            {carouselItems.length > 1 && (
+              <div className="mt-14 border-t border-white/10 pt-5">
+                <div className="mb-4 flex items-center justify-between"><p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-400">À découvrir ce soir</p><span className="text-xs tabular-nums text-zinc-400"><span className="text-white">{String(currentIndex + 1).padStart(2, '0')}</span>{' / '}{String(carouselItems.length).padStart(2, '0')}</span></div>
+                <div className="flex gap-3 overflow-x-auto pb-3 [scrollbar-width:thin]">
+                  {carouselItems.map((item, index) => {
+                    const active = index === currentIndex;
+                    const image = getHeroImage(item);
+                    return (
+                      <button type="button" key={`${item.id}-${index}`} onClick={() => setCurrentIndex(index)} aria-label={`Afficher ${item.title}`} aria-pressed={active} className={`flex w-56 shrink-0 cursor-pointer items-center gap-3 rounded-xl border p-2 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400 ${active ? 'border-red-400/60 bg-red-500/10' : 'border-white/10 bg-white/[0.03] hover:border-white/30 hover:bg-white/[0.07]'}`}>
+                        <div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-zinc-800">{image && <img src={image} alt="" loading="lazy" className="h-full w-full object-cover" />}</div>
+                        <div className="min-w-0"><p className="truncate text-xs font-semibold text-white">{item.title}</p><p className="mt-1.5 text-[10px] text-zinc-400">{active ? 'À la une' : item.type === 'movie' ? 'Film' : 'Série'}</p></div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
-
-          {carouselItems.length > 1 && (
-            <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1.5 sm:bottom-8 sm:left-auto sm:right-10 sm:translate-x-0">
-              {carouselItems.map((m: MediaItem, i: number) => (
-                <button
-                  key={String(m.id) + i}
-                  onClick={() => setCurrentIndex(i)}
-                  aria-label={`Afficher ${m.title}`}
-                  className={`h-1.5 cursor-pointer rounded-full transition-all duration-300 ${
-                    i === currentIndex ? 'w-8 bg-white' : 'w-3 bg-white/30 hover:bg-white/60'
-                  }`}
-                />
-              ))}
-            </div>
-          )}
         </section>
       ) : (
         <div className="h-16" />
       )}
+
+      {showHero && selectedGenre === 'all' && <DiscoveryLinks />}
 
       {selectedType !== 'all' && (
         <div className="px-4 pt-8 sm:px-10">
@@ -866,7 +830,7 @@ export default function Home() {
         </div>
       )}
 
-      <div className={`relative z-10 space-y-10 px-4 sm:px-10 ${showHero ? '-mt-4 sm:-mt-10' : 'mt-6'}`}>
+      <div id="catalogue-accueil" className={`relative z-10 scroll-mt-24 space-y-10 px-4 sm:px-10 ${showHero ? 'mt-2 sm:mt-4' : 'mt-6'}`}>
         
         {continueWatchingList.length > 0 && !searchQuery && (
           <Row title="Reprendre la lecture" icon={<Icon name="play" className="h-4 w-4 text-red-600" />}>

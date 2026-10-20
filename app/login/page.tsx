@@ -177,7 +177,7 @@ export default function LoginPage() {
     'w-full rounded-xl border border-white/10 bg-white/[0.04] py-3.5 pl-11 pr-4 text-sm text-white placeholder:text-zinc-600 outline-none transition focus:border-red-600/70 focus:bg-white/[0.06] focus:ring-4 focus:ring-red-600/15';
 
   return (
-    <main className="relative flex min-h-screen overflow-hidden bg-[#0a0a0b] font-sans text-white antialiased selection:bg-red-600 selection:text-white">
+    <main className="yf-page yf-auth relative flex min-h-screen overflow-hidden bg-[#0a0a0b] font-sans text-white antialiased selection:bg-red-600 selection:text-white">
 
       {/* ================= Pop-up d'installation ================= */}
       {showInstallModal && (
@@ -253,7 +253,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={handleInstallClick}
-                  className="mb-2 flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-red-600 py-3.5 text-sm font-semibold text-white shadow-lg shadow-red-600/25 transition hover:bg-red-500 active:scale-[0.98]"
+                  className="yf-primary mb-2 flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-red-600 py-3.5 text-sm font-semibold text-white shadow-lg shadow-red-600/25 transition hover:bg-red-500 active:scale-[0.98]"
                 >
                   <Icon name="download" /> Installer maintenant
                 </button>
@@ -323,7 +323,7 @@ export default function LoginPage() {
       </aside>
 
       {/* ================= Formulaire ================= */}
-      <section className="relative flex w-full items-center justify-center px-4 py-10 lg:w-[520px] lg:shrink-0 lg:border-l lg:border-white/5 lg:bg-[#0d0d0f]">
+      <section className="yf-auth-form relative flex w-full items-center justify-center px-4 py-10 lg:w-[520px] lg:shrink-0 lg:border-l lg:border-white/5 lg:bg-[#0d0d0f]">
         {/* Halo rouge */}
         <div className="pointer-events-none absolute -top-48 left-1/2 h-[500px] w-[500px] -translate-x-1/2 rounded-full bg-red-600/15 blur-[130px] lg:hidden" />
 
@@ -466,7 +466,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="group flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-red-600 py-3.5 text-sm font-semibold text-white shadow-lg shadow-red-600/25 transition hover:bg-red-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-red-900/70 disabled:shadow-none"
+              className="yf-primary group flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-red-600 py-3.5 text-sm font-semibold text-white shadow-lg shadow-red-600/25 transition hover:bg-red-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-red-900/70 disabled:shadow-none"
             >
               {loading ? (
                 <>

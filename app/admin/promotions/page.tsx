@@ -1,5 +1,7 @@
 'use client';
 
+import SectionNavigation from '@/components/SectionNavigation';
+import PageHero from '@/components/PageHero';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -201,7 +203,7 @@ export default function AdminPromotionsPage() {
 
   if (checking) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#0a0a0b] text-white">
+      <main className="yf-page yf-promotions flex min-h-screen items-center justify-center bg-[#0a0a0b] text-white">
         <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-red-600" />
       </main>
     );
@@ -210,9 +212,9 @@ export default function AdminPromotionsPage() {
   const previewPromo: Promotion = { ...draft, id: 'preview', title: draft.title || 'Titre de la promotion' };
 
   return (
-    <main className="min-h-screen bg-[#0a0a0b] pb-24 font-sans text-white antialiased selection:bg-red-600 selection:text-white">
+    <main className="yf-page yf-promotions min-h-screen bg-[#0a0a0b] pb-24 font-sans text-white antialiased selection:bg-red-600 selection:text-white">
       {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-white/5 bg-[#0a0a0b]/85 backdrop-blur-xl">
+      <header className="yf-topbar sticky top-0 z-40 border-b border-white/5 bg-[#0a0a0b]/85 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-8">
           <div className="flex items-center gap-3">
             <span className="select-none text-lg font-black tracking-[0.2em] text-red-600">YAMON<span className="text-white">FIM</span></span>
@@ -224,6 +226,7 @@ export default function AdminPromotionsPage() {
           </div>
         </div>
       </header>
+      <SectionNavigation admin />
 
       {/* Notifications */}
       <div className="pointer-events-none fixed inset-x-0 top-20 z-50 flex flex-col items-center gap-2 px-4">
@@ -239,18 +242,11 @@ export default function AdminPromotionsPage() {
       </div>
 
       <div className="mx-auto max-w-7xl px-4 pt-8 sm:px-8">
-        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-black tracking-tight sm:text-4xl">Promotions</h1>
-            <p className="mt-1 text-sm text-zinc-400">
-              Bannières affichées en haut de l'accueil · <span className="text-emerald-300">{onlineCount} en ligne</span> sur {promos.length}
-            </p>
-          </div>
-        </div>
+        <PageHero eyebrow="SOUS LES PROJECTEURS" title="Les bonnes offres" accent="méritent la lumière." description="Compose les promotions de l’accueil, choisis leur audience et garde le contrôle de leur calendrier de diffusion." cardLabel="LES PROMOTIONS" cardTitle="Une offre qui se remarque." cardDetail={`${onlineCount} EN LIGNE · ${promos.length} AU TOTAL`} variant="signal" />
 
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start">
           {/* ================= Formulaire ================= */}
-          <form onSubmit={save} className="space-y-6 rounded-3xl bg-white/[0.03] p-5 ring-1 ring-white/10 sm:p-6">
+          <form onSubmit={save} className="yf-surface space-y-6 rounded-3xl bg-white/[0.03] p-5 ring-1 ring-white/10 sm:p-6">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold">{editingId ? 'Modifier la promotion' : 'Nouvelle promotion'}</h2>
               {editingId && (
@@ -344,7 +340,7 @@ export default function AdminPromotionsPage() {
             </div>
 
             <button type="submit" disabled={saving}
-              className="flex w-full items-center justify-center gap-2 rounded-full bg-red-600 py-3.5 text-sm font-bold shadow-lg shadow-red-600/25 transition hover:bg-red-500 disabled:opacity-60">
+              className="yf-primary flex w-full items-center justify-center gap-2 rounded-full bg-red-600 py-3.5 text-sm font-bold shadow-lg shadow-red-600/25 transition hover:bg-red-500 disabled:opacity-60">
               {saving ? 'Enregistrement…' : editingId ? 'Mettre à jour' : 'Publier la promotion'}
             </button>
           </form>
@@ -379,7 +375,7 @@ export default function AdminPromotionsPage() {
 
                         {confirmDeleteId === p.id ? (
                           <div className="flex shrink-0 items-center gap-1">
-                            <button onClick={() => remove(p.id)} className="rounded-full bg-red-600 px-3 py-1.5 text-xs font-bold hover:bg-red-500">Supprimer</button>
+                            <button onClick={() => remove(p.id)} className="yf-primary rounded-full bg-red-600 px-3 py-1.5 text-xs font-bold hover:bg-red-500">Supprimer</button>
                             <button onClick={() => setConfirmDeleteId(null)} className="px-2 text-xs text-zinc-400 hover:text-white">Non</button>
                           </div>
                         ) : (

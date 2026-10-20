@@ -1,5 +1,7 @@
 'use client';
 
+import SectionNavigation from '@/components/SectionNavigation';
+import PageHero from '@/components/PageHero';
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Hls from 'hls.js';
@@ -89,8 +91,8 @@ export default function TvPage() {
   });
 
   return (
-    <main className="min-h-screen bg-[#121212] text-white font-sans pb-24">
-      <header className="flex items-center justify-between px-6 py-4 bg-[#121212]/90 backdrop-blur-md sticky top-0 z-40 border-b border-zinc-900">
+    <main className="yf-page yf-tv min-h-screen bg-[#121212] text-white font-sans pb-24">
+      <header className="yf-topbar flex items-center justify-between px-6 py-4 bg-[#121212]/90 backdrop-blur-md sticky top-0 z-40 border-b border-zinc-900">
         <button 
           onClick={() => router.push('/')}
           className="flex items-center gap-2 text-xs font-bold text-zinc-300 hover:text-white bg-zinc-900 border border-zinc-800 px-3.5 py-2 rounded-xl transition cursor-pointer"
@@ -101,6 +103,7 @@ export default function TvPage() {
           YAMON<span className="text-white">TV</span>
         </span>
       </header>
+      <SectionNavigation />
 
       {activeChannel && (
         <div className="fixed inset-0 z-50 bg-black/98 backdrop-blur-2xl flex flex-col items-center justify-center p-2 sm:p-6">
@@ -115,7 +118,7 @@ export default function TvPage() {
 
               <button 
                 onClick={() => setActiveChannel(null)}
-                className="bg-red-600 hover:bg-red-500 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer"
+                className="yf-primary bg-red-600 hover:bg-red-500 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer"
               >
                 Fermer ✕
               </button>
@@ -142,10 +145,12 @@ export default function TvPage() {
       )}
 
       <div className="px-6 sm:px-12 pt-8 pb-4 max-w-7xl mx-auto space-y-4">
+        <PageHero eyebrow="LE DIRECT, À TA FAÇON" title="Le programme continue." accent="En direct, cette fois." description="Explore les chaînes disponibles, retrouve ton programme et lance le direct depuis un seul endroit." cardLabel="LA TV EN DIRECT" cardTitle="Le bon moment, c’est maintenant." cardDetail={`${channels.length} CHAÎNES DISPONIBLES`} variant="signal" />
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white">TV en Direct ({channels.length})</h1>
-            <p className="text-xs sm:text-sm text-zinc-400">Chaînes chargées depuis la liste M3U.</p>
+            <p className="yf-eyebrow">LE DIRECT, À TA FAÇON</p>
+            <h2 className="text-lg font-bold text-white">Choisis ta chaîne ({channels.length})</h2>
+            <p className="text-xs sm:text-sm text-zinc-400">Retrouve les chaînes disponibles et choisis ton programme en direct.</p>
           </div>
 
           <input 
@@ -167,7 +172,7 @@ export default function TvPage() {
               <div
                 key={channel.id}
                 onClick={() => setActiveChannel(channel)}
-                className="bg-zinc-900/60 border border-zinc-800/80 hover:border-red-600/50 rounded-xl p-3 flex flex-col items-center justify-between gap-3 cursor-pointer transition transform hover:-translate-y-1 group"
+                className="yf-channel-card bg-zinc-900/60 border border-zinc-800/80 hover:border-red-600/50 rounded-xl p-3 flex flex-col items-center justify-between gap-3 cursor-pointer transition transform hover:-translate-y-1 group"
               >
                 <div className="w-full aspect-video flex items-center justify-center p-2 bg-zinc-950 rounded-lg border border-zinc-800/50">
                   {channel.logo ? (

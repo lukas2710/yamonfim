@@ -78,7 +78,7 @@ export function PromoCard({
 }: { promo: Promotion; onClick?: () => void; onDismiss?: () => void }) {
   const theme = PROMO_THEMES[promo.theme] || PROMO_THEMES.red;
   return (
-    <div className={`relative overflow-hidden rounded-3xl bg-[#111113] ring-1 ${theme.ring}`}>
+    <div className={`relative overflow-hidden rounded-2xl bg-[#111113] ring-1 ${theme.ring}`}>
       {promo.image_url && (
         <img src={promo.image_url} alt="" className="absolute inset-0 h-full w-full object-cover opacity-50" />
       )}

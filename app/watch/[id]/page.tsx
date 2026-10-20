@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { fetchSubscriptionProfile } from '@/lib/subscription';
 
 interface Episode {
   number: number;
@@ -383,11 +384,7 @@ export default function WatchPage() {
         setMedia(item);
 
         if (user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('is_vip, watch_count')
-            .eq('id', user.id)
-            .maybeSingle();
+          const { data: profile } = await fetchSubscriptionProfile(user.id);
 
           if (cancelled) return;
           const vip = user.email === ADMIN_EMAIL || !!profile?.is_vip;
@@ -565,11 +562,7 @@ export default function WatchPage() {
     }
 
     const user = session.user;
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('is_vip, watch_count')
-      .eq('id', user.id)
-      .maybeSingle();
+    const { data: profile } = await fetchSubscriptionProfile(user.id);
 
     if (profile) {
       if (!profile.is_vip && (profile.watch_count || 0) >= MAX_FREE_LIMIT) {
@@ -587,11 +580,7 @@ export default function WatchPage() {
     if (!session) return;
     const user = session.user;
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('is_vip, watch_count')
-      .eq('id', user.id)
-      .maybeSingle();
+    const { data: profile } = await fetchSubscriptionProfile(user.id);
 
     if (profile && !profile.is_vip) {
       const newCount = (profile.watch_count || 0) + 1;
@@ -728,7 +717,7 @@ export default function WatchPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#0a0a0b] text-white">
+      <main className="yf-page yf-watch min-h-screen bg-[#0a0a0b] text-white">
         <div className="h-[60vh] w-full bg-gradient-to-b from-zinc-900 to-[#0a0a0b] animate-pulse" />
         <div className="max-w-7xl mx-auto px-6 sm:px-12 -mt-32 space-y-4">
           <div className="h-5 w-24 rounded-full bg-zinc-800 animate-pulse" />
@@ -741,7 +730,7 @@ export default function WatchPage() {
 
   if (!media) {
     return (
-      <main className="min-h-screen bg-[#0a0a0b] text-white flex flex-col items-center justify-center gap-5 p-6 text-center">
+      <main className="yf-page yf-watch min-h-screen bg-[#0a0a0b] text-white flex flex-col items-center justify-center gap-5 p-6 text-center">
         <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-white/10 flex items-center justify-center text-zinc-500">
           <Icon className="w-7 h-7" name="alert" />
         </div>
@@ -791,7 +780,7 @@ export default function WatchPage() {
   const isAdmin = currentUser?.email === ADMIN_EMAIL;
 
   return (
-    <main className="min-h-screen bg-[#080809] text-white font-sans pb-24 antialiased selection:bg-red-600 selection:text-white">
+    <main className="yf-page yf-watch min-h-screen bg-[#080809] text-white font-sans pb-24 antialiased selection:bg-red-600 selection:text-white">
       {notice && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[80] px-4 w-full max-w-sm pointer-events-none">
           <div className="flex items-center gap-3 bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-2xl px-4 py-3 shadow-2xl">
@@ -862,7 +851,7 @@ export default function WatchPage() {
         <section id="lecteur-video" className="fixed inset-0 z-[100] bg-black flex flex-col overflow-hidden">
           {showAdPopup ? (
             <div className="flex-1 flex items-center justify-center p-4 bg-[radial-gradient(ellipse_at_center,rgba(220,38,38,0.12),transparent_60%)]">
-              <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#111113] p-8 text-center shadow-2xl">
+              <div className="yf-surface w-full max-w-sm rounded-3xl border border-white/10 bg-[#111113] p-8 text-center shadow-2xl">
                 <div className="w-14 h-14 rounded-2xl bg-red-600/10 border border-red-500/20 text-red-500 flex items-center justify-center mx-auto mb-5">
                   <Icon className="w-6 h-6" name="alert" />
                 </div>
@@ -873,7 +862,7 @@ export default function WatchPage() {
                 </p>
                 <button
                   onClick={handleLaunchClick}
-                  className="w-full inline-flex items-center justify-center gap-2 bg-red-600 hover:bg-red-500 text-white font-semibold py-3.5 rounded-full text-sm transition shadow-lg shadow-red-600/30 cursor-pointer active:scale-[0.98]"
+                  className="yf-primary w-full inline-flex items-center justify-center gap-2 bg-red-600 hover:bg-red-500 text-white font-semibold py-3.5 rounded-full text-sm transition shadow-lg shadow-red-600/30 cursor-pointer active:scale-[0.98]"
                 >
                   <Icon className="w-4 h-4" name="play" /> Lancer la vidéo en Plein Écran
                 </button>
@@ -964,7 +953,7 @@ export default function WatchPage() {
 
                     <button
                       onClick={closePlayer}
-                      className="inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-full text-xs font-semibold transition cursor-pointer"
+                      className="yf-primary inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-full text-xs font-semibold transition cursor-pointer"
                     >
                       <Icon name="close" className="w-3.5 h-3.5" /> Fermer
                     </button>
@@ -1307,7 +1296,7 @@ export default function WatchPage() {
         </div>
 
         {currentUser ? (
-          <form onSubmit={handleAddComment} className="rounded-3xl bg-white/[0.03] p-4 sm:p-6 ring-1 ring-white/10 space-y-4">
+          <form onSubmit={handleAddComment} className="yf-surface rounded-3xl bg-white/[0.03] p-4 sm:p-6 ring-1 ring-white/10 space-y-4">
             <textarea
               required
               rows={3}
@@ -1320,7 +1309,7 @@ export default function WatchPage() {
               <button
                 type="submit"
                 disabled={submittingComment}
-                className="inline-flex items-center gap-2 rounded-full bg-red-600 hover:bg-red-500 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-red-600/25 transition cursor-pointer disabled:opacity-50"
+                className="yf-primary inline-flex items-center gap-2 rounded-full bg-red-600 hover:bg-red-500 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-red-600/25 transition cursor-pointer disabled:opacity-50"
               >
                 <Icon name="send" className="w-4 h-4" />
                 {submittingComment ? 'Publication...' : 'Publier le commentaire'}
@@ -1342,7 +1331,7 @@ export default function WatchPage() {
             comments.map(comment => {
               const isAuthor = currentUser?.id === comment.user_id;
               return (
-                <div key={comment.id} className="rounded-2xl bg-white/[0.02] p-4 sm:p-5 ring-1 ring-white/10 space-y-2">
+                <div key={comment.id} className="yf-surface rounded-2xl bg-white/[0.02] p-4 sm:p-5 ring-1 ring-white/10 space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="flex h-7 w-7 items-center justify-center rounded-full bg-red-600/20 text-xs font-bold text-red-400 uppercase">

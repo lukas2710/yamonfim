@@ -1,5 +1,7 @@
 'use client';
 
+import SectionNavigation from '@/components/SectionNavigation';
+import PageHero from '@/components/PageHero';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -341,7 +343,7 @@ export default function RequestsPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#0a0a0b] text-white">
+      <main className="yf-page yf-requests min-h-screen bg-[#0a0a0b] text-white">
         <div className="h-16 border-b border-white/5" />
         <div className="mx-auto max-w-5xl space-y-6 px-4 pt-10 sm:px-10">
           <div className="h-10 w-72 animate-pulse rounded-xl bg-zinc-800" />
@@ -353,10 +355,10 @@ export default function RequestsPage() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-x-hidden bg-[#0a0a0b] pb-24 font-sans text-white antialiased selection:bg-red-600 selection:text-white">
+    <main className="yf-page yf-requests relative min-h-screen overflow-x-hidden bg-[#0a0a0b] pb-24 font-sans text-white antialiased selection:bg-red-600 selection:text-white">
       <div className="pointer-events-none absolute -top-56 left-1/2 h-[560px] w-[560px] -translate-x-1/2 rounded-full bg-red-600/10 blur-[140px]" />
 
-      <header className="sticky top-0 z-40 border-b border-white/5 bg-[#0a0a0b]/85 backdrop-blur-xl">
+      <header className="yf-topbar sticky top-0 z-40 border-b border-white/5 bg-[#0a0a0b]/85 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-10">
           <button
             onClick={() => router.push('/')}
@@ -377,17 +379,12 @@ export default function RequestsPage() {
           )}
         </div>
       </header>
+      <SectionNavigation />
 
       <div className="relative mx-auto max-w-5xl space-y-12 px-4 pt-10 sm:px-10">
-        <section>
-          <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-red-500">Demandes</p>
-          <h1 className="text-3xl font-black tracking-tight sm:text-5xl">Il te manque un film ou une série ?</h1>
-          <p className="mt-3 max-w-xl text-sm leading-relaxed text-zinc-400 sm:text-base">
-            Fais ta demande en quelques secondes. Tu pourras suivre son avancement ici jusqu'à son ajout au catalogue.
-          </p>
-        </section>
+        <PageHero eyebrow="TES ENVIES FONT LE PROGRAMME" title="Le prochain coup de cœur." accent="C’est toi qui proposes." description="Un film introuvable ? Une série à découvrir ? Propose ton titre et suis sa progression jusqu’à son arrivée au catalogue." cardLabel="LES DEMANDES" cardTitle="À toi de faire le programme." cardDetail="PROPOSER · SUIVRE · DÉCOUVRIR" variant="collection"><a href="#nouvelle-demande">Proposer un titre <span aria-hidden="true">↗</span></a></PageHero>
 
-        <section className="rounded-3xl bg-white/[0.03] p-5 ring-1 ring-white/10 sm:p-8">
+        <section id="nouvelle-demande" className="yf-surface rounded-3xl bg-white/[0.03] p-5 ring-1 ring-white/10 sm:p-8">
           {msg && (
             <div role="status" className="mb-6 flex items-start gap-3 rounded-2xl bg-emerald-500/10 px-4 py-3 ring-1 ring-emerald-500/30">
               <Icon name="check" className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
@@ -560,7 +557,7 @@ export default function RequestsPage() {
             <button
               type="submit"
               disabled={!canSubmit}
-              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-red-600 py-4 text-sm font-bold text-white shadow-lg shadow-red-600/25 transition hover:bg-red-500 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-zinc-500 disabled:shadow-none"
+              className="yf-primary flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-red-600 py-4 text-sm font-bold text-white shadow-lg shadow-red-600/25 transition hover:bg-red-500 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-zinc-500 disabled:shadow-none"
             >
               {submitting ? (
                 <>
@@ -689,7 +686,7 @@ export default function RequestsPage() {
                             <div className="flex items-center gap-1">
                               <button
                                 onClick={() => handleDelete(req.id)}
-                                className="cursor-pointer rounded-full bg-red-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-red-500"
+                                className="yf-primary cursor-pointer rounded-full bg-red-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-red-500"
                               >
                                 Supprimer
                               </button>

@@ -1,5 +1,6 @@
 'use client';
 
+import PageHero from '@/components/PageHero';
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -160,16 +161,16 @@ export default function ProfilesPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#0a0a0b] flex items-center justify-center text-white">
+      <main className="yf-page yf-profiles min-h-screen bg-[#0a0a0b] flex items-center justify-center text-white">
         <div className="animate-pulse text-zinc-500 font-medium">Chargement des profils...</div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-[#0a0a0b] text-white flex flex-col items-center justify-center p-6 select-none">
+    <main className="yf-page yf-profiles min-h-screen bg-[#0a0a0b] text-white flex flex-col items-center justify-center p-6 select-none">
       <div className="max-w-4xl w-full text-center space-y-10">
-        <h1 className="text-3xl sm:text-5xl font-black tracking-tight">Qui regarde ?</h1>
+        <PageHero eyebrow="TA PLACE EST RÉSERVÉE" title="Une nouvelle séance." accent="Pour qui, ce soir ?" description="Choisis ton profil et retrouve tes découvertes, tes épisodes et tes habitudes de cinéma." cardLabel="LES PROFILS" cardTitle="À chacun son univers." cardDetail="JUSQU’À 5 PROFILS" variant="collection" />
 
         <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-8">
           {profiles.map(profile => (
@@ -223,7 +224,7 @@ export default function ProfilesPage() {
 
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#141416] border border-white/10 rounded-3xl w-full max-w-xl p-6 sm:p-8 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto [scrollbar-width:none]">
+          <div className="yf-surface bg-[#141416] border border-white/10 rounded-3xl w-full max-w-xl p-6 sm:p-8 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto [scrollbar-width:none]">
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-bold">
                 {editingProfile ? 'Modifier le profil' : 'Créer un profil'}
@@ -293,7 +294,7 @@ export default function ProfilesPage() {
                   </button>
                   <button
                     type="submit"
-                    className="bg-red-600 hover:bg-red-500 text-white font-bold px-6 py-2.5 rounded-full text-sm shadow-lg shadow-red-600/30 transition cursor-pointer"
+                    className="yf-primary bg-red-600 hover:bg-red-500 text-white font-bold px-6 py-2.5 rounded-full text-sm shadow-lg shadow-red-600/30 transition cursor-pointer"
                   >
                     Enregistrer
                   </button>

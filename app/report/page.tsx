@@ -1,5 +1,7 @@
 'use client';
 
+import SectionNavigation from '@/components/SectionNavigation';
+import PageHero from '@/components/PageHero';
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -132,7 +134,7 @@ export default function ReportPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#0a0a0b] text-white">
+      <main className="yf-page yf-report min-h-screen bg-[#0a0a0b] text-white">
         <div className="h-16 border-b border-white/5" />
         <div className="mx-auto max-w-5xl space-y-6 px-4 pt-10 sm:px-10">
           <div className="h-10 w-72 animate-pulse rounded-xl bg-zinc-800" />
@@ -143,8 +145,8 @@ export default function ReportPage() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-x-hidden bg-[#0a0a0b] pb-24 font-sans text-white antialiased">
-      <header className="sticky top-0 z-40 border-b border-white/5 bg-[#0a0a0b]/85 backdrop-blur-xl">
+    <main className="yf-page yf-report relative min-h-screen overflow-x-hidden bg-[#0a0a0b] pb-24 font-sans text-white antialiased">
+      <header className="yf-topbar sticky top-0 z-40 border-b border-white/5 bg-[#0a0a0b]/85 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-10">
           <button
             onClick={() => router.push('/')}
@@ -164,18 +166,13 @@ export default function ReportPage() {
           )}
         </div>
       </header>
+      <SectionNavigation />
 
       <div className="relative mx-auto max-w-5xl space-y-12 px-4 pt-10 sm:px-10">
-        <section>
-          <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-red-500">Support & Améliorations</p>
-          <h1 className="text-3xl font-black tracking-tight sm:text-5xl">Signaler un problème ou proposer une idée</h1>
-          <p className="mt-3 max-w-xl text-sm leading-relaxed text-zinc-400 sm:text-base">
-            Un épisode ne se lance pas ? Un bug d'affichage ou une suggestion d'amélioration ? Dis-le-nous ici.
-          </p>
-        </section>
+        <PageHero eyebrow="ON EST LÀ POUR TA SÉANCE" title="Un souci à l’écran ?" accent="On regarde ça ensemble." description="Un épisode qui bloque, un problème de lecture ou une bonne idée : envoie-nous les détails pour nous aider à améliorer ta prochaine séance." cardLabel="L’ASSISTANCE" cardTitle="Ta séance mérite de continuer." cardDetail="ÉCOUTER · COMPRENDRE · AMÉLIORER" variant="signal"><a href="#nouveau-signalement">Contacter l’assistance <span aria-hidden="true">↗</span></a></PageHero>
 
         {/* Formulaire */}
-        <section className="rounded-3xl bg-white/[0.03] p-5 ring-1 ring-white/10 sm:p-8">
+        <section id="nouveau-signalement" className="yf-surface rounded-3xl bg-white/[0.03] p-5 ring-1 ring-white/10 sm:p-8">
           {msg && (
             <div className="mb-6 rounded-2xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200 ring-1 ring-emerald-500/35">
               {msg}
@@ -260,7 +257,7 @@ export default function ReportPage() {
             <button
               type="submit"
               disabled={submitting}
-              className="flex w-full cursor-pointer items-center justify-center rounded-full bg-red-600 py-4 text-sm font-bold text-white shadow-lg shadow-red-600/25 transition hover:bg-red-500 disabled:opacity-50"
+              className="yf-primary flex w-full cursor-pointer items-center justify-center rounded-full bg-red-600 py-4 text-sm font-bold text-white shadow-lg shadow-red-600/25 transition hover:bg-red-500 disabled:opacity-50"
             >
               {submitting ? 'Envoi en cours...' : 'Envoyer le signalement'}
             </button>
@@ -282,7 +279,7 @@ export default function ReportPage() {
                 const cat = CATEGORIES[report.category] || CATEGORIES.autre;
 
                 return (
-                  <div key={report.id} className="flex flex-col gap-4 rounded-2xl bg-white/[0.03] p-4 ring-1 ring-white/10 sm:flex-row sm:items-center sm:justify-between">
+                  <div key={report.id} className="yf-surface flex flex-col gap-4 rounded-2xl bg-white/[0.03] p-4 ring-1 ring-white/10 sm:flex-row sm:items-center sm:justify-between">
                     <div className="space-y-1.5">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 ${cat.badge}`}>
@@ -324,7 +321,7 @@ export default function ReportPage() {
                       {(isAdmin || mine) && (
                         confirmDeleteId === report.id ? (
                           <div className="flex items-center gap-1">
-                            <button onClick={() => handleDelete(report.id)} className="rounded-full bg-red-600 px-3 py-1 text-xs font-bold text-white">Confirmer</button>
+                            <button onClick={() => handleDelete(report.id)} className="yf-primary rounded-full bg-red-600 px-3 py-1 text-xs font-bold text-white">Confirmer</button>
                             <button onClick={() => setConfirmDeleteId(null)} className="rounded-full bg-white/10 px-3 py-1 text-xs text-zinc-300">Annuler</button>
                           </div>
                         ) : (
