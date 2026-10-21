@@ -4,9 +4,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import WatchPlayer, { type WatchPlayerControl } from '@/components/WatchPlayer';
-import { isDirectVideo, isMoviezPlayer, isCompleted, sameEpisode, playbackProgress, preparePlayerUrl } from '@/lib/watch-progress';
-import { episodeDurationSeconds } from '@/lib/episode-clock';
-import useEstimatedEpisodeClock from '@/components/useEstimatedEpisodeClock';
+import { isDirectVideo, isCompleted, sameEpisode, playbackProgress, preparePlayerUrl } from '@/lib/watch-progress';
+import useDelayedSeen from '@/components/useDelayedSeen';
+import EpisodeQueue from '@/components/EpisodeQueue';
+import WatchDetails from '@/components/WatchDetails';
+import VipQuotaModal from '@/components/VipQuotaModal';
 import './watch.css';
 
 interface Episode {
@@ -55,7 +57,6 @@ const clampIndex = (value: number, length: number) => {
   return Math.min(Math.max(0, Math.trunc(value)), length - 1);
 };
 
-const hasText = (v?: string) => !!v && v.trim() !== '';
 
 const epKey = (s: number, e: number) => `s${s}_e${e}`;
 
@@ -134,12 +135,12 @@ export default function WatchPage() {
   const [showAdPopup, setShowAdPopup] = useState(true);
 
   const [isPlayerPaused, setIsPlayerPaused] = useState(false);
-  const [episodeBanner, setEpisodeBanner] = useState('');
 
   const playerWrapperRef = useRef<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const [isStarting, setIsStarting] = useState(false);
+  const [showVipModal, setShowVipModal] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   const [selectedSeasonIdx, setSelectedSeasonIdx] = useState(0);
@@ -148,7 +149,6 @@ export default function WatchPage() {
   const [resumePos, setResumePos] = useState<Position | null>(null);
   const [hasMovieHistory, setHasMovieHistory] = useState(false);
 
-  const autoPlayEnabled = true;
 
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [newComment, setNewComment] = useState('');
@@ -207,12 +207,6 @@ export default function WatchPage() {
     const t = setTimeout(() => setNotice(null), 4500);
     return () => clearTimeout(t);
   }, [notice]);
-
-  useEffect(() => {
-    if (!episodeBanner) return;
-    const timer = setTimeout(() => setEpisodeBanner(''), 8000);
-    return () => clearTimeout(timer);
-  }, [episodeBanner]);
 
   useEffect(() => {
     if (!isPlaying) return;
@@ -408,7 +402,7 @@ export default function WatchPage() {
       updated_at: new Date().toISOString(),
     };
     resumeProgressRef.current = { position: { s: sIdx, e: eIdx }, time: progress.currentTime, duration: progress.duration };
-    if (current.type === 'series') setResumePos({ s: sIdx, e: sIdx });
+    if (current.type === 'series') setResumePos({ s: sIdx, e: eIdx });
     else setHasMovieHistory(true);
     historyQueueRef.current = historyQueueRef.current.catch(() => {}).then(async () => {
       await supabase.from('watch_history').upsert(payload, { onConflict: 'user_id,profile_id,media_id' });
@@ -533,7 +527,8 @@ export default function WatchPage() {
       if (user.email !== ADMIN_EMAIL) {
         const { data: profile } = await supabase.from('profiles').select('is_vip, watch_count').eq('id', user.id).maybeSingle();
         if (profile && !profile.is_vip && (profile.watch_count || 0) >= 5) {
-          setNotice('Quota de 5 visions gratuites atteint.');
+          if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+          setShowVipModal(true);
           return;
         }
         await supabase.from('profiles').update({ watch_count: (profile?.watch_count || 0) + 1 }).eq('id', user.id);
@@ -634,55 +629,16 @@ export default function WatchPage() {
     await markAsWatched(mediaRef.current?.type === 'series' ? epKey(position.s, position.e) : 'movie_main');
     persistProgress();
     const next = nextPositionOf(mediaRef.current?.seasons, position);
-    if (autoPlayEnabled && next) await startPlaying(next.s, next.e, true);
-    else setNotice(next ? 'Épisode terminé. La suite t’attend.' : 'Lecture terminée. Ton historique est à jour.');
+    setNotice(next ? 'Épisode terminé. La suite t’attend.' : 'Lecture terminée. Ton historique est à jour.');
   };
 
-  const handleEstimatedEpisodeEnd = async () => {
-    if (busyRef.current || endedRef.current) return;
-    endedRef.current = true;
-    const position = lastPlaybackRef.current;
-    const current = mediaRef.current;
-    if (!position || !current) return;
-    const key = epKey(position.s, position.e);
-    if (!current.watched?.[key]) await markAsWatched(key);
-    const next = nextPositionOf(current.seasons, position);
-    if (!next) { setEpisodeBanner('Fin de la série · dernier épisode marqué comme vu'); return; }
-    busyRef.current = true;
-    setIsStarting(true);
-    try {
-      setSelectedSeasonIdx(next.s);
-      setSelectedEpisodeIdx(next.e);
-      const season = current.seasons?.[next.s];
-      const episode = season?.episodes?.[next.e];
-      setEpisodeBanner(`Saison ${season?.seasonNumber || next.s + 1} · Épisode ${episode?.number || next.e + 1}`);
-      await startPlaying(next.s, next.e, true);
-    } catch {
-      setIsPlaying(false);
-      setNotice('Le passage à la suite a échoué.');
-    } finally {
-      busyRef.current = false;
-      setIsStarting(false);
-    }
-  };
-
-  const estimatedDuration = episodeDurationSeconds(media?.seasons?.[selectedSeasonIdx]?.episodes?.[selectedEpisodeIdx]?.runtime, media?.runtime);
-  useEstimatedEpisodeClock({
-    enabled: isPlaying && !showAdPopup && media?.type === 'series' && isMoviezPlayer(stableUrl),
-    episodeKey: `${media?.id}:${selectedSeasonIdx}:${selectedEpisodeIdx}`,
-    durationSeconds: estimatedDuration + 5,
-    paused: isPlayerPaused,
-    getElapsed: () => currentProgressRef.current.currentTime,
-    onProgress: elapsed => {
+  useDelayedSeen(isPlaying && !showAdPopup && !isPlayerPaused,
+    `${media?.id}:${selectedSeasonIdx}:${selectedEpisodeIdx}:${stableUrl}`,
+    () => {
       if (busyRef.current) return;
-      currentProgressRef.current = playbackProgress(elapsed, estimatedDuration);
-      if (isPlayerPaused || Math.abs(elapsed - lastProgressSaveRef.current) >= 10) {
-        lastProgressSaveRef.current = elapsed;
-        persistProgress();
-      }
-    },
-    onEnd: handleEstimatedEpisodeEnd,
-  });
+      const position = lastPlaybackRef.current;
+      if (position) void markAsWatched(mediaRef.current?.type === 'series' ? epKey(position.s, position.e) : 'movie_main');
+    });
 
   const flushProgressRef = useRef(persistProgress);
   useEffect(() => { flushProgressRef.current = persistProgress; });
@@ -729,11 +685,8 @@ export default function WatchPage() {
   const isSeries = media.type === 'series' && !!media.seasons && media.seasons.length > 0;
   const currentSeason = media.seasons?.[selectedSeasonIdx] || media.seasons?.[0];
   const currentEpisode = currentSeason?.episodes?.[selectedEpisodeIdx] || currentSeason?.episodes?.[0];
-  const nextEpisode = nextPositionOf(media.seasons, { s: selectedSeasonIdx, e: selectedEpisodeIdx });
   const w = media.watched || {};
 
-  const desktopBg = hasText(media.backdrop) ? media.backdrop! : media.poster;
-  const mobileBg = hasText(media.poster) ? media.poster : media.backdrop || '';
 
   const episodesCount = currentSeason?.episodes?.length || 0;
 
@@ -760,6 +713,7 @@ export default function WatchPage() {
 
   return (
     <main className="yf-page yf-watch min-h-screen bg-[#080809] text-white font-sans pb-24 antialiased selection:bg-red-600 selection:text-white">
+      {showVipModal && <VipQuotaModal onClose={() => setShowVipModal(false)} />}
       {notice && (
         <div role="status" className="watch-notice fixed top-20 left-1/2 -translate-x-1/2 z-[80] px-4 w-full max-w-sm pointer-events-none">
           <div className="flex items-center gap-3 bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-2xl px-4 py-3 shadow-2xl">
@@ -811,153 +765,31 @@ export default function WatchPage() {
             </div>
           ) : (
             <div ref={playerWrapperRef} className="watch-screen">
-              <header className="watch-player-head">
-                <button onClick={closePlayer} className="watch-icon-button" aria-label="Fermer le lecteur"><Icon name="back" /></button>
-                <div className="watch-player-title"><span className="watch-kicker">EN COURS DE LECTURE</span><h2>{media.title}</h2><p>{isSeries ? 'Saison ' + currentSeason?.seasonNumber + ' · Épisode ' + currentEpisode?.number + (currentEpisode?.title ? ' — ' + currentEpisode.title : '') : 'Ton cinéma, à ta façon.'}</p></div>
-                <span className="watch-save-badge">Suivi par épisode</span>
-                <button onClick={isFullscreen ? exitFullscreenPlayer : requestFullscreenPlayer} className="watch-icon-button" aria-label={isFullscreen ? 'Quitter le plein écran' : 'Plein écran'}><Icon name={isFullscreen ? 'minimize' : 'maximize'} /></button>
-              </header>
-              {episodeBanner && <aside role="status" className="watch-auto-banner"><Icon name="next" /><div><strong>{episodeBanner}</strong><p>Moviez continue la vidéo · suivi estimé selon la durée des épisodes</p></div><button onClick={() => setEpisodeBanner('')} aria-label="Masquer la bannière"><Icon name="close" /></button></aside>}
-              <div className="watch-video-area">
+              <div className="watch-playback-layout"><div className="watch-video-area">
+                <div className="watch-floating-controls" aria-label="Commandes du lecteur">
+                  <button onClick={closePlayer} className="watch-icon-button" aria-label="Fermer le lecteur"><Icon name="back" /></button>
+                  <button onClick={isFullscreen ? exitFullscreenPlayer : requestFullscreenPlayer} className="watch-icon-button" aria-label={isFullscreen ? 'Quitter le plein écran' : 'Plein écran'}><Icon name={isFullscreen ? 'minimize' : 'maximize'} /></button>
+                  {isDirectVideo(stableUrl) && <button className="watch-secondary-button" onClick={() => playerControlRef.current?.togglePause()}><Icon name={isPlayerPaused ? 'play' : 'pause'} />{isPlayerPaused ? 'Reprendre' : 'Pause'}</button>}
+                </div>
                 <WatchPlayer key={stableUrl} src={stableUrl} title={media.title} resumeAt={resumeAt} controlRef={playerControlRef} onProgress={handleProgress} onState={paused => { setIsPlayerPaused(paused); if (paused) persistProgress(); }} onEnded={() => void handlePlaybackEnded()} />
               </div>
-              <footer className="watch-player-foot">
-                <div className="watch-player-status"><span className="watch-status-dot" /><div><strong>{isDirectVideo(stableUrl) ? (isPlayerPaused ? 'Lecture en pause' : 'Progression synchronisée') : isMoviezPlayer(stableUrl) ? (isPlayerPaused ? 'Suivi estimé en pause' : 'Enchaînement automatique · suivi estimé') : 'Épisode suivi dans ton historique'}</strong><p>{isDirectVideo(stableUrl) ? 'Ta position est sauvegardée pendant la lecture.' : isMoviezPlayer(stableUrl) ? 'Si tu mets Moviez en pause, suspends aussi le suivi.' : 'Change d’épisode avec les commandes du site pour conserver le suivi.'}</p></div></div>
-                <div className="watch-player-actions">
-                  {isDirectVideo(stableUrl) && <button className="watch-secondary-button" onClick={() => playerControlRef.current?.togglePause()}><Icon name={isPlayerPaused ? 'play' : 'pause'} />{isPlayerPaused ? 'Reprendre' : 'Pause'}</button>}
-                  {isMoviezPlayer(stableUrl) && <button className="watch-secondary-button" onClick={() => { setIsPlayerPaused(value => !value); if (!isPlayerPaused) setNotice('Suivi suspendu. Mets également la vidéo en pause dans Moviez.'); }}><Icon name={isPlayerPaused ? 'play' : 'pause'} />{isPlayerPaused ? 'Reprendre le suivi' : 'Pause du suivi'}</button>}
-                  {isSeries && nextEpisode && !isMoviezPlayer(stableUrl) && <button disabled={isStarting} className="watch-main-button" onClick={() => void startPlaying(nextEpisode.s, nextEpisode.e, true)}><Icon name="next" />Épisode suivant</button>}
-                  {(!isSeries || !nextEpisode) && <button className="watch-secondary-button" onClick={() => { const position = lastPlaybackRef.current; if (position) void markAsWatched(isSeries ? epKey(position.s, position.e) : 'movie_main'); setNotice('Marqué comme vu.'); }}><Icon name="check" />Marquer comme vu</button>}
-                  <button className="watch-icon-button" onClick={closePlayer} aria-label="Fermer la vidéo"><Icon name="close" /></button>
-                </div>
-              </footer>
+              {isSeries && <EpisodeQueue key={selectedSeasonIdx} seasons={media.seasons || []} active={{ s: selectedSeasonIdx, e: selectedEpisodeIdx }} watched={w} poster={media.poster} disabled={isStarting} onSelect={(s, e) => void startPlaying(s, e, true)} />}
+              </div>
+
             </div>
           )}
         </section>
       )}
 
-      <section className="relative w-full border-b border-white/[0.06]">
-        <div className="relative h-[48svh] min-h-[360px] sm:h-[52vh] sm:min-h-[390px] w-full overflow-hidden">
-          {mobileBg && (
-            <img
-              src={mobileBg}
-              alt=""
-              className={`absolute inset-0 w-full h-full object-cover sm:hidden ${hasText(media.poster) ? 'object-[center_15%]' : 'object-center'}`}
-            />
-          )}
-          {desktopBg && (
-            <img
-              src={desktopBg}
-              alt=""
-              className="absolute inset-0 hidden sm:block w-full h-full object-cover object-center scale-105"
-            />
-          )}
-          <div className="absolute inset-0 hidden sm:block bg-gradient-to-r from-[#0a0a0b] via-[#0a0a0b]/70 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0b] via-[#0a0a0b]/30 to-black/40" />
-          <div className="absolute inset-x-0 bottom-0 h-3/5 bg-gradient-to-t from-[#0a0a0b] via-[#0a0a0b]/70 to-transparent sm:hidden" />
-        </div>
-
-        <div className="absolute inset-x-0 bottom-0">
-          <div className="max-w-7xl mx-auto px-4 sm:px-12 pb-10 flex items-end gap-8">
-            {media.poster && (
-              <img
-                src={media.poster}
-                alt={media.title}
-                className="hidden md:block w-48 lg:w-56 aspect-[2/3] object-cover rounded-2xl ring-1 ring-white/10 shadow-2xl shadow-black/60"
-              />
-            )}
-
-            <div className="flex-1 min-w-0 space-y-4 text-center sm:text-left">
-              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                <span className="text-[11px] uppercase tracking-wider font-semibold text-white bg-red-600 px-2.5 py-1 rounded-md">
-                  {media.type === 'movie' ? 'Film' : 'Série'}
-                </span>
-                {isSeries && (
-                  <span className="text-[11px] uppercase tracking-wider font-semibold text-zinc-300 bg-white/10 backdrop-blur px-2.5 py-1 rounded-md">
-                    {media.seasons!.length} saison{media.seasons!.length > 1 ? 's' : ''}
-                  </span>
-                )}
-                {(seriesDone || (!isSeries && movieSeen)) && (
-                  <span className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-500/25 px-2.5 py-1 rounded-md">
-                    <Icon className="w-3 h-3" name="check" /> {isSeries ? 'Terminée' : 'Vu'}
-                  </span>
-                )}
-              </div>
-
-              <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-[1.05] drop-shadow-lg">
-                {media.title}
-              </h1>
-
-              {media.description && (
-                <p className="mx-auto sm:mx-0 text-sm sm:text-base text-zinc-300 max-w-2xl line-clamp-2 sm:line-clamp-3 leading-relaxed">
-                  {media.description}
-                </p>
-              )}
-
-              {isSeries && totalEpisodes > 0 && (
-                <div className="mx-auto sm:mx-0 flex max-w-sm items-center gap-3">
-                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/15">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${seriesDone ? 'bg-emerald-500' : 'bg-red-600'}`}
-                      style={{ width: `${(seenEpisodes / totalEpisodes) * 100}%` }}
-                    />
-                  </div>
-                  <span className="shrink-0 text-xs font-medium tabular-nums text-zinc-300">
-                    {seenEpisodes} / {totalEpisodes} vus
-                  </span>
-                </div>
-              )}
-
-              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 pt-1">
-                <button
-                  onClick={() => startPlaying(selectedSeasonIdx, selectedEpisodeIdx)}
-                  disabled={isStarting}
-                  className="inline-flex items-center gap-2.5 bg-white hover:bg-zinc-200 text-black font-bold py-3.5 pl-6 pr-7 rounded-full text-sm transition shadow-xl shadow-black/40 cursor-pointer active:scale-[0.97] disabled:opacity-60 disabled:cursor-wait"
-                >
-                  <Icon className="w-5 h-5" name="play" />
-                  {playLabel}
-                </button>
-
-                {isSeries && showRestart && (
-                  <button
-                    onClick={restartFromBeginning}
-                    className="inline-flex items-center gap-2 rounded-full bg-white/10 px-5 py-3.5 text-sm font-semibold text-white ring-1 ring-white/15 backdrop-blur transition hover:bg-white/15 cursor-pointer"
-                  >
-                    <Icon name="restart" /> Depuis le début
-                  </button>
-                )}
-
-                {!isSeries && (
-                  <button
-                    onClick={toggleMovieWatched}
-                    className={`inline-flex items-center gap-2 rounded-full px-5 py-3.5 text-sm font-semibold ring-1 backdrop-blur transition cursor-pointer ${
-                      movieSeen
-                        ? 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30 hover:bg-emerald-500/25'
-                        : 'bg-white/10 text-white ring-white/15 hover:bg-white/15'
-                    }`}
-                  >
-                    <Icon name="check" /> {movieSeen ? 'Vu' : 'Marquer comme vu'}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="watch-follow" aria-label="Suivi de ta séance">
-        <div>
-          <span className="watch-kicker">TA PLACE EST GARDÉE</span>
-          <h2>{isSeries ? 'Un épisode après l’autre.' : 'Reprends le fil de ton film.'}</h2>
-          <p>{isSeries ? 'Les épisodes s’enchaînent dans le lecteur. Le suivi Moviez utilise la durée de chaque épisode pour actualiser automatiquement la bannière, les épisodes vus et ton historique. Si tu fais une pause dans Moviez, mets aussi le suivi en pause.' : 'La fiche et ton historique restent liés à ton profil. La progression précise est conservée lorsque le lecteur permet son suivi.'}</p>
-        </div>
-        <div className="watch-follow-actions">
-          <button className="watch-main-button" onClick={() => void startPlaying(selectedSeasonIdx, selectedEpisodeIdx)} disabled={isStarting}><Icon name="play" />{playLabel}</button>
-        </div>
-      </section>
+      <WatchDetails title={media.title} description={media.description || ''} poster={media.poster} backdrop={media.backdrop}
+        series={isSeries} runtime={media.runtime} seasonCount={media.seasons?.length || 0} seen={seenEpisodes} total={totalEpisodes}
+        watched={isSeries ? seriesDone : movieSeen} playLabel={playLabel}
+        episodeLabel={`Saison ${currentSeason?.seasonNumber || 1} · Épisode ${currentEpisode?.number || 1}${currentEpisode?.title ? ' — ' + currentEpisode.title : ''}`}
+        disabled={isStarting} showRestart={showRestart} onPlay={() => void startPlaying(selectedSeasonIdx, selectedEpisodeIdx)}
+        onRestart={restartFromBeginning} onToggleWatched={() => void toggleMovieWatched()} />
 
       {isSeries && currentSeason && (
-        <section className="watch-episodes-panel max-w-7xl mx-auto px-4 sm:px-8 mt-10 space-y-6">
+        <section id="watch-episodes" className="watch-episodes-panel max-w-7xl mx-auto px-4 sm:px-8 mt-10 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div>
               <h2 className="text-2xl sm:text-3xl font-black tracking-tight">Épisodes <span className="text-red-500">.</span></h2>
@@ -1113,7 +945,7 @@ export default function WatchPage() {
         </section>
       )}
 
-      <section className="max-w-7xl mx-auto px-4 sm:px-8 mt-14 space-y-8 border-t border-white/5 pt-10">
+      <section id={isSeries ? "watch-comments" : "watch-episodes"} className="max-w-7xl mx-auto px-4 sm:px-8 mt-14 space-y-8 border-t border-white/5 pt-10">
         <div>
           <h2 className="text-2xl font-black tracking-tight">Commentaires ({comments.length})</h2>
           <p className="text-sm text-zinc-400 mt-1">Donne ton avis ou discute de ce contenu avec la communauté.</p>

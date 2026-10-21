@@ -319,8 +319,25 @@ export default function Home() {
     checkUserAndFetch();
   }, [router]);
 
-  const handleMediaClick = (item: MediaItem) => {
+  const handleMediaClick = async (item: MediaItem) => {
     if (item.id === undefined || item.id === null) return;
+    let vip = isVip;
+    let count = watchCount;
+    if (currentUserId && userEmail !== ADMIN_EMAIL) {
+      try {
+        const { data: profile } = await fetchSubscriptionProfile(currentUserId);
+        if (profile) {
+          vip = profile.is_vip === true;
+          count = profile.watch_count;
+          setIsVip(vip);
+          setWatchCount(count);
+        }
+      } catch { /* Keep the last known status; playback checks the account again. */ }
+    }
+    if (userEmail !== ADMIN_EMAIL && !vip && count >= MAX_FREE_LIMIT) {
+      setShowVipModal(true);
+      return;
+    }
     if (item.type === 'series' && item.progress) {
       router.push(`/watch/${item.id}?s=${item.progress.seasonIdx}&e=${item.progress.episodeIdx}`);
     } else {
@@ -491,6 +508,9 @@ export default function Home() {
           onClick={() => setShowVipModal(false)}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Promotion VIP : quota gratuit atteint"
             onClick={e => e.stopPropagation()}
             className="relative w-full max-w-md overflow-hidden rounded-3xl border border-amber-500/20 bg-[#111113] shadow-[0_0_80px_-20px_rgba(245,158,11,0.35)]"
           >

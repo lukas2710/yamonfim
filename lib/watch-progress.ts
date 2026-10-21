@@ -21,7 +21,7 @@ export function preparePlayerUrl(value: string, origin: string) {
   const url = new URL(value, origin);
   if (!['http:', 'https:'].includes(url.protocol)) return '';
   if (isDirectVideo(url.href)) return url.href;
-  if (url.hostname === 'api.moviez.ac') url.searchParams.set('next', '1');
+  if (url.hostname === 'api.moviez.ac') url.searchParams.set('next', '0');
   url.searchParams.set('autoplay', '1');
   url.searchParams.set('color', 'e8213f');
   return url.href;
