@@ -14,6 +14,7 @@ const MEMBER_LINKS = [
 const ADMIN_LINKS = [
   { href: '/admin', label: 'Catalogue' },
   { href: '/admin/banners', label: 'Bannières' },
+  { href: '/admin/collections', label: 'Collections' },
   { href: '/admin/promotions', label: 'Promotions' },
   { href: '/admin-vip', label: 'Membres & VIP' },
   { href: '/admin/stats', label: 'Statistiques' },

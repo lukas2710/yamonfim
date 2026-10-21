@@ -1,11 +1,11 @@
 'use client';
 
-import DiscoveryLinks from '@/components/DiscoveryLinks';
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { fetchSubscriptionProfile } from '@/lib/subscription';
 import PromoBanner from '@/components/PromoBanner';
+import HomeCollections from '@/components/HomeCollections';
 
 interface MediaItem {
   id: any;
@@ -733,6 +733,7 @@ export default function Home() {
                         {([
                           { href: '/admin', label: 'Gestion du catalogue', icon: 'shield' },
                           { href: '/admin/banners', label: 'Bannières', icon: 'sparkles' },
+                          { href: '/admin/collections', label: 'Collections', icon: 'film' },
                           { href: '/admin-vip', label: 'Administration VIP', icon: 'crown' },
                           { href: '/admin/stats', label: 'Statistiques', icon: 'chart' },
                         ] as { href: string; label: string; icon: IconName }[]).map(link => (
@@ -817,8 +818,6 @@ export default function Home() {
         <div className="h-16" />
       )}
 
-      {showHero && selectedGenre === 'all' && <DiscoveryLinks />}
-
       {selectedType !== 'all' && (
         <div className="px-4 pt-8 sm:px-10">
           <h1 className="mb-4 text-3xl font-black tracking-tight sm:text-4xl">
@@ -893,6 +892,12 @@ export default function Home() {
               </div>
             ))}
           </Row>
+        )}
+
+        {showHero && selectedGenre === 'all' && (
+          <div className="-mx-4 sm:-mx-10">
+            <HomeCollections catalogue={mediaList} onOpen={item => void handleMediaClick(item)} admin={isAdmin} />
+          </div>
         )}
 
         {isFiltered ? (

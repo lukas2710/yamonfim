@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "./site-theme.css";
+import "./collections.css";
 import PresenceTracker from "@/components/PresenceTracker";
 import SiteFooter from "@/components/SiteFooter";
 
