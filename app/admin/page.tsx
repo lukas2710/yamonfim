@@ -144,13 +144,28 @@ export default function AdminPage() {
   }, [router]);
 
   const fetchMedia = async () => {
-    const { data, error } = await supabase
-      .from('media')
-      .select('*')
-      .order('created_at', { ascending: false });
+    let allData: MediaItem[] = [];
+    let page = 0;
+    const pageSize = 1000;
+    let fetched = true;
 
-    if (!error && data) setMediaList(data);
-    if (error) setErrorMsg('Impossible de charger le catalogue. Actualise la page pour réessayer.');
+    while (fetched) {
+      const { data, error } = await supabase
+        .from('media')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(page * pageSize, (page + 1) * pageSize - 1);
+
+      if (error || !data || data.length === 0) {
+        fetched = false;
+      } else {
+        allData = [...allData, ...data];
+        if (data.length < pageSize) fetched = false;
+        else page++;
+      }
+    }
+
+    setMediaList(allData);
   };
 
   useEffect(() => {
