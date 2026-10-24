@@ -1,8 +1,8 @@
-export interface Plan { id: string; name: string; price: number; days: number; months?: number; tagline: string; badge?: string; stripeLink: string }
+export interface Plan { id: string; name: string; price: number; days: number; months?: number; tagline: string; badge?: string; stripeLink: string; stripePrice: string }
 export const PLANS: Plan[] = [
-  { id: '2w', name: '2 semaines', price: 3.99, days: 14, tagline: 'Pour découvrir à votre rythme', stripeLink: 'https://buy.stripe.com/aFa7sK2HT9tnfaD3qif3a0n' },
-  { id: '3m', name: '3 mois', price: 15, days: 91, months: 3, tagline: 'Pour vos soirées et vos week-ends', badge: 'Notre recommandation', stripeLink: 'https://buy.stripe.com/eVq6oGeqBbBvbYrbWOf3a0m' },
-  { id: '1y', name: '1 an', price: 50, days: 365, months: 12, tagline: 'Pour les passionnés de cinéma', badge: 'Meilleur tarif par jour', stripeLink: 'https://buy.stripe.com/bJedR896h8pjbYrd0Sf3a0o' },
+  { id: '2w', name: '2 semaines', price: 3.99, days: 14, tagline: 'Pour découvrir à votre rythme', stripeLink: 'https://buy.stripe.com/aFa7sK2HT9tnfaD3qif3a0n', stripePrice: 'price_1UQWjnAH8QaNSrdMYkHoxcdi' },
+  { id: '3m', name: '3 mois', price: 15, days: 91, months: 3, tagline: 'Pour vos soirées et vos week-ends', badge: 'Notre recommandation', stripeLink: 'https://buy.stripe.com/eVq6oGeqBbBvbYrbWOf3a0m', stripePrice: 'price_1UPHs1AH8QaNSrdMukuoW5Xd' },
+  { id: '1y', name: '1 an', price: 50, days: 365, months: 12, tagline: 'Pour les passionnés de cinéma', badge: 'Meilleur tarif par jour', stripeLink: 'https://buy.stripe.com/bJedR896h8pjbYrd0Sf3a0o', stripePrice: 'price_1UQWkHAH8QaNSrdMB4qFo6xG' },
 ];
 export const RECOMMENDED_PLAN = '3m';
 const DAYS_PER_MONTH = 365 / 12;
