@@ -17,7 +17,7 @@ export async function POST(request: Request) {
       allow_promotion_codes: true,
       automatic_tax: { enabled: true },
       // Match the site: dark background, red buttons, pill shapes (Stripe refuses a logo in embedded mode).
-      branding_settings: { display_name: 'YAMONFILM', background_color: '#0a0a0b', button_color: '#dc2626', border_style: 'pill', font_family: 'inter', icon: { type: 'url', url: `${origin}/icone.png` }, logo: { type: 'url', url: `${origin}/icone.png` } },
+      branding_settings: { display_name: 'YAMONFILM', background_color: '#0a0a0b', button_color: '#dc2626', border_style: 'pill', font_family: 'inter' },
       customer_email: user.email,
       client_reference_id: user.id,
       metadata: { userId: user.id, planId: plan.id },
