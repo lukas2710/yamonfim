@@ -12,6 +12,7 @@ import { PLANS, RECOMMENDED_PLAN, formatEuro, perMonth, perWeek, savingPercent, 
 import styles from './subscription.module.css';
 import sales from './sales.module.css';
 import MemberReviews from './MemberReviews';
+import EmbeddedPayment, { embeddedPaymentEnabled } from './EmbeddedPayment';
 
 const ADMIN_EMAIL = 'lukas.leclerc312@gmail.com';
 const FREE_LIMIT = 5;
@@ -57,6 +58,8 @@ export default function AbonnementPage() {
   const [selectedId, setSelectedId] = useState(RECOMMENDED_PLAN);
   const [catalogue, setCatalogue] = useState<Poster[]>([]);
   const [redirecting, setRedirecting] = useState(false);
+  const [payingPlan, setPayingPlan] = useState<Plan | null>(null);
+  const [activating, setActivating] = useState(false);
   const [now, setNow] = useState<number | null>(null);
   const [copyState, setCopyState] = useState<'idle' | 'done' | 'error'>('idle');
   const mounted = useRef(false);
@@ -100,6 +103,23 @@ export default function AbonnementPage() {
     fetchCatalogueCards<Poster>(supabase).then(rows => { if (active) setCatalogue(rows); }).catch(() => {});
     return () => { active = false; };
   }, []);
+  // Back from embedded Checkout: the webhook activates VIP within seconds, so poll briefly.
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has('paiement')) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- The return URL is only readable in the browser.
+    setActivating(true);
+    let tries = 0;
+    const timer = setInterval(() => { if (++tries > 15) { clearInterval(timer); setActivating(false); } else void loadAccount(); }, 2000);
+    return () => clearInterval(timer);
+  }, [loadAccount]);
+  useEffect(() => {
+    if (!activating || !account?.vip) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- End the activation wait once the account reads as VIP.
+    setActivating(false);
+    setNotice('Paiement confirmé : ton accès VIP est actif. Bon film !');
+    window.history.replaceState(null, '', '/abonnement');
+  }, [activating, account]);
+  const closePayment = useCallback(() => { setPayingPlan(null); paying.current = false; setRedirecting(false); }, []);
   useEffect(() => {
     if (!account) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -130,6 +150,8 @@ export default function AbonnementPage() {
       if (profileError) throw profileError;
       if (!profile) throw new Error('Votre compte ne peut pas être vérifié. Réessayez avant de payer.');
       if (profile.is_vip === true || profile.is_vip === 'true') { await loadAccount(true); return; }
+      // Embedded Checkout when Stripe keys are configured, payment links otherwise.
+      if (embeddedPaymentEnabled) { setPayingPlan(plan); return; }
       window.location.assign(checkoutUrl(plan, session.user.id, session.user.email ?? ''));
       navigating = true;
     } catch (err) { if (mounted.current) setError(err instanceof Error ? err.message : 'Le paiement ne peut pas être ouvert. Réessayez.'); }
@@ -158,6 +180,7 @@ export default function AbonnementPage() {
       <div className={styles.container}>
         {error && <div className={styles.error} role="alert"><p>{error}</p><button onClick={() => void loadAccount(true)} disabled={refreshing}>{refreshing ? 'Vérification…' : 'Réessayer'}</button></div>}
         {notice && <p className={styles.notice} role="status">{notice}</p>}
+        {activating && <p className={styles.notice} role="status">Paiement reçu, activation de ton accès VIP en cours…</p>}
         {account?.vip && <>
           <section className={styles.hero}>
             <div className={styles.heroCopy}><p className={styles.eyebrow}><span /> FILMS, SÉRIES ET ENVIES DE CINÉMA</p><h1>Tu profites de tout,<br /><em>sans limite.</em></h1><p className={styles.intro}>Votre espace, votre abonnement et tout un catalogue à retrouver. Le plus difficile, c’est de choisir le prochain film.</p><div className={styles.heroActions}><Link className={styles.primary} href="/"><Icon name="play" />Explorer le catalogue</Link><a href="#mon-abonnement" className={styles.textLink}>Mon abonnement <span aria-hidden="true">↗</span></a></div><p className={styles.heroNote}><Icon name="shield" />Les informations de votre compte, au même endroit.</p></div>
@@ -226,8 +249,9 @@ export default function AbonnementPage() {
           <div className={styles.supportIntro}><span className={styles.benefitIcon}><Icon name="help" /></span><p className={styles.eyebrow}>ON RESTE À VOS CÔTÉS</p><h2>Besoin d’un coup de main ?</h2><p>Si vous avez déjà payé, actualisez votre statut avant de recommencer un paiement. Gardez votre reçu Stripe pour faciliter la vérification.</p><div className={styles.supportActions}><Link href="/report" className={styles.secondary}>Contacter l’assistance<Icon name="arrow" /></Link><button className={styles.smallButton} onClick={() => void loadAccount(true)} disabled={refreshing}><Icon name="refresh" />{refreshing ? 'Vérification…' : 'Actualiser mon statut'}</button></div></div>
           <div className={styles.accountDetails}><p className={styles.overline}>À JOINDRE À VOTRE DEMANDE</p><div className={styles.emailDetail}>Email du compte<span>{account?.email || 'Compte non chargé'}</span></div><label htmlFor="client-id">Identifiant client</label><div className={styles.idField}><input id="client-id" readOnly value={account?.id || ''} placeholder="Compte non chargé" /><button onClick={() => void copyId()} disabled={!account} aria-label="Copier votre identifiant client"><Icon name={copyState === 'done' ? 'check' : 'copy'} /></button></div><p className={styles.copyStatus} role="status">{copyState === 'done' ? 'Identifiant copié.' : copyState === 'error' ? 'Copie indisponible. Sélectionnez l’identifiant pour le copier manuellement.' : 'Cet identifiant permet de retrouver votre compte.'}</p><p className={styles.privateNote}><Icon name="shield" />Ne transmettez jamais votre mot de passe ni vos coordonnées bancaires.</p></div>
         </section>
-        <footer className={styles.footer}><Link className={styles.brand} href="/">YAMON<span>FIM</span></Link><span>Les belles histoires commencent par une bonne séance.</span><Link href="/">Retour au catalogue ↗</Link></footer>
+        <footer className={styles.footer}><Link className={styles.brand} href="/">YAMON<span>FIM</span></Link><span>Les belles histoires commencent par une bonne séance.</span><Link href="/conditions">CGU & CGV</Link><Link href="/mentions-legales">Mentions légales</Link><Link href="/confidentialite">Confidentialité</Link></footer>
       </div>
+      {payingPlan && <EmbeddedPayment plan={payingPlan} onClose={closePayment} />}
       {account && !account.vip && <div className={styles.mobileBar}><div><span>VIP {selected.name}</span><strong>{formatEuro(selected.price)}</strong></div><button className={styles.primary} disabled={payDisabled} onClick={() => void subscribe()}>{redirecting ? 'Ouverture…' : 'Choisir'}<Icon name="arrow" /></button></div>}
     </main>
   );
