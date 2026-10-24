@@ -1,5 +1,7 @@
 'use client';
 
+import { getPersistentSession } from '@/lib/auth-session';
+
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -33,7 +35,7 @@ export default function VipActivationPage() {
 
     async function activateVipDirectly() {
       try {
-        const { data: { session }, error: authError } = await supabase.auth.getSession();
+        const { data: { session }, error: authError } = await getPersistentSession();
         if (!active) return;
         if (authError || !session) {
           router.replace('/login');

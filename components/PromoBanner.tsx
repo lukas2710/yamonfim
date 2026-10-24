@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { readClientResource } from '@/lib/resource-cache';
 
 /* ------------------------------------------------------------------ */
 /* Types & thèmes (partagés avec la page admin)                        */
@@ -141,20 +142,15 @@ export default function PromoBanner({ isVip, isAdmin = false }: { isVip: boolean
     // elle réapparaît à chaque retour sur l'accueil. On efface l'ancien masquage permanent.
     try { localStorage.removeItem(DISMISS_KEY); } catch { /* stockage indisponible */ }
 
-    supabase
-      .from('promotions')
-      .select('*')
-      .eq('active', true)
-      .order('priority', { ascending: false })
-      .order('created_at', { ascending: false })
-      .then(({ data, error }) => {
-        if (error) {
-          console.error('Erreur promotions :', error);
-          setLoadError(error.message);
-        }
-        setPromos((data as Promotion[]) || []);
-        setLoaded(true);
-      });
+    let alive = true;
+    readClientResource<Promotion[]>('home:promotions', async () => {
+      const { data, error } = await supabase.from('promotions').select('*').eq('active', true)
+        .order('priority', { ascending: false }).order('created_at', { ascending: false });
+      if (error) throw error; return (data as Promotion[]) || [];
+    }).then(data => { if (alive) setPromos(data); })
+      .catch(() => { if (alive) setLoadError('Promotions indisponibles'); })
+      .finally(() => { if (alive) setLoaded(true); });
+    return () => { alive = false; };
   }, []);
 
   const visible = useMemo(() => {

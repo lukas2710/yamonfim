@@ -1,3 +1,4 @@
+import { fetchCatalogueRows } from '@/lib/catalogue';
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseUrl, supabaseAnonKey } from '@/lib/supabase';
@@ -18,9 +19,10 @@ async function authenticatedClient(request: Request) {
 export async function GET(request: Request) {
   const account = await authenticatedClient(request);
   if (!account) return NextResponse.json({ error: 'Connexion requise' }, { status: 401 });
-  const { data, error } = await account.client.from('media').select('*').order('created_at', { ascending: false });
-  if (error) return NextResponse.json({ error: 'Catalogue indisponible' }, { status: 502 });
-  return NextResponse.json(data, { headers: { 'Cache-Control': 'no-store' } });
+  try {
+    const data = await fetchCatalogueRows(account.client, '*');
+    return NextResponse.json(data, { headers: { 'Cache-Control': 'no-store' } });
+  } catch { return NextResponse.json({ error: 'Catalogue indisponible' }, { status: 502 }); }
 }
 
 export async function POST(request: Request) {

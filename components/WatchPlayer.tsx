@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
-import Hls from 'hls.js';
+import type Hls from 'hls.js';
 import { isDirectVideo, playbackProgress } from '@/lib/watch-progress';
 
 export interface WatchPlayerControl { togglePause: () => void }
@@ -30,6 +30,7 @@ export default function WatchPlayer({ src, title, resumeAt, controlRef, onProgre
     if (!direct || !videoRef.current) return;
     const video = videoRef.current;
     let hls: Hls | null = null;
+    let disposed = false;
     let restored = false;
     const progress = () => {
       const value = playbackProgress(video.currentTime, video.duration);
@@ -56,12 +57,16 @@ export default function WatchPlayer({ src, title, resumeAt, controlRef, onProgre
     video.addEventListener('ended', ended);
     video.addEventListener('error', failed);
     if (/\.m3u8(?:\?|$)/i.test(src) && !video.canPlayType('application/vnd.apple.mpegurl')) {
-      if (Hls.isSupported()) {
-        hls = new Hls(); hls.loadSource(src); hls.attachMedia(video);
-        hls.on(Hls.Events.ERROR, (_, data) => { if (data.fatal) failed(); });
-      } else queueMicrotask(failed);
+      void import('hls.js').then(({ default: Hls }) => {
+        if (disposed) return;
+        if (Hls.isSupported()) {
+          hls = new Hls(); hls.loadSource(src); hls.attachMedia(video);
+          hls.on(Hls.Events.ERROR, (_, data) => { if (data.fatal) failed(); });
+        } else failed();
+      }).catch(() => { if (!disposed) failed(); });
     } else video.src = src;
     return () => {
+      disposed = true;
       video.removeEventListener('loadedmetadata', restore); video.removeEventListener('timeupdate', progress);
       video.removeEventListener('seeked', progress); video.removeEventListener('play', playing);
       video.removeEventListener('pause', paused); video.removeEventListener('ended', ended); video.removeEventListener('error', failed);

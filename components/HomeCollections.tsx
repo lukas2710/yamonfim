@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { collectionItems, safeCollectionImage, type CollectionMedia, type MediaCollection } from '@/lib/collections';
+import { readClientResource } from '@/lib/resource-cache';
+import { safeCollectionImage, type CollectionMedia, type MediaCollection } from '@/lib/collections';
 
 export default function HomeCollections<T extends CollectionMedia>({ catalogue, onOpen, admin }: { catalogue: T[]; onOpen: (item: T) => void; admin: boolean }) {
   const [collections, setCollections] = useState<MediaCollection[]>([]);
@@ -15,8 +16,11 @@ export default function HomeCollections<T extends CollectionMedia>({ catalogue, 
     let alive = true;
     async function load() {
       try {
-        const { data, error } = await supabase.from('media_collections').select('*').eq('active', true).order('position').order('created_at');
-        if (alive) { setCollections(data || []); setError(!!error); }
+        const data = await readClientResource<MediaCollection[]>('home:collections', async () => {
+          const result = await supabase.from('media_collections').select('*').eq('active', true).order('position').order('created_at');
+          if (result.error) throw result.error; return result.data || [];
+        });
+        if (alive) { setCollections(data); setError(false); }
       } catch { if (alive) setError(true); }
     }
     void load();
@@ -27,7 +31,10 @@ export default function HomeCollections<T extends CollectionMedia>({ catalogue, 
     panel.current?.focus({ preventScroll: true });
     panel.current?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
   }, [selected]);
-  const visible = collections.map(collection => ({ collection, items: collectionItems(collection, catalogue) })).filter(group => group.items.length);
+  const visible = useMemo(() => {
+    const index = new Map(catalogue.map(item => [String(item.id), item]));
+    return collections.map(collection => ({ collection, items: [...new Set(collection.media_ids)].flatMap(id => { const item = index.get(String(id)); return item ? [item] : []; }) })).filter(group => group.items.length);
+  }, [collections, catalogue]);
   const current = visible.find(group => group.collection.id === selected);
   if (!visible.length && !admin) return null;
   return <section className="yf-collections" aria-labelledby="collections-title">

@@ -1,3 +1,4 @@
+import { clearClientResources } from './resource-cache';
 import { createClient } from '@supabase/supabase-js'
 
 export const supabaseUrl = 'https://nftiussedwyjheqrmlbw.supabase.co'
@@ -10,3 +11,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: true,
   },
 })
+
+// Auth events must not retain metadata loaded under a previous account.
+if (typeof window !== 'undefined') {
+  supabase.auth.onAuthStateChange(() => { clearClientResources(); });
+}

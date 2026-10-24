@@ -2,10 +2,15 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { getPersistentSession } from '@/lib/auth-session';
 import { supabase } from '@/lib/supabase';
+import { loadWatchMedia } from '@/lib/client-media';
+import { withTimeout } from '@/lib/with-timeout';
 import WatchPlayer, { type WatchPlayerControl } from '@/components/WatchPlayer';
 import { isDirectVideo, isCompleted, sameEpisode, playbackProgress, preparePlayerUrl } from '@/lib/watch-progress';
 import useDelayedSeen from '@/components/useDelayedSeen';
+import useEstimatedEpisodeClock from '@/components/useEstimatedEpisodeClock';
+import { episodeDurationSeconds } from '@/lib/episode-clock';
 import EpisodeQueue from '@/components/EpisodeQueue';
 import WatchDetails from '@/components/WatchDetails';
 import VipQuotaModal from '@/components/VipQuotaModal';
@@ -127,10 +132,14 @@ export default function WatchPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { id } = params;
+  const id = typeof params.id === 'string' ? params.id : null;
+  const requestedSeason = searchParams.get('s');
+  const requestedEpisode = searchParams.get('e');
 
   const [media, setMedia] = useState<MediaItem | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryLoad, setRetryLoad] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showAdPopup, setShowAdPopup] = useState(true);
 
@@ -270,8 +279,9 @@ export default function WatchPage() {
   };
 
   useEffect(() => {
-    if (!id) return;
+    if (!id) { setLoading(false); setLoadError('Le lien de ce contenu est invalide.'); return; }
     let cancelled = false;
+    const controller = new AbortController();
 
     async function fetchMediaAndHistory() {
       try {
@@ -283,45 +293,31 @@ export default function WatchPage() {
         endedRef.current = false;
         setIsPlaying(false);
         setLoading(true);
+        setLoadError(null);
+        setCurrentUser(null);
+        userIdRef.current = null;
+        setComments([]);
         setResumePos(null);
         setHasMovieHistory(false);
         setMedia(null);
         mediaRef.current = null;
 
-        const [mediaRes, sessionRes] = await Promise.all([
-          supabase.from('media').select('*').eq('id', id).single(),
-          supabase.auth.getSession()
-        ]);
-
+        // Session refresh and auxiliary data must not hold the detail page hostage.
+        const sessionTask = withTimeout(getPersistentSession(), 12000, 'La session met trop de temps à répondre.')
+          .then(result => {
+            if (result.error) throw result.error;
+            const user = result.data.session?.user || null;
+            if (!cancelled) { setCurrentUser(user); userIdRef.current = user?.id || null; }
+            return user;
+          }).catch(() => {
+            if (!cancelled) setNotice('La session ne répond pas. Actualise la page si la lecture ne démarre pas.');
+            return null;
+          });
+        const mediaData = await loadWatchMedia<MediaItem>(String(id));
         if (cancelled) return;
-
-        const mediaData = mediaRes.data;
-        const error = mediaRes.error;
-        if (error || !mediaData) {
-          setLoading(false);
-          return;
-        }
-
-        const user = sessionRes.data.session?.user;
-        setCurrentUser(user || null);
-        userIdRef.current = user?.id || null;
-
-        fetchComments(String(id));
-
+        if (!mediaData) { setLoadError('Ce contenu n’existe pas ou n’est plus disponible.'); return; }
+        void fetchComments(String(id)).catch(() => { /* Comments do not block playback. */ });
         const userWatched: Record<string, boolean> = {};
-        
-        if (user) {
-          supabase
-            .from('user_watched')
-            .select('ep_key')
-            .eq('user_id', user.id)
-            .eq('media_id', String(mediaData.id))
-            .then(({ data: watchedRows }) => {
-              if (cancelled) return;
-              (watchedRows || []).forEach((r: any) => { userWatched[r.ep_key] = true; });
-              setMedia(prev => prev ? { ...prev, watched: { ...prev.watched, ...userWatched } } : prev);
-            });
-        }
 
         const item: MediaItem = { ...(mediaData as MediaItem), watched: userWatched };
         mediaRef.current = item;
@@ -332,8 +328,8 @@ export default function WatchPage() {
         let eIdx = 0;
         let fromHistory = false;
 
-        const sParam = searchParams.get('s');
-        const eParam = searchParams.get('e');
+        const sParam = requestedSeason;
+        const eParam = requestedEpisode;
 
         if (sParam !== null && eParam !== null) {
           sIdx = parseInt(sParam, 10);
@@ -341,30 +337,33 @@ export default function WatchPage() {
           fromHistory = true;
         }
 
-        if (user) {
-          let historyQuery = supabase
-            .from('watch_history')
-            .select('*')
-            .eq('user_id', user.id)
-            .eq('media_id', String(id));
-
-          if (profileIdRef.current) {
-            historyQuery = historyQuery.eq('profile_id', profileIdRef.current);
+        void sessionTask.then(async user => {
+          if (cancelled || !user) return;
+          const watchedTask = supabase.from('user_watched').select('ep_key')
+            .eq('user_id', user.id).eq('media_id', String(mediaData.id)).abortSignal(controller.signal);
+          let historyQuery = supabase.from('watch_history').select('*').eq('user_id', user.id).eq('media_id', String(id));
+          if (profileIdRef.current) historyQuery = historyQuery.eq('profile_id', profileIdRef.current);
+          const [watchedRes, historyRes] = await Promise.all([
+            watchedTask, historyQuery.abortSignal(controller.signal).maybeSingle()
+          ]);
+          if (cancelled) return;
+          (watchedRes.data || []).forEach((row: { ep_key: string }) => { userWatched[row.ep_key] = true; });
+          setMedia(prev => prev ? { ...prev, watched: { ...prev.watched, ...userWatched } } : prev);
+          const userHistory = historyRes.data;
+          // A slow history response must never move an episode the user has already launched.
+          if (!userHistory || lastPlaybackRef.current) return;
+          const seasons = item.seasons || [];
+          const historySeason = clampIndex(userHistory.season_idx || 0, seasons.length);
+          const historyEpisode = clampIndex(userHistory.episode_idx || 0, seasons[historySeason]?.episodes?.length || 0);
+          if (sParam === null || eParam === null) {
+            setSelectedSeasonIdx(historySeason); setSelectedEpisodeIdx(historyEpisode);
+            posRef.current = { s: historySeason, e: historyEpisode };
           }
-
-          historyQuery.maybeSingle().then(({ data: userHistory }) => {
-            if (cancelled || !userHistory) return;
-            if (sParam === null || eParam === null) {
-              setSelectedSeasonIdx(userHistory.season_idx || 0);
-              setSelectedEpisodeIdx(userHistory.episode_idx || 0);
-              posRef.current = { s: userHistory.season_idx || 0, e: userHistory.episode_idx || 0 };
-            }
-            resumeProgressRef.current = { position: { s: userHistory.season_idx || 0, e: userHistory.episode_idx || 0 }, time: userHistory.current_time || 0, duration: userHistory.duration || 0 };
-            lastPlaybackRef.current = resumeProgressRef.current.position;
-            if (item.type === 'series') setResumePos({ s: userHistory.season_idx || 0, e: userHistory.episode_idx || 0 });
-            else setHasMovieHistory(true);
-          });
-        }
+          resumeProgressRef.current = { position: { s: historySeason, e: historyEpisode }, time: userHistory.current_time || 0, duration: userHistory.duration || 0 };
+          lastPlaybackRef.current = resumeProgressRef.current.position;
+          if (item.type === 'series') setResumePos({ s: historySeason, e: historyEpisode });
+          else setHasMovieHistory(true);
+        }).catch(() => { /* A history failure must not hide the media page. */ });
 
         const seasons = item.seasons || [];
         const safeSeason = clampIndex(sIdx, seasons.length);
@@ -375,16 +374,19 @@ export default function WatchPage() {
         if (fromHistory && item.type === 'series') setResumePos({ s: safeSeason, e: safeEpisode });
 
       } catch (err) {
-        console.error('Erreur chargement:', err);
-        setLoading(false);
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Le contenu n’a pas pu être chargé.');
+        controller.abort();
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     }
 
     fetchMediaAndHistory();
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [id, searchParams]);
+  }, [id, requestedSeason, requestedEpisode, retryLoad]);
 
   const saveWatchHistory = (sIdx: number, eIdx: number, currentTime = 0, duration = 0): Promise<void> => {
     const current = mediaRef.current;
@@ -518,7 +520,7 @@ export default function WatchPage() {
       const playerUrl = getCleanEmbedUrl(raw);
       if (!playerUrl) { setNotice('Aucun lecteur disponible pour cet épisode.'); return; }
 
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await getPersistentSession();
       if (!session) {
         setNotice('Connecte-toi pour lancer la lecture.');
         return;
@@ -640,6 +642,27 @@ export default function WatchPage() {
       if (position) void markAsWatched(mediaRef.current?.type === 'series' ? epKey(position.s, position.e) : 'movie_main');
     });
 
+  // Lecteurs intégrés (Moviez…) : ils ne donnent pas leur position. Le temps passé lecteur ouvert
+  // sert d'estimation, pour la progression et la règle « vu à 70 % » de « Reprendre ».
+  const estimatedEpisode = media?.seasons?.[selectedSeasonIdx]?.episodes?.[selectedEpisodeIdx];
+  useEstimatedEpisodeClock({
+    enabled: isPlaying && !showAdPopup && !!stableUrl && !isDirectVideo(stableUrl),
+    episodeKey: `${media?.id}:${selectedSeasonIdx}:${selectedEpisodeIdx}:${stableUrl}`,
+    durationSeconds: episodeDurationSeconds(estimatedEpisode?.runtime, media?.runtime),
+    paused: false,
+    getElapsed: () => currentProgressRef.current.currentTime,
+    onProgress: elapsed => {
+      if (busyRef.current) return;
+      const duration = episodeDurationSeconds(estimatedEpisode?.runtime, media?.runtime);
+      currentProgressRef.current = playbackProgress(elapsed, duration);
+      if (Math.abs(elapsed - lastProgressSaveRef.current) >= 30) {
+        lastProgressSaveRef.current = elapsed;
+        persistProgress();
+      }
+    },
+    onEnd: async () => { persistProgress(); },
+  });
+
   const flushProgressRef = useRef(persistProgress);
   useEffect(() => { flushProgressRef.current = persistProgress; });
   useEffect(() => {
@@ -669,9 +692,10 @@ export default function WatchPage() {
           <Icon className="w-7 h-7" name="alert" />
         </div>
         <div className="space-y-1">
-          <h1 className="text-lg font-bold">Média introuvable</h1>
-          <p className="text-sm text-zinc-400">Ce contenu n'existe pas ou n'est plus disponible.</p>
+          <h1 className="text-lg font-bold">Impossible d’afficher ce contenu</h1>
+          <p role="alert" className="max-w-md text-sm text-zinc-400">{loadError || 'Ce contenu n’existe pas ou n’est plus disponible.'}</p>
         </div>
+        <button onClick={() => setRetryLoad(value => value + 1)} className="min-h-11 rounded-full bg-red-600 px-6 py-3 text-sm font-semibold text-white hover:bg-red-500">Réessayer</button>
         <button
           onClick={() => router.push('/')}
           className="inline-flex items-center gap-2 bg-white text-black hover:bg-zinc-200 px-5 py-2.5 rounded-full text-sm font-semibold transition cursor-pointer"
@@ -812,36 +836,47 @@ export default function WatchPage() {
           </div>
 
           {media.seasons!.length > 1 && (
-            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {media.seasons!.map((season, sIdx) => {
-                const isSelected = selectedSeasonIdx === sIdx;
-                const seen = seasonSeen(sIdx);
-                const done = season.episodes.length > 0 && seen === season.episodes.length;
-                return (
-                  <button
-                    key={sIdx}
-                    onClick={() => {
-                      if (sIdx === selectedSeasonIdx) return;
-                      if (isPlaying) { void startPlaying(sIdx, 0, true); return; }
-                      setSelectedSeasonIdx(sIdx);
-                      setSelectedEpisodeIdx(0);
-                    }}
-                    className={`inline-flex shrink-0 items-center gap-1.5 px-5 py-2 rounded-full text-sm font-semibold transition cursor-pointer ${
-                      isSelected
-                        ? 'bg-white text-black'
-                        : 'bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10 border border-white/10'
-                    }`}
-                  >
-                    {done && <Icon name="check" className={`w-3.5 h-3.5 ${isSelected ? 'text-emerald-600' : 'text-emerald-400'}`} />}
-                    Saison {season.seasonNumber}
-                    {!done && seen > 0 && (
-                      <span className={`text-[11px] tabular-nums ${isSelected ? 'text-zinc-500' : 'text-zinc-500'}`}>
-                        {seen}/{season.episodes.length}
+            <div className="-mx-1">
+              <div className="flex snap-x snap-mandatory scroll-px-1 gap-2.5 overflow-x-auto px-1 pb-2 pt-1 [mask-image:linear-gradient(90deg,#000_calc(100%-28px),transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {media.seasons!.map((season, sIdx) => {
+                  const isSelected = selectedSeasonIdx === sIdx;
+                  const seen = seasonSeen(sIdx);
+                  const total = season.episodes.length;
+                  const done = total > 0 && seen === total;
+                  const percent = total > 0 ? Math.round((seen / total) * 100) : 0;
+                  return (
+                    <button
+                      key={sIdx}
+                      type="button"
+                      aria-pressed={isSelected}
+                      aria-label={`Saison ${season.seasonNumber}, ${seen} épisode${seen > 1 ? 's' : ''} vu${seen > 1 ? 's' : ''} sur ${total}`}
+                      onClick={() => {
+                        if (sIdx === selectedSeasonIdx) return;
+                        if (isPlaying) { void startPlaying(sIdx, 0, true); return; }
+                        setSelectedSeasonIdx(sIdx);
+                        setSelectedEpisodeIdx(0);
+                      }}
+                      className={`relative flex w-[88px] shrink-0 snap-start flex-col items-start overflow-hidden rounded-2xl border px-3.5 pb-3 pt-2.5 text-left transition duration-200 cursor-pointer active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 ${
+                        isSelected
+                          ? 'border-red-500/70 bg-gradient-to-br from-red-600/30 to-red-950/40 shadow-[0_10px_30px_-14px_rgba(239,68,68,0.9)]'
+                          : 'border-white/10 bg-white/[0.04] hover:border-white/25 hover:bg-white/[0.08]'
+                      }`}
+                    >
+                      <span className={`text-[9px] font-bold uppercase tracking-[0.18em] ${isSelected ? 'text-red-200' : 'text-zinc-500'}`}>Saison</span>
+                      <span className={`mt-0.5 text-2xl font-black leading-none tabular-nums ${isSelected ? 'text-white' : 'text-zinc-300'}`}>{season.seasonNumber}</span>
+                      <span className="mt-2 text-[10px] tabular-nums text-zinc-400">{done ? 'Terminée' : `${seen}/${total} vus`}</span>
+                      <span className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-white/10">
+                        <span className={`block h-full rounded-full ${done ? 'bg-emerald-400' : 'bg-red-500'}`} style={{ width: `${percent}%` }} />
                       </span>
-                    )}
-                  </button>
-                );
-              })}
+                      {done && (
+                        <span className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white">
+                          <Icon name="check" className="h-2.5 w-2.5" />
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 

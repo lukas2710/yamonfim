@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.env*
+.supabase
+*.sst
+*.zip
+*.pack
+modules
+android-apk
+android-tv-apk

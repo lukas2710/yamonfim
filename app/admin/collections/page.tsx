@@ -1,5 +1,12 @@
 'use client';
 
+import { getPersistentSession } from '@/lib/auth-session';
+
+import { clearClientResources } from '@/lib/resource-cache';
+
+import { fetchCatalogueRows } from '@/lib/catalogue';
+import { createSearchMatcher } from '@/lib/search';
+
 import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -35,20 +42,12 @@ export default function AdminCollectionsPage() {
     let alive = true;
     async function load() {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session } } = await getPersistentSession();
         if (!session || session.user.email?.toLowerCase() !== ADMIN_EMAIL) { router.replace('/'); return; }
         if (!alive) return;
         setAuthorized(true);
         const [media, groups] = await Promise.all([
-          (async () => {
-            const all: CollectionMedia[] = [];
-            for (let offset = 0; ; offset += 1000) {
-              const result = await supabase.from('media').select('id,title,type,poster,backdrop').order('id').range(offset, offset + 999);
-              if (result.error) throw result.error;
-              all.push(...(result.data || []));
-              if ((result.data?.length || 0) < 1000) return all;
-            }
-          })(),
+          fetchCatalogueRows<CollectionMedia>(supabase, 'id,title,type,poster,backdrop'),
           supabase.from('media_collections').select('*').order('position').order('created_at'),
         ]);
         if (!alive) return;
@@ -63,6 +62,7 @@ export default function AdminCollectionsPage() {
   }, [router]);
 
   async function refresh() {
+    clearClientResources();
     const { data, error } = await supabase.from('media_collections').select('*').order('position').order('created_at');
     if (error) throw error;
     setCollections(data || []);
@@ -95,6 +95,7 @@ export default function AdminCollectionsPage() {
     if (busy) return;
     setBusy(true); setError(''); setMessage('');
     try {
+      clearClientResources();
       const { error } = await supabase.from('media_collections').update({ active: !collection.active }).eq('id', collection.id).select('id').single();
       if (error) { setError(storageError(error.code)); return; }
       await refresh();
@@ -104,7 +105,7 @@ export default function AdminCollectionsPage() {
     finally { setBusy(false); }
   }
   const selected = collectionItems(draft, catalogue);
-  const filtered = catalogue.filter(item => item.title.toLocaleLowerCase('fr').includes(search.toLocaleLowerCase('fr')));
+  const filtered = catalogue.filter(item => createSearchMatcher(search)(item.title));
   const cover = safeCollectionImage(draft.cover_url) || selected[0]?.backdrop || selected[0]?.poster;
   if (!authorized) return <main className="yf-page min-h-screen bg-[#0a0a0b] p-10 text-zinc-400" role="status">Vérification de l’accès administrateur…</main>;
 

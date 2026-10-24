@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { getPersistentSession } from '@/lib/auth-session';
 import { supabase } from '@/lib/supabase';
 
 /* ------------------------------------------------------------------ */
@@ -55,6 +56,7 @@ const translateSignUpError = (message: string) => {
 export default function LoginPage() {
   const router = useRouter();
 
+  const [checkingSession, setCheckingSession] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
@@ -63,6 +65,26 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const restore = () => { void getPersistentSession().then(({ data: { session } }) => {
+      if (!alive) return;
+      if (!session) { setCheckingSession(false); return; }
+      let destination = '/profiles';
+      try {
+        const profile = JSON.parse(localStorage.getItem('active_profile') || 'null');
+        if (profile?.id && profile.user_id === session.user.id) destination = '/';
+      } catch { /* An invalid profile does not invalidate the account session. */ }
+      router.replace(destination);
+    }).catch(() => {
+      if (alive) { setCheckingSession(false); setErrorMsg('La connexion enregistrée ne peut pas être vérifiée pour le moment. Vérifie ta connexion Internet puis réessaie.'); }
+    }); };
+    restore();
+    window.addEventListener('online', restore);
+    window.addEventListener('pageshow', restore);
+    return () => { alive = false; window.removeEventListener('online', restore); window.removeEventListener('pageshow', restore); };
+  }, [router]);
 
   // Pop-up d'installation
   const [showInstallModal, setShowInstallModal] = useState(false);
@@ -75,13 +97,10 @@ export default function LoginPage() {
       (window.navigator as any).standalone === true;
     if (isStandalone) return;
 
-    // Affiche le pop-up automatiquement après 800ms (comme avant)
-    const timer = setTimeout(() => setShowInstallModal(true), 800);
 
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      setShowInstallModal(true);
     };
 
     const handleInstalled = () => {
@@ -93,7 +112,6 @@ export default function LoginPage() {
     window.addEventListener('appinstalled', handleInstalled);
 
     return () => {
-      clearTimeout(timer);
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('appinstalled', handleInstalled);
     };
@@ -176,6 +194,8 @@ export default function LoginPage() {
 
   const inputClass =
     'w-full rounded-xl border border-white/10 bg-white/[0.04] py-3.5 pl-11 pr-4 text-sm text-white placeholder:text-zinc-600 outline-none transition focus:border-red-600/70 focus:bg-white/[0.06] focus:ring-4 focus:ring-red-600/15';
+
+  if (checkingSession) return <main className="yf-page yf-auth flex min-h-screen items-center justify-center bg-[#0a0a0b] px-6 text-white"><p role="status" className="text-sm text-zinc-400">Reprise de ta connexion…</p></main>;
 
   return (
     <main className="yf-page yf-auth relative flex min-h-screen overflow-hidden bg-[#0a0a0b] font-sans text-white antialiased selection:bg-red-600 selection:text-white">

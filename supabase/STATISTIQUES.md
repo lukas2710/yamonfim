@@ -1,3 +1,19 @@
+# Corriger les nouvelles inscriptions
+
+Exécuter `migrations/20261024_registration_statistics.sql` dans le SQL Editor
+du projet Supabase, puis publier le code et actualiser `/admin/stats`.
+Le script ne supprime ni ne modifie aucun compte ou profil.
+
+Les inscriptions sont comptées depuis `auth.users.created_at`, avec regroupement
+par jour à Paris. Les dates historiques déjà conservées sont prises en compte,
+même si le compte n’a pas de ligne `profiles` ou si cette ligne n’a pas de date.
+Les comptes supprimés ne sont pas reconstitués. Les créations de profils de
+visionnage et les connexions ne sont pas des inscriptions.
+
+La fonction renvoie uniquement des totaux quotidiens et vérifie côté base que
+l’appelant est l’administrateur. Sans cette fonction ou en cas d’erreur, la page
+affiche « — » au lieu d’un faux zéro pour les inscriptions.
+
 # Activer les connectés uniques par jour
 
 1. Dans le projet Supabase du site, ouvrir **SQL Editor**.

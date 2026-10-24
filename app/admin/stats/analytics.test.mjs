@@ -1,9 +1,34 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAnalytics, buildConnections, mergePresenceToday, recoverHistoricalConnections, dayKey, shiftDay, vipExpiry, emptyDataset } from './analytics.ts';
+import { buildAnalytics, buildConnections, mergePresenceToday, recoverHistoricalConnections, validateRegistrations, registrationSummary, dayKey, shiftDay, vipExpiry, emptyDataset } from './analytics.ts';
 
 const now = Date.parse('2026-10-20T12:00:00Z');
 const dataset = extra => ({ ...emptyDataset, ...extra });
+
+test('malformed registration data is reported rather than silently converted to zero', () => {
+  assert.throws(() => validateRegistrations([{ registration_date: '24/10/2026', registrations: 3 }]));
+  assert.throws(() => validateRegistrations([{ registration_date: '2026-10-24', count: 3 }]));
+  assert.throws(() => validateRegistrations([null]));
+  assert.deepEqual(validateRegistrations([{ registration_date: '2026-10-24', registrations: '3' }]), [{ registration_date: '2026-10-24', registrations: 3 }]);
+  assert.deepEqual(validateRegistrations([]), []);
+});
+
+test('signups use actual Auth registrations even when profile dates are missing or wrong', () => {
+  const stats = buildAnalytics(dataset({ profiles: [{ id: 'old', created_at: '2026-10-20T09:00:00Z' }, { id: 'new' }], registrations: [
+    { registration_date: '2026-10-20', registrations: '3' },
+    { registration_date: '2026-10-14', registrations: 2 },
+    { registration_date: '2026-10-13', registrations: 5 },
+    { registration_date: '2026-10-21', registrations: 10 },
+  ] }), 7, 'movie', now);
+  assert.equal(stats.signups, 5);
+  assert.equal(stats.timeline.at(-1).signups, 3);
+  assert.equal(stats.timeline[0].signups, 2);
+});
+
+test('empty authoritative registration data does not count profile creation as a signup', () => {
+  const stats = buildAnalytics(dataset({ profiles: [{ id: 'u', created_at: '2026-10-20T09:00:00Z' }], registrations: [] }), 7, 'all', now);
+  assert.equal(stats.signups, 0);
+});
 
 test('Paris calendar dates include the local midnight and handle DST', () => {
   assert.equal(dayKey(new Date('2026-10-19T22:30:00Z')), '2026-10-20');
@@ -172,4 +197,14 @@ test('today bucket changes at Paris midnight without moving yesterday records', 
   const midnight = Date.parse('2026-10-19T22:01:00Z');
   const merged = mergePresenceToday([{ user_id: 'a', activity_date: '2026-10-19', last_seen: '2026-10-19T21:59:00Z' }], [{ user_id: 'a', last_seen: '2026-10-19T22:00:30Z' }], midnight);
   assert.deepEqual(merged.map(r => r.activity_date).sort(), ['2026-10-19', '2026-10-20']);
+});
+
+test('registration summary uses fixed windows independent of the period filter', () => {
+  const summary = registrationSummary([
+    { registration_date: '2026-09-01', registrations: 4 },
+    { registration_date: '2026-10-14', registrations: 2 },
+    { registration_date: '2026-10-19', registrations: 1 },
+    { registration_date: '2026-10-20', registrations: 3 },
+  ], now);
+  assert.deepEqual(summary, { today: 3, yesterday: 1, week: 6, month: 6, total: 10, first: '2026-09-01', last: '2026-10-20' });
 });

@@ -5,11 +5,41 @@ export interface Presence { user_id: string; email?: string; current_action?: st
 export interface RequestRow { id: string; title?: string; status?: string; created_at?: string }
 export interface Campaign { id: string; title?: string; active?: boolean; starts_at?: string; ends_at?: string }
 export interface CommentRow { id: string; created_at?: string; media_id?: string }
-export interface Dataset { profiles: Profile[]; media: Media[]; history: History[]; requests: RequestRow[]; banners: Campaign[]; promotions: Campaign[]; comments: CommentRow[] }
+export interface Dataset { profiles: Profile[]; media: Media[]; history: History[]; requests: RequestRow[]; banners: Campaign[]; promotions: Campaign[]; comments: CommentRow[]; registrations?: { registration_date: string; registrations: number | string }[] }
 export type ContentType = 'all' | 'movie' | 'series';
 export const emptyDataset: Dataset = { profiles: [], media: [], history: [], requests: [], banners: [], promotions: [], comments: [] };
 const dayFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' });
-export const dayKey = (date: Date) => dayFormatter.format(date);
+export const dayKey = (date: Date) => {
+  const parts = dayFormatter.formatToParts(date);
+  return ['year', 'month', 'day'].map(type => parts.find(part => part.type === type)!.value).join('-');
+};
+
+export function validateRegistrations(rows: unknown[]): NonNullable<Dataset['registrations']> {
+  return rows.map(row => {
+    const value = row as { registration_date?: unknown; registrations?: unknown } | null;
+    const key = value?.registration_date;
+    const count = Number(value?.registrations);
+    if (typeof key !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(key) || value?.registrations == null || !Number.isSafeInteger(count) || count <= 0) {
+      throw new Error('Les dates ou les totaux reçus de Supabase sont invalides. Réexécuter 20261024_registration_statistics.sql.');
+    }
+    return { registration_date: key, registrations: count };
+  });
+}
+// Fixed windows (today, 7 and 30 days) that do not depend on the period filter.
+export function registrationSummary(rows: NonNullable<Dataset['registrations']>, now: number) {
+  const today = dayKey(new Date(now));
+  const since = (from: string) => rows.reduce((sum, r) => r.registration_date >= from && r.registration_date <= today ? sum + Number(r.registrations) : sum, 0);
+  const yesterday = shiftDay(today, -1);
+  return {
+    today: since(today),
+    yesterday: rows.reduce((sum, r) => r.registration_date === yesterday ? sum + Number(r.registrations) : sum, 0),
+    week: since(shiftDay(today, -6)),
+    month: since(shiftDay(today, -29)),
+    total: since(''),
+    first: rows[0]?.registration_date ?? '',
+    last: rows.at(-1)?.registration_date ?? '',
+  };
+}
 export const dateValue = (value?: string) => { const n = value ? Date.parse(value) : NaN; return Number.isFinite(n) ? n : null; };
 export const historyDate = (row: History) => dateValue(row.updated_at) ?? dateValue(row.watched_at) ?? dateValue(row.created_at);
 export const isVip = (profile: Profile) => profile.is_vip === true || profile.is_vip === 'true';
@@ -81,7 +111,19 @@ export function buildAnalytics(data: Dataset, days: number, type: ContentType, n
     monthlyMap.set(month, (monthlyMap.get(month) ?? 0) + 1);
   }
   for (const bucket of timelineMap.values()) bucket.item.accounts = bucket.users.size;
-  const signups = data.profiles.filter(p => { const stamp = dateValue(p.created_at); if (stamp === null || stamp > now) return false; const key = dayKey(new Date(stamp)); const bucket = timelineMap.get(key); if (bucket) bucket.item.signups++; return !days || key >= start; }).length;
+  let signups = 0;
+  const registrationDays = data.registrations ?? data.profiles.flatMap(p => {
+    const stamp = dateValue(p.created_at);
+    return stamp === null || stamp > now ? [] : [{ registration_date: dayKey(new Date(stamp)), registrations: 1 }];
+  });
+  for (const row of registrationDays) {
+    const key = row.registration_date;
+    const count = Number(row.registrations);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || key > today || !Number.isSafeInteger(count) || count < 0) continue;
+    const bucket = timelineMap.get(key);
+    if (bucket) bucket.item.signups += count;
+    if (!days || key >= start) signups += count;
+  }
   const selectedMedia = data.media.filter(m => type === 'all' || m.type === type);
   const ranked = selectedMedia.map(m => ({ ...m, count: counts.get(String(m.id))?.count ?? 0, audience: counts.get(String(m.id))?.users.size ?? 0, completion: counts.get(String(m.id))?.measured ? percent(counts.get(String(m.id))!.completed, counts.get(String(m.id))!.measured) : null })).sort((a, b) => b.count - a.count || (a.title ?? '').localeCompare(b.title ?? ''));
   const requestRows = data.requests.filter(r => { const stamp = dateValue(r.created_at); return stamp !== null && stamp <= now && (!days || dayKey(new Date(stamp)) >= start); });

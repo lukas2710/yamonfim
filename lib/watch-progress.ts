@@ -10,6 +10,9 @@ export function playbackProgress(currentTime: number, duration: number) {
   const total = Number.isFinite(duration) && duration > 0 ? duration : 0;
   return { currentTime: Number.isFinite(currentTime) ? Math.max(0, total ? Math.min(currentTime, total) : currentTime) : 0, duration: total };
 }
+/** Un film vu à 70 % ou plus quitte « Reprendre ». */
+export const RESUME_HIDE_RATIO = 0.7;
+export function isMostlyWatched(currentTime: number, duration: number) { return Number.isFinite(currentTime) && Number.isFinite(duration) && duration > 0 && currentTime / duration >= RESUME_HIDE_RATIO; }
 export function isCompleted(currentTime: number, duration: number) { return duration > 0 && currentTime / duration >= .95; }
 
 export async function commitEpisodeTransition(previous: PlaybackPosition | null, next: PlaybackPosition, markPrevious: (position: PlaybackPosition) => Promise<void>, saveCurrent: () => Promise<void>) {

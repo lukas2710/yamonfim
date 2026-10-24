@@ -1,5 +1,8 @@
 'use client';
 
+import { fetchCatalogueRows } from '@/lib/catalogue';
+import { searchQueryVariants } from '@/lib/search';
+
 import SectionNavigation from '@/components/SectionNavigation';
 import PageHero from '@/components/PageHero';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -134,24 +137,20 @@ export default function RequestsPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const fetchData = async () => {
-    const [reqRes, catRes] = await Promise.all([
-      supabase.from('requests').select('*').order('created_at', { ascending: false }),
-      supabase.from('media').select('id, title, type, tmdb_id')
-    ]);
-
-    if (!reqRes.error && reqRes.data) setRequests(reqRes.data);
-    if (!catRes.error && catRes.data) setCatalogMedia(catRes.data);
-    if (reqRes.error || catRes.error) setErrorMsg('Certaines données n’ont pas pu être chargées. Actualise la page pour réessayer.');
+    const requestsTask = supabase.from('requests').select('*').order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (error) setErrorMsg('Les demandes ne peuvent pas être chargées. Actualise la page pour réessayer.');
+        else if (data) setRequests(data);
+        setLoading(false);
+      });
+    const catalogueTask = fetchCatalogueRows<MediaItem>(supabase, 'id,title,type,tmdb_id')
+      .then(setCatalogMedia).catch(() => setErrorMsg('La vérification du catalogue est momentanément indisponible.'));
+    await Promise.all([requestsTask, catalogueTask]);
   };
 
   useEffect(() => {
-    async function init() {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) setCurrentUser(session.user);
-      await fetchData();
-      setLoading(false);
-    }
-    init();
+    void supabase.auth.getSession().then(({ data: { session } }) => { if (session) setCurrentUser(session.user); });
+    void fetchData().catch(() => { setErrorMsg('Chargement indisponible. Actualise la page pour réessayer.'); setLoading(false); });
   }, []);
 
   useEffect(() => {
@@ -166,13 +165,16 @@ export default function RequestsPage() {
       setSearchingTmdb(true);
       try {
         const endpoint = type === 'movie' ? 'movie' : 'tv';
-        const res = await fetch(
-          `https://api.themoviedb.org/3/search/${endpoint}?api_key=${TMDB_KEY}&language=fr-FR&query=${encodeURIComponent(searchQuery.trim())}`,
-          { signal: controller.signal }
-        );
-        const data = await res.json();
-        if (data && data.results) {
-          setTmdbResults(data.results.slice(0, 6));
+        let results = [];
+        for (const variant of searchQueryVariants(searchQuery)) {
+          const res = await fetch(`https://api.themoviedb.org/3/search/${endpoint}?api_key=${TMDB_KEY}&language=fr-FR&query=${encodeURIComponent(variant)}`, { signal: controller.signal });
+          if (!res.ok) throw new Error('Recherche indisponible');
+          const data = await res.json();
+          results = data.results || [];
+          if (results.length) break;
+        }
+        if (!controller.signal.aborted) {
+          setTmdbResults(results.slice(0, 6));
           setActiveIdx(-1);
           setDropdownOpen(true);
         }

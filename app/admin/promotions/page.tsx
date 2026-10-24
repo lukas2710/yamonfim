@@ -1,5 +1,7 @@
 'use client';
 
+import { clearClientResources } from '@/lib/resource-cache';
+
 import SectionNavigation from '@/components/SectionNavigation';
 import PageHero from '@/components/PageHero';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -102,6 +104,7 @@ export default function AdminPromotionsPage() {
   }, [message]);
 
   const fetchPromos = async () => {
+    clearClientResources();
     const { data, error } = await supabase
       .from('promotions')
       .select('*')
@@ -174,6 +177,7 @@ export default function AdminPromotionsPage() {
 
   const toggleActive = async (p: Promotion) => {
     setPromos(list => list.map(x => (x.id === p.id ? { ...x, active: !x.active } : x)));
+    clearClientResources();
     const { error } = await supabase.from('promotions').update({ active: !p.active }).eq('id', p.id);
     if (error) {
       setErrorMsg(`Erreur : ${error.message}`);
@@ -183,6 +187,7 @@ export default function AdminPromotionsPage() {
 
   const remove = async (id: string) => {
     setConfirmDeleteId(null);
+    clearClientResources();
     const { error } = await supabase.from('promotions').delete().eq('id', id);
     if (error) setErrorMsg(`Erreur : ${error.message}`);
     else {

@@ -1,5 +1,7 @@
 'use client';
 
+import { getPersistentSession } from '@/lib/auth-session';
+
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -66,7 +68,7 @@ export default function AbonnementPage() {
   const loadAccount = useCallback(async (manual = false) => {
     const request = ++activeRequest.current;
     try {
-      const { data: { session }, error: authError } = await supabase.auth.getSession();
+      const { data: { session }, error: authError } = await getPersistentSession();
       if (authError) throw authError;
       if (!mounted.current || request !== activeRequest.current) return;
       setRefreshing(true); setError(''); setNotice('');
@@ -110,7 +112,7 @@ export default function AbonnementPage() {
     paying.current = true; setRedirecting(true); setError('');
     let navigating = false;
     try {
-      const { data: { session }, error: authError } = await supabase.auth.getSession();
+      const { data: { session }, error: authError } = await getPersistentSession();
       if (authError) throw authError;
       if (!session || session.user.id !== account.id) { router.replace('/login'); return; }
       const { data: profile, error: profileError } = await supabase.from('profiles').select('is_vip').eq('id', session.user.id).single();

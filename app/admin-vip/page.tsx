@@ -1,5 +1,7 @@
 'use client';
 
+import { getPersistentSession } from '@/lib/auth-session';
+
 import SectionNavigation from '@/components/SectionNavigation';
 import PageHero from '@/components/PageHero';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -135,7 +137,7 @@ export default function AdminVipPage() {
     const controller = new AbortController();
     activeController.current = controller;
     try {
-      const { data: { session }, error: authError } = await supabase.auth.getSession();
+      const { data: { session }, error: authError } = await getPersistentSession();
       if (!mounted.current || controller.signal.aborted) return;
       if (authError) throw authError;
       if (session?.user.email !== ADMIN_EMAIL) {

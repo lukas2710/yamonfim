@@ -1,11 +1,21 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import { getPersistentSession } from '@/lib/auth-session';
+
+import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { prepareWatchMedia } from '@/lib/client-media';
+import { readClientResource } from '@/lib/resource-cache';
 import { supabase } from '@/lib/supabase';
 import { fetchSubscriptionProfile } from '@/lib/subscription';
+import { fetchCatalogueCards } from '@/lib/client-catalogue';
+import { createSearchMatcher } from '@/lib/search';
+import { isMostlyWatched } from '@/lib/watch-progress';
+import QuotaWaitNotice from '@/components/QuotaWaitNotice';
 import PromoBanner from '@/components/PromoBanner';
 import HomeCollections from '@/components/HomeCollections';
+import TvAppAnnouncement from '@/components/TvAppAnnouncement';
 
 interface MediaItem {
   id: any;
@@ -13,7 +23,7 @@ interface MediaItem {
   type: 'movie' | 'series';
   poster: string;
   backdrop?: string;
-  url: string;
+  url?: string;
   description: string;
   genres?: string[];
   seasons?: any[];
@@ -88,20 +98,27 @@ const activateProps = (onActivate: () => void) => ({
   },
 });
 
+function cardImage(source: string | null | undefined, width = 'w342') {
+  return (source || '').replace(/^(https:\/\/image\.tmdb\.org\/t\/p\/)(?:original|w\d+)\//, `$1${width}/`);
+}
+
 function PosterCard({
-  item, locked, onOpen, className = '',
-}: { item: MediaItem; locked: boolean; onOpen: () => void; className?: string }) {
+  item, locked, onOpen, onPrepare, className = '',
+}: { item: MediaItem; locked: boolean; onOpen: () => void; onPrepare?: () => void; className?: string }) {
   return (
     <div
       {...activateProps(onOpen)}
+      onPointerEnter={onPrepare}
+      onFocus={onPrepare}
       aria-label={item.title}
       className={`yf-poster-card group relative aspect-[2/3] shrink-0 cursor-pointer overflow-hidden rounded-xl bg-zinc-900 ring-1 ring-white/5 transition duration-300 hover:-translate-y-1 hover:ring-white/25 hover:shadow-2xl hover:shadow-black/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-600 active:scale-[0.97] ${className}`}
     >
       {item.poster ? (
         <img
-          src={item.poster}
+          src={cardImage(item.poster)}
           alt={item.title}
           loading="lazy"
+          decoding="async"
           className={`h-full w-full object-cover transition duration-500 group-hover:scale-105 ${locked ? 'blur-[2px] opacity-40' : ''}`}
         />
       ) : (
@@ -137,8 +154,8 @@ function PosterCard({
 }
 
 function Row({
-  title, subtitle, icon, children,
-}: { title: string; subtitle?: string; icon?: React.ReactNode; children: React.ReactNode }) {
+  title, subtitle, icon, children, onSeeAll,
+}: { title: string; subtitle?: string; icon?: React.ReactNode; children: React.ReactNode; onSeeAll?: () => void }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const scroll = (dir: 1 | -1) => {
     const el = scrollerRef.current;
@@ -155,7 +172,8 @@ function Row({
           </h2>
           {subtitle && <p className="mt-0.5 text-xs text-zinc-400 sm:text-sm">{subtitle}</p>}
         </div>
-        <div className="hidden gap-2 opacity-0 transition group-hover/row:opacity-100 sm:flex">
+        <div className="flex items-center gap-2">
+          {onSeeAll && <button onClick={onSeeAll} className="min-h-10 px-2 text-xs font-semibold text-zinc-300 hover:text-white">Tout voir</button>}
           <button onClick={() => scroll(-1)} aria-label="Défiler à gauche"
             className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-300 transition hover:bg-white/10 hover:text-white">
             <Icon name="chevronLeft" />
@@ -184,7 +202,10 @@ export default function Home() {
   const [recommendedForYou, setRecommendedForYou] = useState<MediaItem[]>([]);
   const [customBanners, setCustomBanners] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [catalogueLoading, setCatalogueLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [resultLimit, setResultLimit] = useState(60);
   const [selectedType, setSelectedType] = useState<'all' | 'movie' | 'series'>('all');
   const [selectedGenre, setSelectedGenre] = useState<string>('all');
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -205,7 +226,7 @@ export default function Home() {
   useEffect(() => {
     async function checkUserAndFetch() {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session } } = await getPersistentSession();
         if (!session) {
           router.push('/login');
           return;
@@ -231,96 +252,64 @@ export default function Home() {
 
         setActiveProfile(currentProfile);
 
-        const { data: profile } = await fetchSubscriptionProfile(user.id);
-
-        const userIsVip = user.email === ADMIN_EMAIL || (profile ? !!profile.is_vip : false);
-        const userWatchCount = profile ? profile.watch_count || 0 : 0;
-
-        setIsVip(userIsVip);
-        setWatchCount(userWatchCount);
-
-        let watchedQuery = supabase
-          .from('user_watched')
-          .select('*')
-          .eq('user_id', user.id);
-
-        if (currentProfile?.id) {
-          watchedQuery = watchedQuery.eq('profile_id', currentProfile.id);
-        }
-
-        const [mediaRes, watchedRes, bannerRes] = await Promise.all([
-          supabase.from('media').select('*').order('created_at', { ascending: false }),
-          watchedQuery.order('watched_at', { ascending: false }),
-          supabase.from('banners').select('*').eq('active', true).order('created_at', { ascending: false }),
-        ]);
-
-        const { data: mediaData, error: mediaError } = mediaRes;
-        const { data: watchedData } = watchedRes;
-        const { data: bannerData } = bannerRes;
-
-        if (bannerData) setCustomBanners(bannerData);
-
-        if (!mediaError && mediaData) {
-          setMediaList(mediaData);
-
-          if (watchedData && watchedData.length > 0) {
-            const continueListMap = new Map<string, MediaItem>();
-
-            for (const watchedItem of watchedData) {
-              const mediaId = String(watchedItem.media_id);
-              if (continueListMap.has(mediaId)) continue;
-
-              let foundMedia: MediaItem | undefined = undefined;
-              for (const m of mediaData) {
-                if (String(m.id) === mediaId) {
-                  foundMedia = m;
-                  break;
-                }
-              }
-
-              if (foundMedia) {
-                let seasonIdx = 0;
-                let episodeIdx = 0;
-                let seasonNumber = 1;
-                let episodeNumber = 1;
-
-                if (watchedItem.ep_key && watchedItem.ep_key !== 'movie_main') {
-                  const match = /^s(\d+)_e(\d+)$/.exec(watchedItem.ep_key);
-                  if (match) {
-                    seasonIdx = Number(match[1]);
-                    episodeIdx = Number(match[2]);
-                    seasonNumber = seasonIdx + 1;
-                    episodeNumber = episodeIdx + 1;
-                  }
-                }
-
-                continueListMap.set(mediaId, {
-                  ...foundMedia,
-                  progress: {
-                    seasonIdx,
-                    episodeIdx,
-                    seasonNumber,
-                    episodeNumber,
-                  },
-                });
-              }
-            }
-
-            setContinueWatchingList(Array.from(continueListMap.values()));
+        let firstPageReady = false, accessReady = false;
+        const reveal = () => { if (firstPageReady && accessReady) setLoading(false); };
+        const accessTask = fetchSubscriptionProfile(user.id).then(({ data: profile }) => {
+          setIsVip(user.email === ADMIN_EMAIL || profile?.is_vip === true);
+          setWatchCount(profile?.watch_count || 0);
+          accessReady = true; reveal();
+        });
+        const catalogueTask = fetchCatalogueCards<MediaItem>(supabase, rows => {
+          setMediaList(rows); firstPageReady = true; reveal();
+        }).finally(() => setCatalogueLoading(false));
+        let watchedQuery = supabase.from('user_watched').select('media_id,ep_key,watched_at').eq('user_id', user.id);
+        if (currentProfile?.id) watchedQuery = watchedQuery.eq('profile_id', currentProfile.id);
+        const watchedTask = watchedQuery.order('watched_at', { ascending: false });
+        let progressQuery = supabase.from('watch_history').select('media_id,type,current_time,duration').eq('user_id', user.id);
+        if (currentProfile?.id) progressQuery = progressQuery.eq('profile_id', currentProfile.id);
+        const progressTask = progressQuery.then(result => result, () => ({ data: null }));
+        const bannerTask = readClientResource('home:banners', async () => {
+          const { data, error } = await supabase.from('banners').select('*').eq('active', true).order('created_at', { ascending: false });
+          if (error) throw error; return data || [];
+        }).then(setCustomBanners).catch(() => { /* Optional banners never block the catalogue. */ });
+        const historyTask = Promise.all([catalogueTask, watchedTask, progressTask]).then(([mediaData, watchedRes, progressRes]) => {
+          const byId = new Map(mediaData.map(item => [String(item.id), item]));
+          // Un film regardé à 70 % ou plus ne reste pas dans « Reprendre ».
+          const finishedMovies = new Set((progressRes.data || [])
+            .filter(row => row.type === 'movie' && isMostlyWatched(Number(row.current_time), Number(row.duration)))
+            .map(row => String(row.media_id)));
+          const resume = new Map<string, MediaItem>();
+          for (const watched of watchedRes.data || []) {
+            const id = String(watched.media_id), item = byId.get(id);
+            if (!item || resume.has(id) || (item.type === 'movie' && finishedMovies.has(id))) continue;
+            const match = /^s(\d+)_e(\d+)$/.exec(watched.ep_key || '');
+            const seasonIdx = match ? Number(match[1]) : 0, episodeIdx = match ? Number(match[2]) : 0;
+            resume.set(id, { ...item, progress: { seasonIdx, episodeIdx, seasonNumber: seasonIdx + 1, episodeNumber: episodeIdx + 1 } });
           }
-        }
+          setContinueWatchingList([...resume.values()]);
+        });
+        await Promise.all([accessTask, historyTask, bannerTask]);
       } catch (err) {
+        setLoadError("Le catalogue n’a pas pu être chargé entièrement. Actualise la page pour réessayer.");
         console.error("Erreur lors du chargement de l'accueil:", err);
       } finally {
         setLoading(false);
+        setCatalogueLoading(false);
       }
     }
 
     checkUserAndFetch();
   }, [router]);
 
+  const preparedRoutes = useRef(new Set<string>());
+  const prepareMedia = (item: MediaItem) => {
+    const path = `/watch/${item.id}`;
+    if (!preparedRoutes.current.has(path)) { preparedRoutes.current.add(path); router.prefetch(path); }
+    prepareWatchMedia(String(item.id));
+  };
   const handleMediaClick = async (item: MediaItem) => {
     if (item.id === undefined || item.id === null) return;
+    prepareMedia(item);
     let vip = isVip;
     let count = watchCount;
     if (currentUserId && userEmail !== ADMIN_EMAIL) {
@@ -377,12 +366,14 @@ export default function Home() {
   };
 
   const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
+    if (error) { setLoadError('La déconnexion n’a pas pu être confirmée. Réessaie.'); return; }
     localStorage.removeItem('active_profile');
-    await supabase.auth.signOut();
-    router.push('/login');
+    router.replace('/login');
   };
 
   const selectType = (type: 'all' | 'movie' | 'series') => {
+    setResultLimit(60);
     setSelectedType(type);
     setSelectedGenre('all');
     setSearchQuery('');
@@ -442,19 +433,13 @@ export default function Home() {
     url: '#',
   };
 
-  const query = searchQuery.trim().toLowerCase();
-  const filteredMedia: MediaItem[] = [];
-  for (const item of mediaList) {
-    const matchesType = selectedType === 'all' || item.type === selectedType;
-    const matchesGenre = selectedGenre === 'all' || (item.genres && item.genres.includes(selectedGenre));
-    const matchesSearch =
-      !query ||
-      (item.title || '').toLowerCase().includes(query) ||
-      (item.description || '').toLowerCase().includes(query);
-    if (matchesType && matchesGenre && matchesSearch) {
-      filteredMedia.push(item);
-    }
-  }
+  const deferredQuery = useDeferredValue(searchQuery);
+  const filteredMedia = useMemo(() => {
+    const matches = createSearchMatcher(deferredQuery);
+    return mediaList.filter(item => (selectedType === 'all' || item.type === selectedType)
+      && (selectedGenre === 'all' || item.genres?.includes(selectedGenre))
+      && matches(item.title, item.description, ...(item.genres || [])));
+  }, [mediaList, selectedType, selectedGenre, deferredQuery]);
 
   const recentMovies: MediaItem[] = [];
   const recentSeries: MediaItem[] = [];
@@ -464,8 +449,8 @@ export default function Home() {
   }
 
   const hasText = (v?: string) => !!v && v.trim() !== '';
-  const getHeroImage = (m: MediaItem) => (hasText(m.backdrop) ? m.backdrop! : m.poster);
-  const getMobileHeroImage = (m: MediaItem) => (hasText(m.poster) ? m.poster : m.backdrop || '');
+  const getHeroImage = (m: MediaItem) => cardImage(hasText(m.backdrop) ? m.backdrop! : m.poster, 'w1280');
+  const getMobileHeroImage = (m: MediaItem) => cardImage(hasText(m.poster) ? m.poster : m.backdrop || '', 'w500');
 
   const userLimitReached = !isVip && watchCount >= MAX_FREE_LIMIT;
   const isAdmin = userEmail === ADMIN_EMAIL;
@@ -504,7 +489,7 @@ export default function Home() {
 
       {showVipModal && (
         <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
+          className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-md"
           onClick={() => setShowVipModal(false)}
         >
           <div
@@ -512,7 +497,7 @@ export default function Home() {
             aria-modal="true"
             aria-label="Promotion VIP : quota gratuit atteint"
             onClick={e => e.stopPropagation()}
-            className="relative w-full max-w-md overflow-hidden rounded-3xl border border-amber-500/20 bg-[#111113] shadow-[0_0_80px_-20px_rgba(245,158,11,0.35)]"
+            className="relative my-auto w-full max-w-md shrink-0 overflow-hidden rounded-3xl border border-amber-500/20 bg-[#111113] shadow-[0_0_80px_-20px_rgba(245,158,11,0.35)]"
           >
             <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-amber-500/15 to-transparent" />
             <button
@@ -527,15 +512,18 @@ export default function Home() {
               <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-zinc-950 shadow-lg shadow-amber-500/30">
                 <Icon name="crown" className="h-7 w-7" />
               </div>
-              <h3 className="mb-2 text-xl font-bold tracking-tight">Passez à l'expérience VIP</h3>
+              <h3 className="mb-2 text-xl font-bold tracking-tight">Tes visions gratuites sont épuisées</h3>
               <p className="mb-5 text-sm leading-relaxed text-zinc-400">
                 {userLimitReached ? (
                   <>Vous avez atteint votre quota gratuit de <span className="font-semibold text-white">{MAX_FREE_LIMIT} visions</span>.</>
                 ) : (
                   <>Il vous reste <span className="font-semibold text-white">{Math.max(0, MAX_FREE_LIMIT - watchCount)} vision{MAX_FREE_LIMIT - watchCount > 1 ? 's' : ''}</span> gratuite{MAX_FREE_LIMIT - watchCount > 1 ? 's' : ''}.</>
                 )}{' '}
-                Débloquez un accès illimité.
+
               </p>
+
+              <QuotaWaitNotice />
+              <p className="mb-5 text-sm leading-6 text-zinc-300">Tu ne veux pas de restriction ? <strong className="text-amber-400">Passe au VIP</strong> pour regarder tes films et séries sans limite.</p>
 
               <div className="mb-6">
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
@@ -638,7 +626,7 @@ export default function Home() {
                 type="text"
                 placeholder="Titres, descriptions…"
                 value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
+                onChange={e => { setResultLimit(60); setSearchQuery(e.target.value); setSelectedType('all'); setSelectedGenre('all'); }}
                 onBlur={() => !searchQuery && setSearchOpen(false)}
                 className="min-w-0 flex-1 bg-transparent pr-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none"
               />
@@ -737,9 +725,9 @@ export default function Home() {
                           { href: '/admin-vip', label: 'Administration VIP', icon: 'crown' },
                           { href: '/admin/stats', label: 'Statistiques', icon: 'chart' },
                         ] as { href: string; label: string; icon: IconName }[]).map(link => (
-                          <a key={link.href} href={link.href} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 transition hover:bg-red-500/10 hover:text-white focus-visible:outline-2 focus-visible:outline-red-400">
+                          <Link key={link.href} href={link.href} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-300 transition hover:bg-red-500/10 hover:text-white focus-visible:outline-2 focus-visible:outline-red-400">
                             <Icon name={link.icon} />{link.label}
-                          </a>
+                          </Link>
                         ))}
                       </div>
                     )}
@@ -760,7 +748,7 @@ export default function Home() {
       </header>
 
       {showHero ? (
-        <section className="yf-catalogue-hero relative isolate min-h-[760px] overflow-hidden bg-[#0a0a0b] sm:min-h-[830px]">
+        <section className="yf-catalogue-hero relative isolate min-h-[78svh] overflow-hidden bg-[#0a0a0b] sm:min-h-[830px]">
           {(carouselItems.length > 0 ? carouselItems : [featured]).map((item, index) => {
             const active = carouselItems.length === 0 || index === currentIndex;
             const desktopImage = getHeroImage(item);
@@ -772,31 +760,36 @@ export default function Home() {
               </picture>
             );
           })}
-          <div className="pointer-events-none absolute inset-0 -z-10 bg-black/20" />
-          <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-r from-[#0a0a0b]/95 via-[#0a0a0b]/50 to-transparent" />
-          <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-t from-[#0a0a0b] via-[#0a0a0b]/20 to-black/30" />
-          <div className="mx-auto flex min-h-[760px] max-w-[1600px] flex-col justify-end px-5 pb-12 pt-32 sm:min-h-[830px] sm:px-10 lg:px-16">
+          <div className="pointer-events-none absolute inset-0 -z-10 bg-black/10 sm:bg-black/20" />
+          <div className="pointer-events-none absolute inset-0 -z-10 hidden bg-gradient-to-r from-[#0a0a0b]/95 via-[#0a0a0b]/50 to-transparent sm:block" />
+          <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-t from-[#0a0a0b] via-[#0a0a0b]/10 to-transparent sm:via-[#0a0a0b]/20 sm:to-black/30" />
+          <div className="mx-auto flex min-h-[78svh] max-w-[1600px] flex-col justify-end px-5 pb-6 pt-24 sm:min-h-[830px] sm:px-10 sm:pb-12 sm:pt-32 lg:px-16">
             <div className="max-w-3xl">
-              <div className="mb-6 flex flex-wrap items-center gap-3">
+              <div className="mb-3 flex flex-wrap items-center gap-3 sm:mb-6">
                 <span className="flex items-center gap-2 rounded-full border border-red-400/25 bg-red-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-red-200 backdrop-blur-md"><Icon name="sparkles" className="h-3.5 w-3.5" />Sous les projecteurs</span>
-                <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-300">La sélection Yamonfim</span>
+                <span className="hidden text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-300 sm:inline">La sélection Yamonfim</span>
               </div>
-              <h1 className="max-w-3xl break-words text-5xl font-black leading-[0.98] tracking-[-0.04em] text-white drop-shadow-xl sm:text-7xl lg:text-8xl">{featured.title}</h1>
-              <div className="mt-6 flex flex-wrap items-center gap-3 text-xs text-zinc-300">
+              <h1 className="max-w-3xl break-words text-[2rem] font-black leading-[1.02] tracking-[-0.03em] text-white drop-shadow-xl line-clamp-2 sm:line-clamp-none sm:text-7xl sm:leading-[0.98] sm:tracking-[-0.04em] lg:text-8xl">{featured.title}</h1>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-300 sm:mt-6 sm:gap-3">
                 <span className="font-semibold text-white">{featured.type === 'movie' ? 'Film' : 'Série'}</span>
                 {(featured.genres ?? []).slice(0, 3).map(genre => <span key={genre} className="rounded-md border border-white/15 bg-black/15 px-2.5 py-1 backdrop-blur-sm">{genre}</span>)}
                 {!!featured.runtime && <span>{featured.runtime} min</span>}
               </div>
-              {featured.description && <p className="mt-5 line-clamp-3 max-w-xl text-sm leading-7 text-zinc-300 sm:text-base sm:leading-8">{featured.description}</p>}
+              {featured.description && <p className="mt-3 line-clamp-2 max-w-xl text-[13px] leading-6 text-zinc-300 sm:mt-5 sm:line-clamp-3 sm:text-base sm:leading-8">{featured.description}</p>}
               {featured.id !== null && featured.id !== undefined && (
-                <div className="mt-8 flex flex-wrap gap-3">
-                  <button type="button" onClick={() => handleMediaClick(featured)} className="yf-primary inline-flex cursor-pointer items-center gap-3 rounded-xl bg-red-600 px-7 py-4 text-sm font-bold text-white shadow-lg shadow-red-950/40 transition hover:bg-red-500 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-red-400"><Icon name={userLimitReached ? 'lock' : 'play'} className="h-5 w-5" />{userLimitReached ? 'Découvrir le VIP' : 'Regarder maintenant'}</button>
-                  <button type="button" onClick={() => document.getElementById('catalogue-accueil')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })} className="inline-flex cursor-pointer items-center gap-3 rounded-xl border border-white/20 bg-white/5 px-6 py-4 text-sm font-semibold text-white backdrop-blur-md transition hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">Explorer le catalogue<Icon name="chevronRight" className="h-4 w-4" /></button>
+                <div className="mt-5 flex gap-2.5 sm:mt-8 sm:flex-wrap sm:gap-3">
+                  <button type="button" onClick={() => handleMediaClick(featured)} className="yf-primary inline-flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-3 text-sm font-bold sm:flex-none sm:gap-3 sm:px-7 sm:py-4 text-white shadow-lg shadow-red-950/40 transition hover:bg-red-500 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-red-400"><Icon name={userLimitReached ? 'lock' : 'play'} className="h-5 w-5" />{userLimitReached ? 'Découvrir le VIP' : <><span className="sm:hidden">Regarder</span><span className="hidden sm:inline">Regarder maintenant</span></>}</button>
+                  <button type="button" onClick={() => document.getElementById('catalogue-accueil')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })} className="inline-flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-sm font-semibold sm:flex-none sm:gap-3 sm:px-6 sm:py-4 text-white backdrop-blur-md transition hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"><span className="sm:hidden">Catalogue</span><span className="hidden sm:inline">Explorer le catalogue</span><Icon name="chevronRight" className="h-4 w-4" /></button>
                 </div>
               )}
             </div>
             {carouselItems.length > 1 && (
-              <div className="mt-14 border-t border-white/10 pt-5">
+              <div className="mt-5 flex justify-center gap-1.5 sm:hidden" aria-hidden="true">
+                {carouselItems.map((_, index) => <span key={index} className={`h-1.5 rounded-full transition-all ${index === currentIndex ? 'w-5 bg-red-500' : 'w-1.5 bg-white/30'}`} />)}
+              </div>
+            )}
+            {carouselItems.length > 1 && (
+              <div className="mt-14 hidden border-t border-white/10 pt-5 sm:block">
                 <div className="mb-4 flex items-center justify-between"><p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-400">À découvrir ce soir</p><span className="text-xs tabular-nums text-zinc-400"><span className="text-white">{String(currentIndex + 1).padStart(2, '0')}</span>{' / '}{String(carouselItems.length).padStart(2, '0')}</span></div>
                 <div className="flex gap-3 overflow-x-auto pb-3 [scrollbar-width:thin]">
                   {carouselItems.map((item, index) => {
@@ -844,6 +837,8 @@ export default function Home() {
         </div>
       )}
 
+      {loadError && <p role="alert" className="relative z-10 mx-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{loadError}</p>}
+      {catalogueLoading && <p role="status" className="relative z-10 px-4 text-sm text-zinc-400 sm:px-10">Le reste du catalogue se charge… Les résultats se complètent automatiquement.</p>}
       <div id="catalogue-accueil" className={`relative z-10 scroll-mt-24 space-y-10 px-4 sm:px-10 ${showHero ? 'mt-2 sm:mt-4' : 'mt-6'}`}>
         
         {continueWatchingList.length > 0 && !searchQuery && (
@@ -919,7 +914,7 @@ export default function Home() {
                   <Icon name="search" className="h-5 w-5" />
                 </span>
                 <div>
-                  <p className="font-semibold text-white">Aucun contenu trouvé</p>
+                  <p className="font-semibold text-white">{catalogueLoading ? 'Recherche dans le reste du catalogue…' : 'Aucun contenu trouvé'}</p>
                   <p className="mt-1 text-sm text-zinc-500">Essayez un autre titre ou faites une demande.</p>
                 </div>
                 <button
@@ -931,20 +926,23 @@ export default function Home() {
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4 md:grid-cols-5 lg:grid-cols-6 2xl:grid-cols-8">
-                {filteredMedia.map((item: MediaItem) => (
+                {filteredMedia.slice(0, resultLimit).map((item: MediaItem) => (
                   <PosterCard
                     key={item.id}
                     item={item}
                     locked={userLimitReached}
                     onOpen={() => handleMediaClick(item)}
+                    onPrepare={() => prepareMedia(item)}
                   />
                 ))}
               </div>
             )}
+            {filteredMedia.length > resultLimit && <button onClick={() => setResultLimit(count => count + 60)} className="mx-auto mt-6 block min-h-11 rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm font-semibold hover:bg-white/10">Afficher plus de résultats ({Math.min(resultLimit, filteredMedia.length)} / {filteredMedia.length})</button>}
           </section>
         ) : (
           <>
             <PromoBanner isVip={isVip} isAdmin={isAdmin} />
+            <TvAppAnnouncement />
 
             {becauseYouWatched && becauseYouWatched.list.length > 0 && (
               <Row
@@ -957,6 +955,7 @@ export default function Home() {
                     item={item}
                     locked={userLimitReached}
                     onOpen={() => handleMediaClick(item)}
+                    onPrepare={() => prepareMedia(item)}
                     className="w-[130px] sm:w-[170px]"
                   />
                 ))}
@@ -971,6 +970,7 @@ export default function Home() {
                     item={item}
                     locked={userLimitReached}
                     onOpen={() => handleMediaClick(item)}
+                    onPrepare={() => prepareMedia(item)}
                     className="w-[130px] sm:w-[170px]"
                   />
                 ))}
@@ -985,6 +985,7 @@ export default function Home() {
                     item={item}
                     locked={userLimitReached}
                     onOpen={() => handleMediaClick(item)}
+                    onPrepare={() => prepareMedia(item)}
                     className="w-[130px] sm:w-[170px]"
                   />
                 ))}
@@ -995,13 +996,14 @@ export default function Home() {
               const genreItems = mediaList.filter(m => m.genres && m.genres.includes(genre));
               if (genreItems.length === 0) return null;
               return (
-                <Row key={genre} title={`Populaires en ${genre}`} icon={<Icon name="film" className="h-5 w-5 text-zinc-400" />}>
-                  {genreItems.map((item: MediaItem) => (
+                <Row key={genre} title={`Populaires en ${genre}`} onSeeAll={() => { setSelectedGenre(genre); setSelectedType('all'); setSearchQuery(''); }} icon={<Icon name="film" className="h-5 w-5 text-zinc-400" />}>
+                  {genreItems.slice(0, 20).map((item: MediaItem) => (
                     <PosterCard
                       key={genre + '-' + item.id}
                       item={item}
                       locked={userLimitReached}
                       onOpen={() => handleMediaClick(item)}
+                    onPrepare={() => prepareMedia(item)}
                       className="w-[130px] sm:w-[170px]"
                     />
                   ))}
@@ -1055,6 +1057,7 @@ export default function Home() {
                           item={item}
                           locked={userLimitReached}
                           onOpen={() => handleMediaClick(item)}
+                    onPrepare={() => prepareMedia(item)}
                           className="w-[130px] sm:w-[170px]"
                         />
                       ))}
@@ -1064,32 +1067,34 @@ export default function Home() {
               );
             })}
 
-            <Row title="Films récents" icon={<Icon name="film" className="h-5 w-5 text-zinc-500" />}>
+            <Row title="Films récents" onSeeAll={() => selectType('movie')} icon={<Icon name="film" className="h-5 w-5 text-zinc-500" />}>
               {recentMovies.length === 0 ? (
                 <p className="py-6 text-sm text-zinc-500">Aucun film pour le moment.</p>
               ) : (
-                recentMovies.map((item: MediaItem) => (
+                recentMovies.slice(0, 20).map((item: MediaItem) => (
                   <PosterCard
                     key={item.id}
                     item={item}
                     locked={userLimitReached}
                     onOpen={() => handleMediaClick(item)}
+                    onPrepare={() => prepareMedia(item)}
                     className="w-[130px] sm:w-[170px]"
                   />
                 ))
               )}
             </Row>
 
-            <Row title="Séries récentes" icon={<Icon name="tv" className="h-5 w-5 text-zinc-500" />}>
+            <Row title="Séries récentes" onSeeAll={() => selectType('series')} icon={<Icon name="tv" className="h-5 w-5 text-zinc-500" />}>
               {recentSeries.length === 0 ? (
                 <p className="py-6 text-sm text-zinc-500">Aucune série pour le moment.</p>
               ) : (
-                recentSeries.map((item: MediaItem) => (
+                recentSeries.slice(0, 20).map((item: MediaItem) => (
                   <PosterCard
                     key={item.id}
                     item={item}
                     locked={userLimitReached}
                     onOpen={() => handleMediaClick(item)}
+                    onPrepare={() => prepareMedia(item)}
                     className="w-[130px] sm:w-[170px]"
                   />
                 ))

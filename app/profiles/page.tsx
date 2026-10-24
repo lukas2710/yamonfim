@@ -1,5 +1,7 @@
 'use client';
 
+import { getPersistentSession } from '@/lib/auth-session';
+
 import PageHero from '@/components/PageHero';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -58,7 +60,7 @@ export default function ProfilesPage() {
   const fetchProfiles = useCallback(async () => {
     try {
       setErrorMsg('');
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await getPersistentSession();
       if (!session) {
         router.push('/login');
         return;

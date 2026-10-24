@@ -12,7 +12,7 @@ export default function EpisodeQueue({ seasons, active, watched, poster, disable
   if (!season) return null;
   return <aside className="watch-queue" aria-label="Liste des épisodes">
     <div className="watch-queue-heading"><span className="watch-kicker">CONTINUE TON HISTOIRE</span><h3>Les épisodes <span>{season.episodes.length}</span></h3>
-      <label className="watch-queue-season"><span>Saison</span><select aria-label="Saison des épisodes du lecteur" value={browseSeason} onChange={event => setBrowseSeason(Number(event.target.value))}>{seasons.map((item, index) => <option value={index} key={index}>Saison {item.seasonNumber}</option>)}</select></label>
+      {seasons.length > 1 && <div className="watch-queue-seasons" role="group" aria-label="Saison des épisodes du lecteur">{seasons.map((item, index) => <button type="button" key={index} aria-pressed={browseSeason === index} onClick={() => setBrowseSeason(index)} className="watch-queue-season-chip">Saison {item.seasonNumber}</button>)}</div>}
     </div>
     <ol className="watch-queue-list">{season.episodes.map((episode, index) => {
       const selected = browseSeason === active.s && index === active.e;

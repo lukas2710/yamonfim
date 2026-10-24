@@ -1,5 +1,9 @@
 'use client';
 
+import { getPersistentSession } from '@/lib/auth-session';
+
+import { createSearchMatcher } from '@/lib/search';
+
 import SectionNavigation from '@/components/SectionNavigation';
 import PageHero from '@/components/PageHero';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -132,7 +136,7 @@ export default function HistoryPage() {
   useEffect(() => {
     async function load() {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session } } = await getPersistentSession();
         if (!session) {
           router.push('/login');
           return;
@@ -354,10 +358,10 @@ export default function HistoryPage() {
     .filter(e => e.history && (e.media.type === 'movie' || e.seen < e.total))
     .slice(0, 10);
 
-  const q = query.trim().toLowerCase();
+  const matchesQuery = createSearchMatcher(query);
   const visible = entries.filter(e =>
     (tab === 'all' || e.media.type === tab) &&
-    (!q || (e.media.title || '').toLowerCase().includes(q))
+    matchesQuery(e.media.title)
   );
 
   const selected = selectedSeriesId ? mediaById[selectedSeriesId] : null;

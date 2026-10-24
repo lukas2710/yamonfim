@@ -1,5 +1,10 @@
 'use client';
 
+import { clearClientResources } from '@/lib/resource-cache';
+
+import { fetchCatalogueCards } from '@/lib/client-catalogue';
+import { createSearchMatcher } from '@/lib/search';
+
 import SectionNavigation from '@/components/SectionNavigation';
 import PageHero from '@/components/PageHero';
 import React, { useEffect, useState } from 'react';
@@ -57,15 +62,13 @@ export default function AdminBannersPage() {
   }, [router]);
 
   async function fetchMedia() {
-    const { data, error } = await supabase
-      .from('media')
-      .select('id, title, type, poster')
-      .order('created_at', { ascending: false });
-    if (data) setMediaList(data);
-    if (error) setErrorMsg('Impossible de charger les titres du catalogue. Actualise la page pour réessayer.');
+    clearClientResources();
+    try { setMediaList(await fetchCatalogueCards<MediaItem>(supabase)); }
+    catch { setErrorMsg('Impossible de charger les titres du catalogue. Actualise la page pour réessayer.'); }
   };
 
   async function fetchBanners() {
+    clearClientResources();
     const { data, error } = await supabase
       .from('banners')
       .select('*')
@@ -89,6 +92,8 @@ export default function AdminBannersPage() {
     setSubmitting(true);
     setMessage('');
     setErrorMsg('');
+
+    clearClientResources();
 
     const { error } = await supabase.from('banners').insert([
       {
@@ -115,6 +120,7 @@ export default function AdminBannersPage() {
 
   const handleDeleteBanner = async (id: string) => {
     if (!confirm('Voulez-vous supprimer cette bannière ?')) return;
+    clearClientResources();
     const { error } = await supabase.from('banners').delete().eq('id', id);
     if (!error) {
       fetchBanners();
@@ -135,7 +141,7 @@ export default function AdminBannersPage() {
     return <main className={`yf-page yf-banners ${styles.page}`}><div className={styles.loading}>Vérification de votre accès administrateur…</div></main>;
   }
 
-  const filteredMedia = mediaList.filter(item => item.title.toLocaleLowerCase('fr').includes(search.toLocaleLowerCase('fr')));
+  const filteredMedia = mediaList.filter(item => createSearchMatcher(search)(item.title));
   const selectedMedia = mediaList.filter(item => selectedMediaIds.includes(String(item.id)));
 
   return (

@@ -2,3 +2,10 @@
 @media(max-width:900px){.yf-collection-workspace{grid-template-columns:minmax(0,1fr)}.yf-collection-preview{display:grid;grid-template-columns:minmax(0,1fr)}.yf-collection-preview>.yf-collection-card{max-width:440px}}
 @media(max-width:600px){.yf-collections{padding:28px 16px 14px}.yf-collections-heading{align-items:flex-start;flex-wrap:wrap;gap:13px}.yf-collections-heading h2{font-size:27px}.yf-collection-grid{grid-template-columns:minmax(0,1fr);gap:13px}.yf-collection-card{aspect-ratio:16/9}.yf-collection-card-copy>strong{font-size:29px}.yf-collection-panel{padding:18px;margin-top:18px}.yf-collection-titles{grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 12px}.yf-collection-workspace{padding:0 14px;margin:22px auto;gap:18px}.yf-collection-editor,.yf-collection-preview{padding:20px 16px;border-radius:16px}.yf-collection-options{grid-template-columns:minmax(0,1fr);gap:15px}.yf-collection-admin-top{padding:20px 16px}.yf-collection-admin-top>a:first-child{font-size:14px}.yf-collection-selection li{gap:5px;padding:7px}.yf-collection-selection li button{width:30px}.yf-collection-order{min-width:12px}}
 @media(prefers-reduced-motion:reduce){.yf-collection-card>img{transition:none}}
+
+/* Mobile collections form a swipeable horizontal row; desktop keeps its grid. */
+@media(max-width:767px){
+ .yf-collection-grid{display:flex;gap:13px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity;scroll-padding-inline:16px;margin-inline:-16px;padding:5px 16px 15px;-webkit-overflow-scrolling:touch}
+ .yf-collection-grid>.yf-collection-card{flex:0 0 min(82vw,340px);width:min(82vw,340px);scroll-snap-align:start;aspect-ratio:16/10}
+ .yf-collection-grid>.yf-collection-card:focus-visible{outline-offset:-4px}
+}

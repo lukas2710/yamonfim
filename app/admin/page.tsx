@@ -1,9 +1,15 @@
 'use client';
 
+import { clearClientResources } from '@/lib/resource-cache';
+
+import { fetchCatalogueRows } from '@/lib/catalogue';
+import { createSearchMatcher, searchQueryVariants } from '@/lib/search';
+
 import SectionNavigation from '@/components/SectionNavigation';
 import PageHero from '@/components/PageHero';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { findContentDuplicate, duplicateErrorMessage } from '@/lib/content-identity';
 import { checkContentDuplicate } from '@/lib/content-duplicates';
@@ -102,6 +108,7 @@ export default function AdminPage() {
   const [editingId, setEditingId] = useState<any>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const tmdbSearchVersion = useRef(0);
   const [tmdbSearchResults, setTmdbSearchResults] = useState<any[]>([]);
   const [selectedTmdbId, setSelectedTmdbId] = useState('');
   const [searchingTmdb, setSearchingTmdb] = useState(false);
@@ -143,30 +150,11 @@ export default function AdminPage() {
     checkAdmin();
   }, [router]);
 
-  const fetchMedia = async () => {
-    let allData: MediaItem[] = [];
-    let page = 0;
-    const pageSize = 1000;
-    let fetched = true;
-
-    while (fetched) {
-      const { data, error } = await supabase
-        .from('media')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .range(page * pageSize, (page + 1) * pageSize - 1);
-
-      if (error || !data || data.length === 0) {
-        fetched = false;
-      } else {
-        allData = [...allData, ...data];
-        if (data.length < pageSize) fetched = false;
-        else page++;
-      }
-    }
-
-    setMediaList(allData);
-  };
+  async function fetchMedia() {
+    clearClientResources();
+    try { setMediaList(await fetchCatalogueRows<MediaItem>(supabase, '*')); }
+    catch { setErrorMsg('Le catalogue n’a pas pu être chargé entièrement. Réessaie avant de modifier ou ajouter un titre.'); }
+  }
 
   useEffect(() => {
     if (!message) return;
@@ -175,6 +163,7 @@ export default function AdminPage() {
   }, [message]);
 
   const handleSearchTmdbByName = (query: string) => {
+    const version = ++tmdbSearchVersion.current;
     setSearchQuery(query);
     if (tmdbTimer.current) clearTimeout(tmdbTimer.current);
     if (query.trim().length < 2) {
@@ -187,15 +176,19 @@ export default function AdminPage() {
       setSearchingTmdb(true);
       try {
         const endpoint = type === 'movie' ? 'movie' : 'tv';
-        const res = await fetch(
-          `https://api.themoviedb.org/3/search/${endpoint}?api_key=${TMDB_KEY}&query=${encodeURIComponent(query.trim())}&language=fr-FR`
-        );
-        const data = await res.json();
-        setTmdbSearchResults(data.results || []);
+        let results = [];
+        for (const variant of searchQueryVariants(query)) {
+          const res = await fetch(`https://api.themoviedb.org/3/search/${endpoint}?api_key=${TMDB_KEY}&query=${encodeURIComponent(variant)}&language=fr-FR`);
+          if (!res.ok) throw new Error('Recherche indisponible');
+          const data = await res.json();
+          results = data.results || [];
+          if (results.length) break;
+        }
+        if (version === tmdbSearchVersion.current) setTmdbSearchResults(results);
       } catch {
-        setTmdbSearchResults([]);
+        if (version === tmdbSearchVersion.current) setTmdbSearchResults([]);
       } finally {
-        setSearchingTmdb(false);
+        if (version === tmdbSearchVersion.current) setSearchingTmdb(false);
       }
     }, 300);
   };
@@ -422,6 +415,7 @@ export default function AdminPage() {
   };
 
   const handleDelete = async (id: any) => {
+    clearClientResources();
     const { error } = await supabase.from('media').delete().eq('id', id);
     setConfirmDeleteId(null);
     if (error) {
@@ -472,10 +466,13 @@ export default function AdminPage() {
     const existing = await checkContentDuplicate(supabase, payload, 'media', editingId);
     if (existing) {
       setErrorMsg(`« ${existing.item.title} » est déjà dans le catalogue. Modifie sa fiche plutôt que d’ajouter un doublon.`);
+      setLibraryQuery(existing.item.title || '');
+      setLibraryType('all');
       void fetchMedia();
       return;
     }
     if (editingId !== null && editingId !== undefined) {
+      clearClientResources();
       const { error } = await supabase.from('media').update(payload).eq('id', editingId);
       if (error) {
         setErrorMsg(duplicateErrorMessage(error, `Erreur modification : ${error.message}`));
@@ -485,6 +482,7 @@ export default function AdminPage() {
         fetchMedia();
       }
     } else {
+      clearClientResources();
       const { error } = await supabase.from('media').insert([payload]);
       if (error) {
         setErrorMsg(duplicateErrorMessage(error, `Erreur enregistrement Supabase : ${error.message}`));
@@ -509,19 +507,9 @@ export default function AdminPage() {
     }
   };
 
-  const normalize = (s: string) =>
-    s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-
   const filteredLibrary = useMemo(() => {
-    const q = normalize(libraryQuery.trim());
-    return mediaList.filter(m => {
-      if (libraryType !== 'all' && m.type !== libraryType) return false;
-      if (!q) return true;
-      return (
-        normalize(m.title || '').includes(q) ||
-        (m.genres || []).some(g => normalize(g).includes(q))
-      );
-    });
+    const matches = createSearchMatcher(libraryQuery);
+    return mediaList.filter(m => (libraryType === 'all' || m.type === libraryType) && matches(m.title, ...(m.genres || [])));
   }, [mediaList, libraryQuery, libraryType]);
 
   const counts = useMemo(() => ({
@@ -562,18 +550,18 @@ export default function AdminPage() {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <a
+            <Link
               href="/admin/banners"
               className="hidden items-center gap-2 rounded-full bg-white/5 px-4 py-2 text-sm font-medium text-zinc-200 ring-1 ring-white/10 transition hover:bg-white/10 hover:text-white sm:inline-flex"
             >
               <Icon name="layers" /> Bannières
-            </a>
-            <a
+            </Link>
+            <Link
               href="/"
               className="inline-flex items-center gap-2 rounded-full bg-white/5 py-2 pl-3 pr-4 text-sm font-medium text-zinc-200 ring-1 ring-white/10 transition hover:bg-white/10 hover:text-white"
             >
               <Icon name="back" /> Site
-            </a>
+            </Link>
           </div>
         </div>
       </header>
@@ -704,9 +692,7 @@ export default function AdminPage() {
                       const year = releaseDate ? `(${releaseDate.slice(0, 4)})` : '';
                       const mediaTypeLabel = item.media_type === 'tv' || type === 'series' ? 'Série' : 'Film';
                       
-                      const already = mediaList.find(
-                        m => (m.tmdb_id && String(m.tmdb_id) === String(item.id)) || (normalize(m.title || '') === normalize(`${name} ${year}`))
-                      );
+                      const already = findContentDuplicate({ title: `${name} ${year}`, type, tmdb_id: item.id }, mediaList);
                       return (
                         <li key={item.id}>
                           <button

@@ -1,10 +1,12 @@
 'use client';
 
+import { createSearchMatcher } from '@/lib/search';
+
 import SectionNavigation from '@/components/SectionNavigation';
 import PageHero from '@/components/PageHero';
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import Hls from 'hls.js';
+import type Hls from 'hls.js';
 
 interface Channel {
   id: string;
@@ -73,29 +75,23 @@ export default function TvPage() {
     const proxiedUrl = `/api/proxy?url=${encodeURIComponent(activeChannel.streamUrl)}`;
     let hls: Hls | null = null;
 
-    if (Hls.isSupported()) {
-      hls = new Hls({ enableWorker: true, lowLatencyMode: true });
-      hls.loadSource(proxiedUrl);
-      hls.attachMedia(video);
-
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        video.play().catch(() => {});
-      });
-
-      hls.on(Hls.Events.ERROR, (_, data) => {
-        if (data.fatal) {
-          setStreamError(true);
-          hls?.destroy();
-        }
-      });
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    let disposed = false;
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = proxiedUrl;
       video.addEventListener('loadedmetadata', play);
     } else {
-      queueMicrotask(fail);
+      void import('hls.js').then(({ default: Hls }) => {
+        if (disposed) return;
+        if (!Hls.isSupported()) { fail(); return; }
+        hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+        hls.loadSource(proxiedUrl); hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, play);
+        hls.on(Hls.Events.ERROR, (_, data) => { if (data.fatal) { setStreamError(true); hls?.destroy(); } });
+      }).catch(() => { if (!disposed) fail(); });
     }
 
     return () => {
+      disposed = true;
       if (hls) hls.destroy();
       video.removeEventListener('loadedmetadata', play);
       video.removeEventListener('error', fail);
@@ -108,7 +104,7 @@ export default function TvPage() {
   const categories = ['Toutes', ...Array.from(new Set(channels.map(c => c.category).filter(Boolean)))];
 
   const filteredChannels = channels.filter(c => {
-    const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = createSearchMatcher(searchQuery)(c.name);
     const matchesCategory = selectedCategory === 'Toutes' || c.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });

@@ -1,5 +1,7 @@
 'use client';
 
+import { getPersistentSession } from '@/lib/auth-session';
+
 import { useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { usePathname } from 'next/navigation';
@@ -19,7 +21,7 @@ export default function PresenceTracker() {
       if (disposed || inFlight || document.visibilityState !== 'visible') return;
       inFlight = true;
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session } } = await getPersistentSession();
         if (!session || disposed) return;
 
         // Détecte si l'utilisateur regarde un média (ex: /watch/123)
