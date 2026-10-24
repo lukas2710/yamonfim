@@ -4,7 +4,16 @@ export const PLANS: Plan[] = [
   { id: '3m', name: '3 mois', price: 15, days: 91, months: 3, tagline: 'Pour vos soirées et vos week-ends', badge: 'Notre recommandation', stripeLink: 'https://buy.stripe.com/eVq6oGeqBbBvbYrbWOf3a0m' },
   { id: '1y', name: '1 an', price: 50, days: 365, months: 12, tagline: 'Pour les passionnés de cinéma', badge: 'Meilleur tarif par jour', stripeLink: 'https://buy.stripe.com/bJedR896h8pjbYrd0Sf3a0o' },
 ];
-export const formatEuro = (value: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(value);
+export const RECOMMENDED_PLAN = '3m';
+const DAYS_PER_MONTH = 365 / 12;
+export const perMonth = (plan: Plan) => plan.price / plan.days * DAYS_PER_MONTH;
+export const perWeek = (plan: Plan) => plan.price / plan.days * 7;
+// Saving on the daily price compared with the shortest plan, rounded down so it is never overstated.
+export function savingPercent(plan: Plan, base: Plan = PLANS[0]) {
+  const saving = Math.floor((1 - (plan.price / plan.days) / (base.price / base.days)) * 100);
+  return saving > 0 ? saving : 0;
+}
+export const formatEuro =(value: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(value);
 export function checkoutUrl(plan: Plan, userId: string, email: string) {
   if (!userId || !email) throw new Error('Reconnectez-vous pour associer le paiement à votre compte.');
   const url = new URL(plan.stripeLink);

@@ -7,8 +7,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { fetchSubscriptionProfile } from '@/lib/subscription';
-import { PLANS, formatEuro, checkoutUrl, expirationDate, nextSundayReset } from './plans';
+import { fetchCatalogueCards } from '@/lib/client-catalogue';
+import { PLANS, RECOMMENDED_PLAN, formatEuro, perMonth, perWeek, savingPercent, checkoutUrl, expirationDate, nextSundayReset, type Plan } from './plans';
 import styles from './subscription.module.css';
+import sales from './sales.module.css';
 import MemberReviews from './MemberReviews';
 
 const ADMIN_EMAIL = 'lukas.leclerc312@gmail.com';
@@ -34,12 +36,14 @@ const BENEFITS: { icon: IconName; title: string; text: string }[] = [
   { icon: 'shield', title: 'Un paiement via Stripe', text: 'Finalisez votre choix sur une page de paiement Stripe.' },
 ];
 const FAQ = [
-  { q: 'Qu’est-ce qui change avec le VIP ?', a: 'Le VIP enlève le quota de visionnage pendant votre période d’accès. Toutes les formules VIP proposent les mêmes avantages : vous choisissez simplement la durée qui vous convient.' },
-  { q: 'Quel montant vais-je payer ?', a: 'Le prix principal de chaque carte est le montant affiché pour la période choisie. Le prix par mois ou par jour est un équivalent indicatif, pas une autre formule de facturation. Vérifiez le montant final et les conditions présentés par Stripe avant de confirmer.' },
-  { q: 'Comment le paiement est-il associé à mon compte ?', a: 'Votre adresse email et votre identifiant de compte sont transmis au lien Stripe pour identifier votre compte. Utilisez l’adresse indiquée dans le récapitulatif. Si vous voulez utiliser un autre compte, reconnectez-vous avec celui-ci avant de payer.' },
-  { q: 'J’ai payé, mais mon accès n’a pas changé. Que faire ?', a: 'Revenez sur cette page et utilisez « Actualiser mon statut ». Si le problème persiste, contactez-nous via le formulaire d’assistance, avec votre reçu Stripe et votre identifiant client. Évitez de payer une seconde fois pour tenter d’activer votre accès.' },
-  { q: 'Comment vérifier la durée restante de mon accès ?', a: 'Votre espace « Mon abonnement » affiche votre statut et, si votre compte possède une date de début et une durée, une estimation de l’échéance. Si ces informations sont absentes, notre assistance peut vérifier votre accès.' },
+  { q: 'Qu’est-ce que je gagne avec le VIP ?', a: 'Tu regardes autant de films et d’épisodes que tu veux, sans quota et sans attendre la remise à zéro du dimanche. Les trois offres donnent exactement les mêmes avantages : seule la durée change.' },
+  { q: 'Le paiement est-il sécurisé ?', a: 'Oui. Le paiement se fait sur Stripe, une plateforme de paiement utilisée par des millions de sites. Tes coordonnées bancaires ne passent jamais par YAMONFIM. Le montant exact est affiché par Stripe avant que tu confirmes.' },
+  { q: 'Comment mon VIP est-il relié à mon compte ?', a: 'Ton email et ton identifiant de compte sont transmis automatiquement à Stripe. Paie avec le compte sur lequel tu es connecté, celui affiché sous les offres.' },
+  { q: 'J’ai payé mais je ne suis pas encore VIP ?', a: 'Reviens sur cette page et appuie sur « Actualiser mon statut ». Si rien ne change, contacte l’assistance avec ton reçu Stripe et ton identifiant client (en bas de page). Ne repaie pas une deuxième fois.' },
+  { q: 'Quelle offre choisir ?', a: '2 semaines pour essayer. 3 mois si tu regardes régulièrement : c’est 42 % moins cher par jour. 1 an si tu ne veux plus y penser : c’est le prix le plus bas, moins de 1 € par semaine.' },
 ];
+const durationLabel = (seconds: number) => { const d = Math.floor(seconds / 86400), h = Math.floor(seconds / 3600) % 24, m = Math.floor(seconds / 60) % 60; return d ? `${d} j ${h} h` : h ? `${h} h ${m} min` : `${m} min`; };
+interface Poster { id: string | number; title?: string; poster?: string; type?: string }
 interface Account { id: string; email: string; vip: boolean; admin: boolean; watchCount: number; started?: string; duration?: string; resetAt?: string; resetVerified: boolean }
 const formatDate = (value: number) => new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(value);
 
@@ -50,7 +54,8 @@ export default function AbonnementPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [selectedId, setSelectedId] = useState('3m');
+  const [selectedId, setSelectedId] = useState(RECOMMENDED_PLAN);
+  const [catalogue, setCatalogue] = useState<Poster[]>([]);
   const [redirecting, setRedirecting] = useState(false);
   const [now, setNow] = useState<number | null>(null);
   const [copyState, setCopyState] = useState<'idle' | 'done' | 'error'>('idle');
@@ -91,6 +96,11 @@ export default function AbonnementPage() {
     return () => { mounted.current = false; if (copyTimer.current) clearTimeout(copyTimer.current); };
   }, [loadAccount]);
   useEffect(() => {
+    let active = true;
+    fetchCatalogueCards<Poster>(supabase).then(rows => { if (active) setCatalogue(rows); }).catch(() => {});
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
     if (!account) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
@@ -107,7 +117,8 @@ export default function AbonnementPage() {
     window.addEventListener('pageshow', handlePageShow);
     return () => { document.removeEventListener('visibilitychange', handleReturn); window.removeEventListener('pageshow', handlePageShow); };
   }, [loadAccount]);
-  const subscribe = async () => {
+  const subscribe = async (plan: Plan = selected) => {
+    setSelectedId(plan.id);
     if (paying.current || !account || account.vip || refreshing || error) return;
     paying.current = true; setRedirecting(true); setError('');
     let navigating = false;
@@ -119,7 +130,7 @@ export default function AbonnementPage() {
       if (profileError) throw profileError;
       if (!profile) throw new Error('Votre compte ne peut pas être vérifié. Réessayez avant de payer.');
       if (profile.is_vip === true || profile.is_vip === 'true') { await loadAccount(true); return; }
-      window.location.assign(checkoutUrl(selected, session.user.id, session.user.email ?? ''));
+      window.location.assign(checkoutUrl(plan, session.user.id, session.user.email ?? ''));
       navigating = true;
     } catch (err) { if (mounted.current) setError(err instanceof Error ? err.message : 'Le paiement ne peut pas être ouvert. Réessayez.'); }
     finally { if (mounted.current && !navigating) { paying.current = false; setRedirecting(false); } }
@@ -132,6 +143,13 @@ export default function AbonnementPage() {
   };
   const seconds = end !== null && now !== null ? Math.max(0, Math.floor((end - now) / 1000)) : null;
   const countdown = seconds === null ? [] : [Math.floor(seconds / 86400), Math.floor(seconds / 3600) % 24, Math.floor(seconds / 60) % 60, seconds % 60];
+  const posters = catalogue.filter(m => m.poster).slice(0, 32);
+  const movies = catalogue.filter(m => m.type === 'movie').length;
+  const series = catalogue.filter(m => m.type === 'series').length;
+  const cheapestWeek = Math.min(...PLANS.map(perWeek));
+  const quotaReached = !!account && !account.vip && remaining === 0;
+  const showSales = !account?.vip || account.admin;
+  const payDisabled = !account || account.vip || !!error || refreshing || redirecting;
   if (loading) return <main className={`yf-page yf-subscription ${styles.page}`}><div className={styles.loading}><span className={styles.loader} /><p>Votre expérience VIP se prépare…</p></div></main>;
 
   return (
@@ -140,12 +158,12 @@ export default function AbonnementPage() {
       <div className={styles.container}>
         {error && <div className={styles.error} role="alert"><p>{error}</p><button onClick={() => void loadAccount(true)} disabled={refreshing}>{refreshing ? 'Vérification…' : 'Réessayer'}</button></div>}
         {notice && <p className={styles.notice} role="status">{notice}</p>}
-        <section className={styles.hero}>
-          <div className={styles.heroCopy}><p className={styles.eyebrow}><span /> FILMS, SÉRIES ET ENVIES DE CINÉMA</p><h1>{account?.vip ? <>Tu profites de tout,<br /><em>sans limite.</em></> : <>Regarde sans limite.<br /><em>Passe au VIP.</em></>}</h1><p className={styles.intro}>{account?.vip ? 'Votre espace, votre abonnement et tout un catalogue à retrouver. Le plus difficile, c’est de choisir le prochain film.' : 'Le film qu’on attendait. La série qu’on ne lâche plus. Retrouvez tout le catalogue et profitez de vos envies de cinéma sans quota de visionnage.'}</p><div className={styles.heroActions}>{account?.vip ? <Link className={styles.primary} href="/"><Icon name="play" />Explorer le catalogue</Link> : <a className={styles.primary} href="#formules">Découvrir les formules<Icon name="arrow" /></a>}<a href={account?.vip ? '#mon-abonnement' : '#comparatif'} className={styles.textLink}>{account?.vip ? 'Mon abonnement' : 'Comparer les avantages'} <span aria-hidden="true">↗</span></a></div><p className={styles.heroNote}><Icon name="shield" />{account?.vip ? 'Les informations de votre compte, au même endroit.' : `Trois durées. Les mêmes avantages. À partir de ${formatEuro(PLANS[0].price)}.`}</p></div>
-          <div className={styles.ticketScene}><div className={styles.ticketGlow} /><div className={styles.ticket}><div className={styles.ticketTop}><span>YAMONFIM</span><Icon name="crown" /></div><p className={styles.ticketLabel}>VOTRE PASSEPORT POUR</p><p className={styles.ticketTitle}>Ton cinéma.<br />Sans limite.</p><div className={styles.ticketPills}><span>FILMS</span><span>SÉRIES</span><span>ILLIMITÉ</span></div><div className={styles.ticketTear} /><div className={styles.ticketBottom}><div><span>ACCÈS</span><strong>{account?.vip ? 'MEMBRE VIP' : 'YAMONFIM VIP'}</strong></div><div className={styles.ticketBarcode} aria-hidden="true" /><span className={styles.ticketStar} aria-hidden="true">✳</span></div></div><span className={styles.ticketCaption}>POUR CEUX QUI AIMENT LES GÉNÉRIQUES DE FIN.</span></div>
-        </section>
-        <section className={styles.benefits} aria-label="Les avantages VIP">{BENEFITS.map(b => <article key={b.title}><span className={styles.benefitIcon}><Icon name={b.icon} /></span><h2>{b.title}</h2><p>{b.text}</p></article>)}</section>
-        {account?.vip ? (
+        {account?.vip && <>
+          <section className={styles.hero}>
+            <div className={styles.heroCopy}><p className={styles.eyebrow}><span /> FILMS, SÉRIES ET ENVIES DE CINÉMA</p><h1>Tu profites de tout,<br /><em>sans limite.</em></h1><p className={styles.intro}>Votre espace, votre abonnement et tout un catalogue à retrouver. Le plus difficile, c’est de choisir le prochain film.</p><div className={styles.heroActions}><Link className={styles.primary} href="/"><Icon name="play" />Explorer le catalogue</Link><a href="#mon-abonnement" className={styles.textLink}>Mon abonnement <span aria-hidden="true">↗</span></a></div><p className={styles.heroNote}><Icon name="shield" />Les informations de votre compte, au même endroit.</p></div>
+            <div className={styles.ticketScene}><div className={styles.ticketGlow} /><div className={styles.ticket}><div className={styles.ticketTop}><span>YAMONFIM</span><Icon name="crown" /></div><p className={styles.ticketLabel}>VOTRE PASSEPORT POUR</p><p className={styles.ticketTitle}>Ton cinéma.<br />Sans limite.</p><div className={styles.ticketPills}><span>FILMS</span><span>SÉRIES</span><span>ILLIMITÉ</span></div><div className={styles.ticketTear} /><div className={styles.ticketBottom}><div><span>ACCÈS</span><strong>MEMBRE VIP</strong></div><div className={styles.ticketBarcode} aria-hidden="true" /><span className={styles.ticketStar} aria-hidden="true">✳</span></div></div><span className={styles.ticketCaption}>POUR CEUX QUI AIMENT LES GÉNÉRIQUES DE FIN.</span></div>
+          </section>
+          <section className={styles.benefits} aria-label="Les avantages VIP">{BENEFITS.map(b => <article key={b.title}><span className={styles.benefitIcon}><Icon name={b.icon} /></span><h2>{b.title}</h2><p>{b.text}</p></article>)}</section>
           <section id="mon-abonnement" className={styles.memberSection}>
             <div className={styles.sectionHeading}><p className={styles.eyebrow}>VOTRE ESPACE MEMBRE</p><h2>Le VIP, côté coulisses.</h2><p>Gardez un œil sur votre accès, puis retrouvez votre prochaine découverte.</p></div>
             <div className={styles.memberGrid}>
@@ -158,45 +176,59 @@ export default function AbonnementPage() {
               <aside className={styles.memberAside}><Icon name="help" /><h3>Un accès à vérifier ?</h3><p>Un paiement récent, une durée manquante ou une question sur votre compte ? Retrouvez les informations à transmettre à l’assistance.</p><a href="#aide" className={styles.textLink}>Consulter l’aide <span aria-hidden="true">↗</span></a></aside>
             </div>
           </section>
-        ) : (
-          <section id="formules" className={styles.pricing}>
-            <div className={styles.sectionHeading}><p className={styles.eyebrow}>TON RYTHME, TON FORFAIT</p><h2>Choisis ton forfait.</h2><p>Les mêmes avantages VIP. Seule la durée change.</p></div>
-            {account && <div className={styles.quota}><span className={styles.quotaIcon}><Icon name="play" /></span><div><strong>Votre accès gratuit</strong><p>{remaining > 0 ? `${remaining} vision${remaining > 1 ? 's' : ''} disponible${remaining > 1 ? 's' : ''} selon votre compteur actuel.` : 'Votre quota gratuit est atteint.'}</p></div><div className={styles.quotaMeter}><span>{Math.min(account.watchCount, FREE_LIMIT)} / {FREE_LIMIT} utilisées</span><progress max={FREE_LIMIT} value={Math.min(account.watchCount, FREE_LIMIT)} aria-label="Quota gratuit utilisé" /></div></div>}
-            {account && <div className={styles.resetCard}>
-              <div><span className={styles.benefitIcon}><Icon name="refresh" /></span><h3>{remaining === 0 ? 'Tu pourras bientôt relancer ta séance.' : 'Tes prochaines visions gratuites arrivent.'}</h3><p>{account.resetVerified ? 'Remise à zéro de ton quota gratuit' : 'Prochaine remise à zéro prévue'} · Dimanche à 00 h, heure de Paris</p></div>
-              <div className={styles.resetClock} aria-label="Temps avant la prochaine remise à zéro">{resetSeconds === null ? <p>Calcul en cours…</p> : [Math.floor(resetSeconds / 86400), Math.floor(resetSeconds / 3600) % 24, Math.floor(resetSeconds / 60) % 60, resetSeconds % 60].map((value, i) => <div key={i}><strong>{String(value).padStart(2, '0')}</strong><span>{['Jours', 'Heures', 'Minutes', 'Secondes'][i]}</span></div>)}</div>
-              {!account.resetVerified && <p className={styles.resetNotice}>Horaire prévu. Utilise « Actualiser mon statut » pour vérifier tes visions disponibles.</p>}
-            </div>}
-            <fieldset className={styles.plans}>
-              <legend className={styles.srOnly}>Choisissez une durée VIP</legend>
-              {PLANS.map((plan, i) => <label key={plan.id} className={`${styles.plan} ${selectedId === plan.id ? styles.selected : ''}`}>
-                <input className={styles.planRadio} type="radio" name="vip-plan" value={plan.id} checked={selectedId === plan.id} onChange={() => setSelectedId(plan.id)} disabled={redirecting} />
-                {plan.badge && <span className={`${styles.planBadge} ${i === 2 ? styles.savingBadge : ''}`}>{plan.badge}</span>}
-                <div className={styles.planHeader}><span className={styles.planNumber}>0{i + 1}</span><span className={styles.radioMark} aria-hidden="true">{selectedId === plan.id && <Icon name="check" />}</span></div>
-                <h3>{plan.name}</h3><p className={styles.tagline}>{plan.tagline}</p><p className={styles.price}>{formatEuro(plan.price)}<span>pour {plan.name}</span></p><p className={styles.equivalent}>{plan.months ? `Soit ≈ ${formatEuro(plan.price / plan.months)} / mois` : `Soit ≈ ${formatEuro(plan.price / plan.days)} / jour`}</p>
-                <div className={styles.planDivider} /><ul>{['Visionnage sans quota', 'Films et séries du catalogue', `Accès VIP pendant ${plan.name}`].map(text => <li key={text}><Icon name="check" />{text}</li>)}</ul><span className={styles.selectPlan}>{selectedId === plan.id ? 'Votre formule sélectionnée' : 'Sélectionner cette formule'}<Icon name={selectedId === plan.id ? 'check' : 'arrow'} /></span>
-              </label>)}
-            </fieldset>
-            <div className={styles.checkout}><div className={styles.checkoutSummary}><span className={styles.checkoutIcon}><Icon name="shield" /></span><div><p className={styles.overline}>VOTRE SÉLECTION</p><h3>VIP {selected.name}<span>{formatEuro(selected.price)}</span></h3><p>{account ? <>Associé au compte <strong>{account.email}</strong></> : 'Votre compte doit être vérifié avant de continuer.'}</p></div></div><div className={styles.checkoutAction}><button className={styles.primary} onClick={() => void subscribe()} disabled={!account || !!error || refreshing || redirecting}>{redirecting ? 'Ouverture de Stripe…' : 'Continuer vers le paiement'}<Icon name="arrow" /></button><span>Paiement sur Stripe · Vérifiez les conditions avant de confirmer.</span></div></div>
-            <p className={styles.pricingNote}>Les équivalents par mois ou par jour sont indicatifs. Le prix principal correspond à la période affichée ; le montant et les conditions de paiement sont confirmés sur Stripe.</p>
+        </>}
+        {showSales && <>
+          {account?.admin && <p className={sales.preview}>Aperçu admin : voici la page de vente telle que la voient les membres gratuits. Le paiement est désactivé pour ton compte.</p>}
+          <section className={sales.hero}>
+            {posters.length > 0 && <div className={sales.wall} aria-hidden="true">{posters.map(m => <img key={m.id} src={m.poster} alt="" loading="lazy" />)}</div>}
+            <div className={sales.heroInner}>
+              {quotaReached ? <p className={`${sales.status} ${sales.urgent}`}><Icon name="play" />Tes {FREE_LIMIT} visions gratuites sont utilisées. Continue tout de suite avec le VIP.</p>
+                : account && !account.vip ? <p className={sales.status}><Icon name="play" />Il te reste {remaining} vision{remaining > 1 ? 's' : ''} gratuite{remaining > 1 ? 's' : ''} cette semaine</p> : null}
+              <h1>Regarde tout.<br /><em>Sans limite.</em></h1>
+              <p className={sales.lead}>{movies && series ? <><strong>{movies.toLocaleString('fr-FR')} films</strong> et <strong>{series.toLocaleString('fr-FR')} séries</strong></> : 'Tout le catalogue'}, sans quota et sans attendre, sur téléphone, ordinateur et TV. Dès <strong>{formatEuro(cheapestWeek)} par semaine</strong>.</p>
+              <a className={`${styles.primary} ${sales.cta}`} href="#formules">Voir les offres VIP<Icon name="arrow" /></a>
+              <ul className={sales.trust}><li><Icon name="shield" />Paiement sécurisé Stripe</li><li><Icon name="check" />Activé sur ton compte</li><li><Icon name="screen" />Téléphone, PC & TV</li></ul>
+            </div>
           </section>
-        )}
+          <section id="formules" className={sales.offers}>
+            <div className={sales.heading}><h2>Choisis ton offre</h2><p>Mêmes avantages partout. Plus c’est long, moins c’est cher.</p></div>
+            <div className={sales.plans}>
+              {PLANS.map(plan => {
+                const featured = plan.id === RECOMMENDED_PLAN;
+                const saving = savingPercent(plan);
+                return <article key={plan.id} className={`${sales.plan} ${featured ? sales.featured : ''} ${selectedId === plan.id ? sales.active : ''}`} onClick={() => setSelectedId(plan.id)}>
+                  {plan.badge && <span className={`${sales.badge} ${featured ? '' : sales.alt}`}>{featured ? 'Recommandé' : 'Le moins cher'}</span>}
+                  <h3>{plan.name}</h3><p className={sales.tagline}>{plan.tagline}</p>
+                  <p className={sales.price}><strong>{formatEuro(plan.price)}</strong><span>pour {plan.name}</span></p>
+                  <p className={sales.equiv}>soit {formatEuro(plan.months ? perMonth(plan) : perWeek(plan))} / {plan.months ? 'mois' : 'semaine'}{saving > 0 && <span className={sales.saving}>−{saving} %</span>}</p>
+                  <ul>{['Films et séries en illimité', 'Aucune attente le dimanche', 'Téléphone, ordinateur et TV', `VIP pendant ${plan.name}`].map(text => <li key={text}><Icon name="check" />{text}</li>)}</ul>
+                  <button className={`${styles.primary} ${sales.choose} ${featured ? '' : sales.ghost}`} disabled={payDisabled} onClick={e => { e.stopPropagation(); void subscribe(plan); }}>{redirecting && selectedId === plan.id ? 'Ouverture du paiement…' : `Choisir ${plan.name}`}<Icon name="arrow" /></button>
+                </article>;
+              })}
+            </div>
+            <p className={sales.secure}><span><Icon name="shield" />Paiement 100 % sécurisé par Stripe</span><span><Icon name="check" />Montant confirmé avant de payer</span>{account && <span><Icon name="crown" />VIP activé sur {account.email}</span>}</p>
+          </section>
+          <section id="comparatif" className={sales.versus}>
+            <div className={sales.heading}><h2>Gratuit ou VIP ?</h2><p>Le VIP, c’est la fin de l’attente.</p></div>
+            <div className={sales.vsGrid}>
+              <div className={sales.vsCard}><h3>Gratuit</h3><ul><li className={sales.yes}><Icon name="check" />Accès au catalogue</li><li className={sales.no}><Icon name="arrow" />{FREE_LIMIT} visions par semaine seulement</li><li className={sales.no}><Icon name="arrow" />Ensuite, attendre dimanche</li></ul>{account && !account.vip && resetSeconds !== null && <p className={sales.wait}>Sans VIP, prochaines visions gratuites dans <strong>{durationLabel(resetSeconds)}</strong></p>}</div>
+              <div className={`${sales.vsCard} ${sales.vip}`}><h3><Icon name="crown" />VIP</h3><ul><li className={sales.yes}><Icon name="check" />Accès au catalogue</li><li className={sales.yes}><Icon name="infinity" />Films et épisodes en illimité</li><li className={sales.yes}><Icon name="check" />Aucune attente, tout de suite</li><li className={sales.yes}><Icon name="screen" />Téléphone, ordinateur et TV</li></ul></div>
+            </div>
+          </section>
+        </>}
         <MemberReviews userId={account?.id} admin={account?.admin ?? false} />
-        <section id="comparatif" className={styles.comparison}>
-          <div><p className={styles.eyebrow}>LE CHOIX EN UN CLIN D’ŒIL</p><h2>Un peu de cinéma.<br /><em>Ou tout votre cinéma.</em></h2><p>Gardez votre compte et vos repères. Le VIP retire le quota de visionnage pendant votre période d’accès.</p></div>
-          <div className={styles.tableWrap}><table><caption className={styles.srOnly}>Comparaison de l’accès gratuit et VIP</caption><thead><tr><th scope="col">Votre expérience</th><th scope="col">Gratuit</th><th scope="col"><Icon name="crown" /> VIP</th></tr></thead><tbody>{[{ label: 'Films et séries', free: 'Catalogue', vip: 'Catalogue' }, { label: 'Visionnage', free: `Quota de ${FREE_LIMIT}`, vip: 'Sans quota' }, { label: 'Reprise de lecture', free: 'Inclus', vip: 'Inclus' }, { label: 'Téléphone et ordinateur', free: 'Inclus', vip: 'Inclus' }, { label: 'Durée VIP', free: '—', vip: 'Selon la formule' }].map(row => <tr key={row.label}><th scope="row">{row.label}</th><td>{row.free}</td><td>{row.vip}</td></tr>)}</tbody></table></div>
-        </section>
         <section className={styles.faq}>
-          <div><p className={styles.eyebrow}>AVANT LE GÉNÉRIQUE</p><h2>Les réponses<br />à vos questions.</h2><p>Un doute ? Vous pouvez aussi retrouver notre assistance juste en dessous.</p><a href="#aide" className={styles.textLink}>J’ai besoin d’aide <span aria-hidden="true">↗</span></a></div>
+          <div><p className={styles.eyebrow}>AVANT LE GÉNÉRIQUE</p><h2>Tes questions,<br />nos réponses.</h2><p>Un doute avant de passer VIP ? L’assistance est juste en dessous.</p><a href="#aide" className={styles.textLink}>J’ai besoin d’aide <span aria-hidden="true">↗</span></a></div>
           <div className={styles.faqItems}>{FAQ.map((item, i) => <details key={item.q} open={i === 0 ? true : undefined}><summary>{item.q}<span aria-hidden="true">+</span></summary><p>{item.a}</p></details>)}</div>
         </section>
+        {showSales && <section className={sales.final}><h2>Ta prochaine séance t’attend.</h2><p>VIP {PLANS.find(p => p.id === RECOMMENDED_PLAN)!.name} pour {formatEuro(PLANS.find(p => p.id === RECOMMENDED_PLAN)!.price)}, soit {formatEuro(perMonth(PLANS.find(p => p.id === RECOMMENDED_PLAN)!))} par mois.</p><button className={`${styles.primary} ${sales.cta}`} disabled={payDisabled} onClick={() => void subscribe(PLANS.find(p => p.id === RECOMMENDED_PLAN)!)}>{redirecting ? "Ouverture du paiement…" : "Je passe VIP"}<Icon name="arrow" /></button></section>}
         <section id="aide" className={styles.support}>
           <div className={styles.supportIntro}><span className={styles.benefitIcon}><Icon name="help" /></span><p className={styles.eyebrow}>ON RESTE À VOS CÔTÉS</p><h2>Besoin d’un coup de main ?</h2><p>Si vous avez déjà payé, actualisez votre statut avant de recommencer un paiement. Gardez votre reçu Stripe pour faciliter la vérification.</p><div className={styles.supportActions}><Link href="/report" className={styles.secondary}>Contacter l’assistance<Icon name="arrow" /></Link><button className={styles.smallButton} onClick={() => void loadAccount(true)} disabled={refreshing}><Icon name="refresh" />{refreshing ? 'Vérification…' : 'Actualiser mon statut'}</button></div></div>
           <div className={styles.accountDetails}><p className={styles.overline}>À JOINDRE À VOTRE DEMANDE</p><div className={styles.emailDetail}>Email du compte<span>{account?.email || 'Compte non chargé'}</span></div><label htmlFor="client-id">Identifiant client</label><div className={styles.idField}><input id="client-id" readOnly value={account?.id || ''} placeholder="Compte non chargé" /><button onClick={() => void copyId()} disabled={!account} aria-label="Copier votre identifiant client"><Icon name={copyState === 'done' ? 'check' : 'copy'} /></button></div><p className={styles.copyStatus} role="status">{copyState === 'done' ? 'Identifiant copié.' : copyState === 'error' ? 'Copie indisponible. Sélectionnez l’identifiant pour le copier manuellement.' : 'Cet identifiant permet de retrouver votre compte.'}</p><p className={styles.privateNote}><Icon name="shield" />Ne transmettez jamais votre mot de passe ni vos coordonnées bancaires.</p></div>
         </section>
         <footer className={styles.footer}><Link className={styles.brand} href="/">YAMON<span>FIM</span></Link><span>Les belles histoires commencent par une bonne séance.</span><Link href="/">Retour au catalogue ↗</Link></footer>
       </div>
-      {account && !account.vip && <div className={styles.mobileBar}><div><span>VIP {selected.name}</span><strong>{formatEuro(selected.price)}</strong></div><button className={styles.primary} disabled={!!error || refreshing || redirecting} onClick={() => void subscribe()}>{redirecting ? 'Ouverture…' : 'Continuer'}<Icon name="arrow" /></button></div>}
+      {account && !account.vip && <div className={styles.mobileBar}><div><span>VIP {selected.name}</span><strong>{formatEuro(selected.price)}</strong></div><button className={styles.primary} disabled={payDisabled} onClick={() => void subscribe()}>{redirecting ? 'Ouverture…' : 'Choisir'}<Icon name="arrow" /></button></div>}
     </main>
   );
 }

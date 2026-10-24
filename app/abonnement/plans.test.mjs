@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PLANS, checkoutUrl, expirationDate, formatEuro, nextSundayReset } from './plans.ts';
+import { PLANS, perMonth, perWeek, savingPercent, checkoutUrl, expirationDate, formatEuro, nextSundayReset } from './plans.ts';
 
 test('existing prices and Stripe destinations are preserved', () => {
   assert.deepEqual(PLANS.map(p => p.price), [3.99, 15, 50]);
@@ -34,4 +34,10 @@ test('weekly countdown targets Sunday midnight in Paris, including DST changes',
   assert.equal(new Date(nextSundayReset(Date.parse('2026-10-20T12:00:00Z'))).toISOString(), '2026-10-24T22:00:00.000Z');
   assert.equal(new Date(nextSundayReset(Date.parse('2026-03-28T12:00:00Z'))).toISOString(), '2026-03-28T23:00:00.000Z');
   assert.equal(new Date(nextSundayReset(Date.parse('2026-10-25T02:00:00Z'))).toISOString(), '2026-10-31T23:00:00.000Z');
+});
+
+test('savings and equivalents are derived from the real prices and never overstated', () => {
+  assert.deepEqual(PLANS.map(p => savingPercent(p)), [0, 42, 51]);
+  assert.equal(perMonth(PLANS[1]).toFixed(2), '5.01');
+  assert.ok(perWeek(PLANS[2]) < 1);
 });
