@@ -18,6 +18,14 @@ export default function MemberReviews({ userId, admin }: { userId?: string; admi
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [ownReview, setOwnReview] = useState(false);
+  // A rating chosen in the home prompt arrives as ?note=N.
+  useEffect(() => {
+    const note = Number(new URLSearchParams(window.location.search).get('note'));
+    if (!Number.isInteger(note) || note < 1 || note > 5) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Read the rating passed in the URL once on mount.
+    setRating(note);
+    window.setTimeout(() => { document.getElementById('donner-mon-avis')?.scrollIntoView({ block: 'center' }); document.getElementById('review-comment')?.focus({ preventScroll: true }); }, 600);
+  }, []);
   const loadReviews = useCallback(async (signal?: AbortSignal) => {
     let query = supabase.from('site_reviews').select('*', { count: 'exact' }).order('created_at', { ascending: false }).limit(12);
     if (signal) query = query.abortSignal(signal);
@@ -34,7 +42,7 @@ export default function MemberReviews({ userId, admin }: { userId?: string; admi
     void loadReviews(controller.signal);
     void (async () => {
       const { data } = await supabase.from('site_reviews').select('*').eq('user_id', userId).abortSignal(controller.signal).maybeSingle();
-      if (!controller.signal.aborted && data) { setOwnReview(true); setName(data.display_name); setRating(data.rating); setComment(data.comment); }
+      if (!controller.signal.aborted && data) { setOwnReview(true); setName(data.display_name); if (!new URLSearchParams(window.location.search).get('note')) setRating(data.rating); setComment(data.comment); }
     })();
     return () => controller.abort();
   }, [userId, loadReviews]);
@@ -57,6 +65,6 @@ export default function MemberReviews({ userId, admin }: { userId?: string; admi
       <div className={styles.reviewSummary}><strong>{average?.toLocaleString('fr-FR', { maximumFractionDigits: 1 })}<span> / 5</span></strong><span className={styles.stars} aria-hidden="true">{Array.from({ length: 5 }, (_, i) => <span key={i} className={i < Math.round(average ?? 0) ? styles.filledStar : styles.emptyStar}>★</span>)}</span><p>Moyenne des {reviews.length} avis affichés · {total} avis au total</p></div>
       <div className={styles.reviewGrid}>{reviews.map(review => <article key={review.id} className={styles.reviewCard}><div className={styles.reviewStars} aria-label={`${review.rating} sur 5`}>{Array.from({ length: 5 }, (_, i) => <span key={i} className={i < review.rating ? styles.filledStar : styles.emptyStar} aria-hidden="true">★</span>)}</div><p>« {review.comment} »</p><footer><div className={styles.reviewAvatar} aria-hidden="true">{review.display_name.slice(0, 1).toUpperCase()}</div><div><strong>{review.display_name}</strong><span>Membre Yamonfim</span></div><time dateTime={review.created_at}>{new Date(review.created_at).toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris', day: 'numeric', month: 'short', year: 'numeric' })}</time></footer></article>)}</div>
     </>}
-    {userId && !unavailable && <form className={styles.reviewForm} onSubmit={event => void submit(event)}><div><h3>{ownReview ? 'Ton avis, tes mots.' : 'Et toi, qu’en penses-tu ?'}</h3><p>Un avis par compte, modifiable à tout moment. Ton pseudo et ton commentaire seront visibles par les membres.</p></div><div className={styles.reviewFields}><label htmlFor="review-name">Ton pseudo<input id="review-name" required minLength={2} maxLength={50} value={name} onChange={e => setName(e.target.value)} placeholder="Ton prénom ou pseudo" autoComplete="nickname" /></label><label htmlFor="review-rating">Ta note<select id="review-rating" value={rating} onChange={e => setRating(Number(e.target.value))}>{[5, 4, 3, 2, 1].map(value => <option key={value} value={value}>{value} / 5</option>)}</select></label></div><label htmlFor="review-comment">Ton expérience<textarea id="review-comment" required minLength={10} maxLength={1000} rows={3} value={comment} onChange={e => setComment(e.target.value)} placeholder="Ce que tu apprécies, ce qui pourrait être amélioré…" /></label><div className={styles.reviewFormFooter}><span>{comment.length} / 1 000 caractères</span><button className={styles.primary} disabled={submitting} type="submit">{submitting ? 'Enregistrement…' : ownReview ? 'Mettre à jour mon avis' : 'Publier mon avis'}</button></div>{message && <p className={styles.reviewSuccess} role="status">{message}</p>}{error && <p className={styles.reviewError} role="alert">{error}</p>}</form>}
+    {userId && !unavailable && <form id="donner-mon-avis" className={styles.reviewForm} onSubmit={event => void submit(event)}><div><h3>{ownReview ? 'Ton avis, tes mots.' : 'Et toi, qu’en penses-tu ?'}</h3><p>Un avis par compte, modifiable à tout moment. Ton pseudo et ton commentaire seront visibles par les membres.</p></div><div className={styles.reviewFields}><label htmlFor="review-name">Ton pseudo<input id="review-name" required minLength={2} maxLength={50} value={name} onChange={e => setName(e.target.value)} placeholder="Ton prénom ou pseudo" autoComplete="nickname" /></label><label htmlFor="review-rating">Ta note<select id="review-rating" value={rating} onChange={e => setRating(Number(e.target.value))}>{[5, 4, 3, 2, 1].map(value => <option key={value} value={value}>{value} / 5</option>)}</select></label></div><label htmlFor="review-comment">Ton expérience<textarea id="review-comment" required minLength={10} maxLength={1000} rows={3} value={comment} onChange={e => setComment(e.target.value)} placeholder="Ce que tu apprécies, ce qui pourrait être amélioré…" /></label><div className={styles.reviewFormFooter}><span>{comment.length} / 1 000 caractères</span><button className={styles.primary} disabled={submitting} type="submit">{submitting ? 'Enregistrement…' : ownReview ? 'Mettre à jour mon avis' : 'Publier mon avis'}</button></div>{message && <p className={styles.reviewSuccess} role="status">{message}</p>}{error && <p className={styles.reviewError} role="alert">{error}</p>}</form>}
   </section>;
 }

@@ -12,10 +12,11 @@ import { fetchSubscriptionProfile } from '@/lib/subscription';
 import { fetchCatalogueCards } from '@/lib/client-catalogue';
 import { createSearchMatcher } from '@/lib/search';
 import { isMostlyWatched } from '@/lib/watch-progress';
-import QuotaWaitNotice from '@/components/QuotaWaitNotice';
+import QuotaUnlockModal, { LockedPosterOverlay, QuotaBanner, LockIcon } from '@/components/QuotaUnlockModal';
 import PromoBanner from '@/components/PromoBanner';
 import HomeCollections from '@/components/HomeCollections';
 import TvAppAnnouncement from '@/components/TvAppAnnouncement';
+import ReviewPrompt from '@/components/ReviewPrompt';
 
 interface MediaItem {
   id: any;
@@ -119,7 +120,7 @@ function PosterCard({
           alt={item.title}
           loading="lazy"
           decoding="async"
-          className={`h-full w-full object-cover transition duration-500 group-hover:scale-105 ${locked ? 'blur-[2px] opacity-40' : ''}`}
+          className={`h-full w-full object-cover transition duration-500 group-hover:scale-105 ${locked ? 'brightness-[.8] saturate-[.85]' : ''}`}
         />
       ) : (
         <div className="flex h-full items-center justify-center p-3 text-center text-xs text-zinc-500">
@@ -139,16 +140,7 @@ function PosterCard({
         </div>
       )}
 
-      {locked && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60">
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/30">
-            <Icon name="lock" />
-          </span>
-          <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-400 ring-1 ring-amber-500/30">
-            VIP requis
-          </span>
-        </div>
-      )}
+      {locked && <LockedPosterOverlay />}
     </div>
   );
 }
@@ -216,6 +208,7 @@ export default function Home() {
   const [isVip, setIsVip] = useState(false);
   const [watchCount, setWatchCount] = useState(0);
   const [showVipModal, setShowVipModal] = useState(false);
+  const [quotaPreview, setQuotaPreview] = useState(false);
 
   const [scrolled, setScrolled] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -452,7 +445,13 @@ export default function Home() {
   const getHeroImage = (m: MediaItem) => cardImage(hasText(m.backdrop) ? m.backdrop! : m.poster, 'w1280');
   const getMobileHeroImage = (m: MediaItem) => cardImage(hasText(m.poster) ? m.poster : m.backdrop || '', 'w500');
 
-  const userLimitReached = !isVip && watchCount >= MAX_FREE_LIMIT;
+  // Admin-only preview of the blocked experience: /?apercu-quota=1
+  useEffect(() => {
+    if (userEmail !== ADMIN_EMAIL || !new URLSearchParams(window.location.search).has('apercu-quota')) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Enable the preview once the admin session is known.
+    setQuotaPreview(true); setShowVipModal(true);
+  }, [userEmail]);
+  const userLimitReached = (!isVip && watchCount >= MAX_FREE_LIMIT) || quotaPreview;
   const isAdmin = userEmail === ADMIN_EMAIL;
   const isFiltered = !!searchQuery || selectedGenre !== 'all' || selectedType !== 'all';
   const showHero = !searchQuery && selectedType === 'all';
@@ -487,83 +486,8 @@ export default function Home() {
   return (
     <main className="yf-page yf-home min-h-screen max-w-[100vw] overflow-x-hidden bg-[#0a0a0b] pb-28 font-sans text-white antialiased selection:bg-red-600 selection:text-white sm:pb-16">
 
-      {showVipModal && (
-        <div
-          className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-md"
-          onClick={() => setShowVipModal(false)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Promotion VIP : quota gratuit atteint"
-            onClick={e => e.stopPropagation()}
-            className="relative my-auto w-full max-w-md shrink-0 overflow-hidden rounded-3xl border border-amber-500/20 bg-[#111113] shadow-[0_0_80px_-20px_rgba(245,158,11,0.35)]"
-          >
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-amber-500/15 to-transparent" />
-            <button
-              onClick={() => setShowVipModal(false)}
-              aria-label="Fermer"
-              className="absolute right-4 top-4 z-10 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-white/5 text-zinc-400 transition hover:bg-white/10 hover:text-white"
-            >
-              <Icon name="close" />
-            </button>
-
-            <div className="relative p-8 text-center">
-              <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-zinc-950 shadow-lg shadow-amber-500/30">
-                <Icon name="crown" className="h-7 w-7" />
-              </div>
-              <h3 className="mb-2 text-xl font-bold tracking-tight">Tes visions gratuites sont épuisées</h3>
-              <p className="mb-5 text-sm leading-relaxed text-zinc-400">
-                {userLimitReached ? (
-                  <>Vous avez atteint votre quota gratuit de <span className="font-semibold text-white">{MAX_FREE_LIMIT} visions</span>.</>
-                ) : (
-                  <>Il vous reste <span className="font-semibold text-white">{Math.max(0, MAX_FREE_LIMIT - watchCount)} vision{MAX_FREE_LIMIT - watchCount > 1 ? 's' : ''}</span> gratuite{MAX_FREE_LIMIT - watchCount > 1 ? 's' : ''}.</>
-                )}{' '}
-
-              </p>
-
-              <QuotaWaitNotice />
-              <p className="mb-5 text-sm leading-6 text-zinc-300">Tu ne veux pas de restriction ? <strong className="text-amber-400">Passe au VIP</strong> pour regarder tes films et séries sans limite.</p>
-
-              <div className="mb-6">
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-600 transition-all"
-                    style={{ width: `${Math.min(100, (watchCount / MAX_FREE_LIMIT) * 100)}%` }}
-                  />
-                </div>
-                <p className="mt-1.5 text-right text-[11px] text-zinc-500">
-                  {Math.min(watchCount, MAX_FREE_LIMIT)}/{MAX_FREE_LIMIT} visions utilisées
-                </p>
-              </div>
-
-              <ul className="mb-7 space-y-2.5 text-left">
-                {['Visionnage illimité', 'Tous les films et séries', 'Accès immédiat après paiement'].map((f: string) => (
-                  <li key={f} className="flex items-center gap-3 text-sm text-zinc-300">
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-400">
-                      <Icon name="check" className="h-3 w-3" />
-                    </span>
-                    {f}
-                  </li>
-                ))}
-              </ul>
-
-              <button
-                onClick={() => router.push('/abonnement')}
-                className="w-full cursor-pointer rounded-full bg-gradient-to-r from-amber-400 to-amber-500 py-3.5 text-sm font-bold text-zinc-950 shadow-lg shadow-amber-500/20 transition hover:from-amber-300 hover:to-amber-400 focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-400/50"
-              >
-                Voir l'offre VIP
-              </button>
-              <button
-                onClick={() => setShowVipModal(false)}
-                className="mt-3 w-full cursor-pointer py-2 text-sm text-zinc-400 transition hover:text-white"
-              >
-                Plus tard
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {showVipModal && <QuotaUnlockModal onClose={() => setShowVipModal(false)} />}
+      {!showVipModal && <ReviewPrompt eligible={!!userEmail && (isVip || watchCount >= 2)} />}
 
       <header
         className={`fixed inset-x-0 top-0 z-50 transition-colors duration-300 ${
@@ -840,6 +764,7 @@ export default function Home() {
       {loadError && <p role="alert" className="relative z-10 mx-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{loadError}</p>}
       {catalogueLoading && <p role="status" className="relative z-10 px-4 text-sm text-zinc-400 sm:px-10">Le reste du catalogue se charge… Les résultats se complètent automatiquement.</p>}
       <div id="catalogue-accueil" className={`relative z-10 scroll-mt-24 space-y-10 px-4 sm:px-10 ${showHero ? 'mt-2 sm:mt-4' : 'mt-6'}`}>
+        {userLimitReached && <QuotaBanner />}
         
         {continueWatchingList.length > 0 && !searchQuery && (
           <Row title="Reprendre la lecture" icon={<Icon name="play" className="h-4 w-4 text-red-600" />}>
@@ -872,7 +797,7 @@ export default function Home() {
 
                 <div className="absolute inset-0 flex items-center justify-center opacity-0 transition duration-300 group-hover:opacity-100">
                   <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-black shadow-xl">
-                    {userLimitReached ? <Icon name="lock" className="h-5 w-5" /> : <Icon name="play" className="h-5 w-5 translate-x-[1px]" />}
+                    {userLimitReached ? <LockIcon className="h-6 w-6 text-amber-500" /> : <Icon name="play" className="h-5 w-5 translate-x-[1px]" />}
                   </span>
                 </div>
 

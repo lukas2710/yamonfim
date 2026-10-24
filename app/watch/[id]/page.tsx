@@ -14,6 +14,7 @@ import { episodeDurationSeconds } from '@/lib/episode-clock';
 import EpisodeQueue from '@/components/EpisodeQueue';
 import WatchDetails from '@/components/WatchDetails';
 import VipQuotaModal from '@/components/VipQuotaModal';
+import { incrementWatchCount } from '@/lib/subscription';
 import './watch.css';
 
 interface Episode {
@@ -533,7 +534,7 @@ export default function WatchPage() {
           setShowVipModal(true);
           return;
         }
-        await supabase.from('profiles').update({ watch_count: (profile?.watch_count || 0) + 1 }).eq('id', user.id);
+        await incrementWatchCount(user.id, profile?.watch_count || 0).catch(() => false);
       }
 
       const next = { s: sIdx, e: eIdx };

@@ -516,7 +516,7 @@ export default function LoginPage() {
           </p>
 
           <p className="mt-8 text-center text-[11px] leading-relaxed text-zinc-600">
-            En créant un compte, tu acceptes les conditions d'utilisation du site.
+            En créant un compte, tu acceptes les <a href="/conditions" className="underline hover:text-zinc-300">conditions générales</a> et la <a href="/confidentialite" className="underline hover:text-zinc-300">politique de confidentialité</a>.
           </p>
         </div>
       </section>

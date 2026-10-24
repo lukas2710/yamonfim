@@ -30,11 +30,18 @@ export async function reserveAccountViewing(userId: string) {
     const { data: profile, error } = await fetchSubscriptionProfile(userId);
     if (error || !profile) throw new Error('Impossible de vérifier ton accès. Réessaie dans un instant.');
     return { vip: profile.is_vip === true, count: profile.watch_count };
-  }, async expected => {
-    let query = supabase.from('profiles').update({ watch_count: expected + 1 }).eq('id', userId).not('is_vip', 'is', true);
-    query = expected === 0 ? query.or('watch_count.eq.0,watch_count.is.null') : query.eq('watch_count', expected);
-    const { data, error } = await query.select('id').maybeSingle();
-    if (error) throw new Error('Le visionnage n’a pas pu être enregistré. Réessaie.');
-    return !!data;
-  });
+  }, async expected => incrementWatchCount(userId, expected));
+}
+
+// Prefer the server function: members cannot edit their profile row once RLS is locked.
+// The direct update keeps sites without the security migration working.
+export async function incrementWatchCount(userId: string, expected: number) {
+  const rpc = await supabase.rpc('increment_my_watch_count', { expected });
+  if (!rpc.error) return rpc.data === true;
+  if (!['PGRST202', '42883'].includes(rpc.error.code)) throw new Error('Le visionnage n’a pas pu être enregistré. Réessaie.');
+  let query = supabase.from('profiles').update({ watch_count: expected + 1 }).eq('id', userId).not('is_vip', 'is', true);
+  query = expected === 0 ? query.or('watch_count.eq.0,watch_count.is.null') : query.eq('watch_count', expected);
+  const { data, error } = await query.select('id').maybeSingle();
+  if (error) throw new Error('Le visionnage n’a pas pu être enregistré. Réessaie.');
+  return !!data;
 }
