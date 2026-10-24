@@ -4,6 +4,7 @@ import { getPersistentSession } from '@/lib/auth-session';
 
 import SectionNavigation from '@/components/SectionNavigation';
 import PageHero from '@/components/PageHero';
+import ContactExport from '@/components/ContactExport';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { reconcileMemberDrafts, newlyActivatedMembers } from './member-sync';
 import { expirationDate } from '@/app/abonnement/plans';
@@ -298,6 +299,7 @@ export default function AdminVipPage() {
 
       <div className="mx-auto max-w-7xl space-y-8 px-4 pt-10 sm:px-10">
         <PageHero eyebrow="LES MEMBRES, AU PREMIER PLAN" title="Ils passent au VIP." accent="Tu gardes le fil." description="Retrouve les nouveaux membres VIP, leurs accès et les quotas. Une vue claire pour accompagner chaque abonnement." cardLabel="LES MEMBRES VIP" cardTitle="Le premier rang se remplit." cardDetail={`${vipUsers} VIP · ${totalUsers} COMPTES`} variant="collection" />
+        <ContactExport />
         
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>

@@ -19,6 +19,13 @@ export default function Confidentialite() {
         <li><strong>Abonnement VIP</strong> : formule, dates de début et de fin. Le paiement est réalisé chez Stripe : {LEGAL.siteName} ne reçoit jamais vos coordonnées bancaires (contrat, obligations comptables).</li>
       </ul>
     </Section>
+    <Section title="Emails de nouveautés et d’offres">
+      <ul>
+        <li><strong>Membres</strong> : vous ne recevez nos nouveautés et offres par email que si vous l’avez accepté (case à l’inscription, invitation sur le site ou page Mon abonnement). Ce choix est facultatif et sans effet sur votre compte (consentement).</li>
+        <li><strong>Clients VIP</strong> : après un achat, nous pouvons vous proposer par email des offres VIP similaires, sauf si vous vous y opposez (intérêt légitime, article L34-5 du Code des postes et des communications électroniques).</li>
+      </ul>
+      <p>Chaque email contient un lien de désinscription immédiate. Vous pouvez aussi changer d’avis à tout moment depuis la page Mon abonnement ou en écrivant à {LEGAL.email}. Votre adresse n’est jamais vendue ni transmise à des tiers pour leur propre prospection. Sans réponse à nos emails pendant 3 ans, nous cessons de vous écrire.</p>
+    </Section>
     <Section title="Destinataires et sous-traitants">
       <p>Vos données ne sont ni vendues ni louées. Elles sont accessibles à l’éditeur et à ses prestataires techniques : Supabase (base de données et authentification), Vercel (hébergement et mesure d’audience anonyme), Stripe (paiement). Certains prestataires sont situés hors de l’Union européenne ; les transferts sont encadrés par les clauses contractuelles types de la Commission européenne ou le cadre de protection des données UE–États-Unis.</p>
     </Section>

@@ -11,3 +11,18 @@
 .cancelEdit{width:100%;min-height:40px;border:1px solid #33343d;border-radius:10px;background:transparent;color:#c9c9d1;font-size:12px;font-weight:600;cursor:pointer}
 .cancelEdit:hover{color:#fff;border-color:#55565f}
 .editing{outline:2px solid #b85061;outline-offset:3px}
+.rankToggle{display:flex;gap:10px;align-items:flex-start;font-size:12px;line-height:1.6;color:#c9c9d1;cursor:pointer}
+.rankToggle input{margin-top:4px;accent-color:#e5484d}
+.rankToggle strong{color:#fff}
+.order{display:grid;gap:6px;margin:0;padding:0;list-style:none}
+.order li{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:9px;background:#1c1d24}
+.order button{width:28px;height:28px;border:1px solid #33343d;border-radius:7px;background:#14151a;color:#e7e7ec;cursor:pointer}
+.order button:disabled{opacity:.3;cursor:default}
+.rank{width:22px;text-align:center;font-size:15px;font-weight:900;color:#f28b95}
+.orderTitle{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#e7e7ec}
+.orderTitle small{color:#f28b95}
+.miniPoster{position:relative}
+.miniPoster .miniRank{position:absolute;left:3px;bottom:2px;z-index:1;display:block;padding:0;font-size:34px;font-weight:900;line-height:.8;color:#0b0b0e;-webkit-text-stroke:2px #fff}
+.form .rankToggle{display:flex;align-items:flex-start;gap:10px;font-weight:400}
+.form .rankToggle input{display:inline-block;width:18px;height:18px;flex-shrink:0;margin:2px 0 0;padding:0}
+.form .rankToggle>span{margin-left:0;font-size:12px;color:#c9c9d1}

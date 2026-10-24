@@ -16,7 +16,9 @@ import QuotaUnlockModal, { LockedPosterOverlay, QuotaBanner, LockIcon } from '@/
 import PromoBanner from '@/components/PromoBanner';
 import HomeCollections from '@/components/HomeCollections';
 import TvAppAnnouncement from '@/components/TvAppAnnouncement';
+import DailyAdditions from '@/components/DailyAdditions';
 import ReviewPrompt from '@/components/ReviewPrompt';
+import { MarketingConsentBanner } from '@/components/MarketingConsent';
 import { parseBannerEntry, findSeason, type SeasonSummary } from '@/lib/banner-items';
 import { parseHeroSetting, pickHeroItems, HERO_SIZE } from '@/lib/home-hero';
 
@@ -144,7 +146,7 @@ function PosterCard({
         </div>
       )}
 
-      {badge && <span className="absolute left-2 top-2 z-[3] rounded-md bg-red-600 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-white shadow-lg shadow-black/40">{badge}</span>}
+      {badge && <span className="absolute left-1.5 top-1.5 z-[3] max-w-[calc(100%-0.75rem)] truncate whitespace-nowrap rounded-md bg-red-600 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-white shadow-lg shadow-black/40 sm:left-2 sm:top-2 sm:px-2 sm:py-1 sm:text-[10px]">{badge}</span>}
       {locked && <LockedPosterOverlay />}
     </div>
   );
@@ -800,6 +802,7 @@ export default function Home() {
       {catalogueLoading && <p role="status" className="relative z-10 px-4 text-sm text-zinc-400 sm:px-10">Le reste du catalogue se charge… Les résultats se complètent automatiquement.</p>}
       <div id="catalogue-accueil" className={`relative z-10 scroll-mt-24 space-y-10 px-4 sm:px-10 ${showHero ? 'mt-2 sm:mt-4' : 'mt-6'}`}>
         {userLimitReached && <QuotaBanner />}
+        {userEmail && !searchQuery && <MarketingConsentBanner />}
         
         {continueWatchingList.length > 0 && !searchQuery && (
           <Row title="Reprendre la lecture" icon={<Icon name="play" className="h-4 w-4 text-red-600" />}>
@@ -903,6 +906,7 @@ export default function Home() {
           <>
             <PromoBanner isVip={isVip} isAdmin={isAdmin} />
             <TvAppAnnouncement />
+            <DailyAdditions />
 
             {customBanners.map((banner: any) => {
               // Admin order is kept; a season entry shows the season poster and opens on it.
@@ -940,17 +944,28 @@ export default function Home() {
                       subtitle={banner.subtitle}
                       icon={<Icon name="flame" className="h-5 w-5 text-red-500" />}
                     >
-                      {bannerMedia.map(({ key, item, badge, start }) => (
-                        <PosterCard
-                          key={key}
-                          item={item}
-                          badge={badge}
-                          locked={userLimitReached}
-                          onOpen={() => handleMediaClick(item, start)}
-                    onPrepare={() => prepareMedia(item)}
-                          className="w-[130px] sm:w-[170px]"
-                        />
-                      ))}
+                      {bannerMedia.map(({ key, item, badge, start }, rank) => {
+                        const card = (
+                          <PosterCard
+                            key={key}
+                            item={item}
+                            badge={badge}
+                            locked={userLimitReached}
+                            onOpen={() => handleMediaClick(item, start)}
+                            onPrepare={() => prepareMedia(item)}
+                            className="w-[130px] sm:w-[170px]"
+                          />
+                        );
+                        if (!banner.ranked) return card;
+                        // Numbered top: a rank as tall as the poster, sitting on its left and slightly under it.
+                        const twoDigits = rank + 1 >= 10;
+                        return (
+                          <div key={key} className={`relative flex shrink-0 items-end ${twoDigits ? 'pl-[118px] sm:pl-[160px]' : 'pl-[78px] sm:pl-[104px]'}`}>
+                            <span aria-hidden="true" className="pointer-events-none absolute bottom-0 left-0 z-0 select-none text-[175px] font-black leading-[0.74] tracking-[-0.09em] text-[#0a0a0b] [-webkit-text-stroke:3px_rgba(255,255,255,0.8)] sm:text-[232px] sm:[-webkit-text-stroke:4px_rgba(255,255,255,0.8)]">{rank + 1}</span>
+                            <div className="relative z-10">{card}</div>
+                          </div>
+                        );
+                      })}
                     </Row>
                   </div>
                 </div>

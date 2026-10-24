@@ -60,6 +60,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
+  const [marketingConsent, setMarketingConsent] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
@@ -155,9 +156,11 @@ export default function LoginPage() {
 
     try {
       if (isSignUp) {
+        // Marketing consent is opt-in (unchecked by default) and kept with the account.
         const { error } = await supabase.auth.signUp({
           email: cleanEmail,
           password,
+          options: { data: { marketing_consent: marketingConsent, marketing_consent_at: new Date().toISOString() } },
         });
 
         if (error) {
@@ -483,6 +486,18 @@ export default function LoginPage() {
                 </div>
               )}
             </div>
+
+            {isSignUp && (
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs leading-5 text-zinc-400">
+                <input
+                  type="checkbox"
+                  checked={marketingConsent}
+                  onChange={e => setMarketingConsent(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-red-600"
+                />
+                <span>J’accepte de recevoir par email les nouveautés et offres de YAMONFIM. Désinscription possible à tout moment.</span>
+              </label>
+            )}
 
             <button
               type="submit"

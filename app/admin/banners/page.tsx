@@ -27,6 +27,7 @@ interface BannerItem {
   backdrop: string;
   media_ids: string[];
   active: boolean;
+  ranked?: boolean;
   created_at: string;
 }
 
@@ -49,6 +50,7 @@ export default function AdminBannersPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [seasonsById, setSeasonsById] = useState<Record<string, SeasonSummary[]>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [ranked, setRanked] = useState(false);
 
   useEffect(() => {
     async function init() {
@@ -101,6 +103,14 @@ export default function AdminBannersPage() {
     setSubtitle('');
     setBackdrop('');
     setSelectedMediaIds([]);
+    setRanked(false);
+  };
+  const moveEntry = (index: number, delta: number) => {
+    const target = index + delta;
+    if (target < 0 || target >= selectedMediaIds.length) return;
+    const entries = [...selectedMediaIds];
+    [entries[index], entries[target]] = [entries[target], entries[index]];
+    setSelectedMediaIds(entries);
   };
 
   // Load an existing banner into the form; saving then updates it instead of creating a new one.
@@ -111,6 +121,7 @@ export default function AdminBannersPage() {
     setBackdrop(banner.backdrop);
     const entries = (banner.media_ids ?? []).map(String);
     setSelectedMediaIds(entries);
+    setRanked(banner.ranked === true);
     setMessage('');
     setErrorMsg('');
     for (const id of new Set(entries.map(entry => parseBannerEntry(entry).mediaId))) {
@@ -135,6 +146,8 @@ export default function AdminBannersPage() {
       subtitle: subtitle.trim() || null,
       backdrop: backdrop.trim(),
       media_ids: selectedMediaIds,
+      // Only sent once the ranking column exists (20261024_banner_ranking.sql), so banners keep working before.
+      ...(ranked || banners.some(b => 'ranked' in b) ? { ranked } : {}),
     };
     // .select() reveals a change silently refused by the database rules (0 rows).
     const { data, error } = editingId
@@ -142,7 +155,7 @@ export default function AdminBannersPage() {
       : await supabase.from('banners').insert([{ ...fields, active: true }]).select('id');
 
     if (error) {
-      setErrorMsg(`Erreur : ${error.message}`);
+      setErrorMsg(error.message.includes('ranked') ? 'Pour le Top numéroté, exécute d’abord supabase/migrations/20261024_banner_ranking.sql dans Supabase.' : `Erreur : ${error.message}`);
     } else if (!data?.length) {
       setErrorMsg('La base de données a refusé l’enregistrement. Vérifie les droits de la table « banners » dans Supabase.');
     } else {
@@ -229,6 +242,15 @@ export default function AdminBannersPage() {
                   {!seasonsById[String(m.id)] ? <span className={styles.seasonTag}>Chargement des saisons…</span> : seasonsById[String(m.id)].map((s, i) => { const number = s.seasonNumber ?? i + 1; return <button type="button" key={number} aria-pressed={m.season === number} onClick={() => chooseSeason(String(m.id), number)}>Saison {number}</button>; })}
                 </div></div>)}
               </div>}
+              {selectedMedia.length > 0 && <div className={styles.seasons}>
+                <label className={styles.rankToggle}><input type="checkbox" checked={ranked} onChange={e => setRanked(e.target.checked)} /><span><strong>Top numéroté</strong> : affiche les grands chiffres 1, 2, 3… devant les affiches (ex. « Top 5 des meilleures séries »).</span></label>
+                <ol className={styles.order}>{selectedMedia.map((m, i) => <li key={m.key}>
+                  <span className={styles.rank}>{i + 1}</span>
+                  <span className={styles.orderTitle}>{m.title}{m.season !== null && <small> · Saison {m.season}</small>}</span>
+                  <button type="button" aria-label={`Monter ${m.title}`} disabled={i === 0} onClick={() => moveEntry(i, -1)}>↑</button>
+                  <button type="button" aria-label={`Descendre ${m.title}`} disabled={i === selectedMedia.length - 1} onClick={() => moveEntry(i, 1)}>↓</button>
+                </li>)}</ol>
+              </div>}
               <button type="submit" className={styles.publish} disabled={submitting}>{submitting ? 'Enregistrement…' : editingId ? 'Enregistrer les modifications' : 'Publier la bannière'}<span aria-hidden="true">↗</span></button>
               {editingId ? <button type="button" className={styles.cancelEdit} onClick={resetForm}>Annuler la modification</button> : <p className={styles.formNote}>La bannière sera visible sur la page d’accueil dès sa publication.</p>}
             </form>
@@ -239,7 +261,7 @@ export default function AdminBannersPage() {
               {backdrop && <img className={styles.cover} src={backdrop} alt="Aperçu de la couverture" />}
               <div className={styles.previewContent}><span className={styles.badge}>LA SÉLECTION YAMONFIM</span><h2>{title || 'Votre prochaine obsession.'}</h2><p>{subtitle || 'Une collection à votre image. Ajoutez un titre et laissez la magie opérer.'}</p><span className={styles.discover}>Découvrir la sélection <span>→</span></span></div>
             </div>
-            <div className={styles.filmstrip}>{selectedMedia.slice(0, 5).map(m => <div key={m.key} className={styles.miniPoster}>{m.poster ? <img src={m.poster} alt={m.season === null ? m.title : m.title + ' – saison ' + m.season} /> : <span>{m.title}</span>}</div>)}{selectedMedia.length === 0 && <p>Les affiches de votre sélection apparaîtront ici.</p>}</div>
+            <div className={styles.filmstrip}>{selectedMedia.slice(0, 5).map((m, i) => <div key={m.key} className={styles.miniPoster}>{ranked && <span className={styles.miniRank}>{i + 1}</span>}{m.poster ? <img src={m.poster} alt={m.season === null ? m.title : m.title + ' – saison ' + m.season} /> : <span>{m.title}</span>}</div>)}{selectedMedia.length === 0 && <p>Les affiches de votre sélection apparaîtront ici.</p>}</div>
             <div className={styles.tip}><span>✦</span><div><h3>Le détail qui change tout</h3><p>Un titre court, une belle image et des films qui partagent la même énergie : les meilleures sélections racontent déjà une histoire.</p></div></div>
           </aside>
         </div>
@@ -247,7 +269,7 @@ export default function AdminBannersPage() {
           <div className={styles.libraryHeading}><div className={styles.sectionTitle}><span className={styles.number}>02</span><div><h2>Vos sélections</h2><p>Gérez ce qui passe sous les projecteurs.</p></div></div><span className={styles.total}>{banners.length} au total</span></div>
           {banners.length === 0 ? <div className={styles.emptyLibrary}><span>✧</span><h3>Le début d’une belle programmation.</h3><p>Votre première bannière trouvera sa place ici.</p></div> : <div className={styles.cards}>{banners.map(b => <article key={b.id} className={`${styles.card} ${editingId === b.id ? styles.editing : ''}`}>
             <div className={styles.cardVisual}><img src={b.backdrop} alt="" /><span className={`${styles.status} ${b.active ? styles.active : ''}`}>{b.active ? '● En ligne' : '○ Masquée'}</span><div><h3>{b.title}</h3>{b.subtitle && <p>{b.subtitle}</p>}</div></div>
-            <footer><span>{b.media_ids?.length || 0} titres associés</span><div><button type="button" onClick={() => startEditing(b)}>Modifier</button><button type="button" onClick={() => toggleActive(b.id, b.active)}>{b.active ? 'Masquer' : 'Afficher'}</button><button type="button" className={styles.delete} aria-label={`Supprimer ${b.title}`} onClick={() => void handleDeleteBanner(b)}>Supprimer</button></div></footer>
+            <footer><span>{b.media_ids?.length || 0} titres associés{b.ranked ? ' · Top numéroté' : ''}</span><div><button type="button" onClick={() => startEditing(b)}>Modifier</button><button type="button" onClick={() => toggleActive(b.id, b.active)}>{b.active ? 'Masquer' : 'Afficher'}</button><button type="button" className={styles.delete} aria-label={`Supprimer ${b.title}`} onClick={() => void handleDeleteBanner(b)}>Supprimer</button></div></footer>
           </article>)}</div>}
         </section>
         <footer className={styles.bottom}>YAMONFIM STUDIO<span>Le cinéma commence par une bonne sélection.</span></footer>

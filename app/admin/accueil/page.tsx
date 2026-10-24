@@ -120,14 +120,14 @@ export default function AdminHeroPage() {
 
       {setting.mode === 'custom' && <section className={panel} aria-label="Ma sélection">
         <div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Ma sélection</h2><span className="text-xs text-zinc-500">{setting.media_ids.length} / {HERO_SIZE}</span></div>
-        <ol className="mt-4 space-y-2">{setting.media_ids.map((entry, i) => { const { mediaId, season } = parseBannerEntry(entry); const c = byId.get(mediaId); const seasons = c?.type === 'series' ? seasonsById[mediaId] : undefined; return <li key={mediaId} className="flex flex-wrap items-center gap-3 rounded-xl bg-white/[0.03] p-2">
+        <ol className="mt-4 space-y-2">{setting.media_ids.map((entry, i) => { const { mediaId, season } = parseBannerEntry(entry); const c = byId.get(mediaId); const seasons = c?.type === 'series' ? seasonsById[mediaId] : undefined; return <li key={mediaId} className="flex flex-wrap items-center gap-2 rounded-xl bg-white/[0.03] p-2 sm:gap-3">
           <span className="w-5 text-center text-xs font-bold text-red-400">{i + 1}</span>
           <div className="h-12 w-8 shrink-0 overflow-hidden rounded bg-white/5">{c?.poster && <img src={c.poster} alt="" className="h-full w-full object-cover" />}</div>
-          <span className="min-w-0 flex-1 truncate text-sm">{c?.title ?? 'Titre introuvable'}{season !== null && <span className="ml-2 rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold">Saison {season}</span>}</span>
+          <span className="min-w-0 flex-1"><span className="line-clamp-2 text-sm leading-5">{c?.title ?? 'Titre introuvable'}</span>{season !== null && <span className="mt-1 inline-block rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold">Saison {season}</span>}</span>
           <button type="button" aria-label="Monter" disabled={i === 0} onClick={() => move(i, -1)} className="rounded-lg bg-white/5 px-2 py-1 text-xs disabled:opacity-30">↑</button>
           <button type="button" aria-label="Descendre" disabled={i === setting.media_ids.length - 1} onClick={() => move(i, 1)} className="rounded-lg bg-white/5 px-2 py-1 text-xs disabled:opacity-30">↓</button>
-          <button type="button" onClick={() => remove(entry)} className="rounded-lg bg-white/5 px-2 py-1 text-xs text-red-300">Retirer</button>
-          {c?.type === 'series' && <div className="flex basis-full flex-wrap gap-1.5 pl-8">
+          <button type="button" aria-label={`Retirer ${c?.title ?? 'ce titre'}`} onClick={() => remove(entry)} className="rounded-lg bg-white/5 px-2 py-1 text-xs text-red-300"><span className="hidden sm:inline">Retirer</span><span aria-hidden="true" className="sm:hidden">✕</span></button>
+          {c?.type === 'series' && <div className="flex basis-full flex-wrap gap-1.5 pl-7 sm:pl-8">
             <button type="button" aria-pressed={season === null} onClick={() => chooseSeason(entry, null)} className={`rounded-full px-3 py-1 text-[11px] font-semibold ${season === null ? 'bg-red-500 text-white' : 'bg-white/5 text-zinc-400 hover:text-white'}`}>Série complète</button>
             {!seasons ? <span className="text-[11px] text-zinc-500">Chargement des saisons…</span> : seasons.map((s, si) => { const n = s.seasonNumber ?? si + 1; return <button type="button" key={n} aria-pressed={season === n} onClick={() => chooseSeason(entry, n)} className={`rounded-full px-3 py-1 text-[11px] font-semibold ${season === n ? 'bg-red-500 text-white' : 'bg-white/5 text-zinc-400 hover:text-white'}`}>Saison {n}</button>; })}
           </div>}
