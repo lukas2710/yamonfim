@@ -258,7 +258,7 @@ export default function AbonnementPage() {
         </section>
         <footer className={styles.footer}><Link className={styles.brand} href="/">YAMON<span>FIM</span></Link><span>Les belles histoires commencent par une bonne séance.</span><Link href="/conditions">CGU & CGV</Link><Link href="/mentions-legales">Mentions légales</Link><Link href="/confidentialite">Confidentialité</Link></footer>
       </div>
-      {payingPlan && <EmbeddedPayment plan={payingPlan} onClose={closePayment} />}
+      {payingPlan && <EmbeddedPayment plan={payingPlan} email={account?.email} onClose={closePayment} />}
       {account && !account.vip && <div className={styles.mobileBar}><div><span>VIP {selected.name}</span><strong>{formatEuro(selected.price)}</strong></div><button className={styles.primary} disabled={payDisabled} onClick={() => void subscribe()}>{redirecting ? 'Ouverture…' : 'Choisir'}<Icon name="arrow" /></button></div>}
     </main>
   );
