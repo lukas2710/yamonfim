@@ -13,6 +13,7 @@ const MEMBER_LINKS = [
 ];
 const ADMIN_LINKS = [
   { href: '/admin', label: 'Catalogue' },
+  { href: '/admin/accueil', label: 'Carrousel' },
   { href: '/admin/banners', label: 'Bannières' },
   { href: '/admin/collections', label: 'Collections' },
   { href: '/admin/promotions', label: 'Promotions' },

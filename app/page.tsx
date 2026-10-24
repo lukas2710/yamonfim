@@ -17,6 +17,8 @@ import PromoBanner from '@/components/PromoBanner';
 import HomeCollections from '@/components/HomeCollections';
 import TvAppAnnouncement from '@/components/TvAppAnnouncement';
 import ReviewPrompt from '@/components/ReviewPrompt';
+import { parseBannerEntry, findSeason, type SeasonSummary } from '@/lib/banner-items';
+import { parseHeroSetting, pickHeroItems, HERO_SIZE } from '@/lib/home-hero';
 
 interface MediaItem {
   id: any;
@@ -29,6 +31,8 @@ interface MediaItem {
   genres?: string[];
   seasons?: any[];
   runtime?: number;
+  heroSeason?: number;
+  heroStart?: number;
   progress?: {
     seasonIdx: number;
     episodeIdx: number;
@@ -104,8 +108,8 @@ function cardImage(source: string | null | undefined, width = 'w342') {
 }
 
 function PosterCard({
-  item, locked, onOpen, onPrepare, className = '',
-}: { item: MediaItem; locked: boolean; onOpen: () => void; onPrepare?: () => void; className?: string }) {
+  item, locked, onOpen, onPrepare, className = '', badge,
+}: { item: MediaItem; locked: boolean; onOpen: () => void; onPrepare?: () => void; className?: string; badge?: string }) {
   return (
     <div
       {...activateProps(onOpen)}
@@ -140,6 +144,7 @@ function PosterCard({
         </div>
       )}
 
+      {badge && <span className="absolute left-2 top-2 z-[3] rounded-md bg-red-600 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-white shadow-lg shadow-black/40">{badge}</span>}
       {locked && <LockedPosterOverlay />}
     </div>
   );
@@ -193,6 +198,7 @@ export default function Home() {
   const [becauseYouWatched, setBecauseYouWatched] = useState<{ parentTitle: string; list: MediaItem[] } | null>(null);
   const [recommendedForYou, setRecommendedForYou] = useState<MediaItem[]>([]);
   const [customBanners, setCustomBanners] = useState<any[]>([]);
+  const [hero, setHero] = useState<{ ids: string[]; seasonsById: Record<string, SeasonSummary[]> }>({ ids: [], seasonsById: {} });
   const [loading, setLoading] = useState(true);
   const [catalogueLoading, setCatalogueLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -263,8 +269,31 @@ export default function Home() {
         const progressTask = progressQuery.then(result => result, () => ({ data: null }));
         const bannerTask = readClientResource('home:banners', async () => {
           const { data, error } = await supabase.from('banners').select('*').eq('active', true).order('created_at', { ascending: false });
-          if (error) throw error; return data || [];
+          if (error) throw error;
+          const banners: Record<string, unknown>[] = data || [];
+          // Promoted seasons need the series' season posters, not part of the catalogue cards.
+          const seriesIds = [...new Set(banners.flatMap(b => Array.isArray(b.media_ids) ? b.media_ids.map(parseBannerEntry).filter(e => e.season !== null).map(e => e.mediaId) : []))];
+          if (!seriesIds.length) return banners;
+          const { data: seasonRows } = await supabase.from('media').select('id,seasons').in('id', seriesIds);
+          const seasonsById = Object.fromEntries((seasonRows || []).map((row: { id: unknown; seasons: SeasonSummary[] }) => [String(row.id), row.seasons]));
+          return banners.map(b => ({ ...b, seasonsById }));
         }).then(setCustomBanners).catch(() => { /* Optional banners never block the catalogue. */ });
+        // Carousel titles chosen in Admin → Carrousel; without a setting, the latest additions are shown.
+        const heroTask = readClientResource('home:hero', async () => {
+          const { data } = await supabase.from('site_settings').select('value').eq('key', 'home_hero').maybeSingle();
+          const setting = parseHeroSetting(data?.value);
+          let ids: string[] = [];
+          if (setting.mode === 'custom') ids = setting.media_ids;
+          else if (setting.mode === 'top') {
+            const { data: top } = await supabase.rpc('top_watched_media', { days: setting.days, max_items: HERO_SIZE });
+            ids = ((top ?? []) as { media_id: string }[]).map(row => String(row.media_id));
+          }
+          // A promoted season needs the series' seasons to open on the right one.
+          const seriesIds = [...new Set(ids.map(parseBannerEntry).filter(e => e.season !== null).map(e => e.mediaId))];
+          if (!seriesIds.length) return { ids, seasonsById: {} };
+          const { data: seasonRows } = await supabase.from('media').select('id,seasons').in('id', seriesIds);
+          return { ids, seasonsById: Object.fromEntries((seasonRows || []).map((row: { id: unknown; seasons: SeasonSummary[] }) => [String(row.id), row.seasons])) };
+        }).then(setHero).catch(() => { /* The latest additions remain a valid carousel. */ });
         const historyTask = Promise.all([catalogueTask, watchedTask, progressTask]).then(([mediaData, watchedRes, progressRes]) => {
           const byId = new Map(mediaData.map(item => [String(item.id), item]));
           // Un film regardé à 70 % ou plus ne reste pas dans « Reprendre ».
@@ -281,7 +310,7 @@ export default function Home() {
           }
           setContinueWatchingList([...resume.values()]);
         });
-        await Promise.all([accessTask, historyTask, bannerTask]);
+        await Promise.all([accessTask, historyTask, bannerTask, heroTask]);
       } catch (err) {
         setLoadError("Le catalogue n’a pas pu être chargé entièrement. Actualise la page pour réessayer.");
         console.error("Erreur lors du chargement de l'accueil:", err);
@@ -300,7 +329,7 @@ export default function Home() {
     if (!preparedRoutes.current.has(path)) { preparedRoutes.current.add(path); router.prefetch(path); }
     prepareWatchMedia(String(item.id));
   };
-  const handleMediaClick = async (item: MediaItem) => {
+  const handleMediaClick = async (item: MediaItem, startSeason: number | null = null) => {
     if (item.id === undefined || item.id === null) return;
     prepareMedia(item);
     let vip = isVip;
@@ -320,7 +349,9 @@ export default function Home() {
       setShowVipModal(true);
       return;
     }
-    if (item.type === 'series' && item.progress) {
+    if (item.type === 'series' && startSeason !== null) {
+      router.push(`/watch/${item.id}?s=${startSeason}&e=0`);
+    } else if (item.type === 'series' && item.progress) {
       router.push(`/watch/${item.id}?s=${item.progress.seasonIdx}&e=${item.progress.episodeIdx}`);
     } else {
       router.push(`/watch/${item.id}`);
@@ -406,7 +437,10 @@ export default function Home() {
   }
 
   const availableGenres = Array.from(new Set(dbGenres.length > 0 ? dbGenres : DEFAULT_GENRES)).sort();
-  const carouselItems = mediaList.slice(0, 5);
+  const carouselItems = useMemo(() => pickHeroItems(mediaList, hero.ids).map(({ item, season }) => {
+    const found = season === null ? null : findSeason(hero.seasonsById[String(item.id)], season);
+    return found ? { ...item, heroSeason: season!, heroStart: found.index } : item;
+  }), [mediaList, hero]);
 
   useEffect(() => {
     if (carouselItems.length <= 1) return;
@@ -691,6 +725,7 @@ export default function Home() {
             <div className="max-w-3xl">
               <div className="mb-3 flex flex-wrap items-center gap-3 sm:mb-6">
                 <span className="flex items-center gap-2 rounded-full border border-red-400/25 bg-red-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-red-200 backdrop-blur-md"><Icon name="sparkles" className="h-3.5 w-3.5" />Sous les projecteurs</span>
+                {featured.heroSeason && <span className="rounded-full bg-red-600 px-3 py-1.5 text-[11px] font-black uppercase tracking-wide text-white shadow-lg shadow-red-950/50">Saison {featured.heroSeason} · Nouveau</span>}
                 <span className="hidden text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-300 sm:inline">La sélection Yamonfim</span>
               </div>
               <h1 className="max-w-3xl break-words text-[2rem] font-black leading-[1.02] tracking-[-0.03em] text-white drop-shadow-xl line-clamp-2 sm:line-clamp-none sm:text-7xl sm:leading-[0.98] sm:tracking-[-0.04em] lg:text-8xl">{featured.title}</h1>
@@ -702,7 +737,7 @@ export default function Home() {
               {featured.description && <p className="mt-3 line-clamp-2 max-w-xl text-[13px] leading-6 text-zinc-300 sm:mt-5 sm:line-clamp-3 sm:text-base sm:leading-8">{featured.description}</p>}
               {featured.id !== null && featured.id !== undefined && (
                 <div className="mt-5 flex gap-2.5 sm:mt-8 sm:flex-wrap sm:gap-3">
-                  <button type="button" onClick={() => handleMediaClick(featured)} className="yf-primary inline-flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-3 text-sm font-bold sm:flex-none sm:gap-3 sm:px-7 sm:py-4 text-white shadow-lg shadow-red-950/40 transition hover:bg-red-500 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-red-400"><Icon name={userLimitReached ? 'lock' : 'play'} className="h-5 w-5" />{userLimitReached ? 'Découvrir le VIP' : <><span className="sm:hidden">Regarder</span><span className="hidden sm:inline">Regarder maintenant</span></>}</button>
+                  <button type="button" onClick={() => handleMediaClick(featured, featured.heroStart ?? null)} className="yf-primary inline-flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-3 text-sm font-bold sm:flex-none sm:gap-3 sm:px-7 sm:py-4 text-white shadow-lg shadow-red-950/40 transition hover:bg-red-500 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-red-400"><Icon name={userLimitReached ? 'lock' : 'play'} className="h-5 w-5" />{userLimitReached ? 'Découvrir le VIP' : <><span className="sm:hidden">Regarder</span><span className="hidden sm:inline">Regarder maintenant</span></>}</button>
                   <button type="button" onClick={() => document.getElementById('catalogue-accueil')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })} className="inline-flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-sm font-semibold sm:flex-none sm:gap-3 sm:px-6 sm:py-4 text-white backdrop-blur-md transition hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"><span className="sm:hidden">Catalogue</span><span className="hidden sm:inline">Explorer le catalogue</span><Icon name="chevronRight" className="h-4 w-4" /></button>
                 </div>
               )}
@@ -869,6 +904,59 @@ export default function Home() {
             <PromoBanner isVip={isVip} isAdmin={isAdmin} />
             <TvAppAnnouncement />
 
+            {customBanners.map((banner: any) => {
+              // Admin order is kept; a season entry shows the season poster and opens on it.
+              const bannerMedia = (Array.isArray(banner.media_ids) ? banner.media_ids : []).flatMap((value: unknown) => {
+                const { mediaId, season } = parseBannerEntry(value);
+                const item = mediaList.find(m => String(m.id) === mediaId);
+                if (!item) return [];
+                const found = season === null ? null : findSeason(banner.seasonsById?.[mediaId], season);
+                if (season !== null && found) return [{ key: `${mediaId}:s${season}`, item: { ...item, poster: found.season.poster_path || item.poster }, badge: `Saison ${season} · Nouveau`, start: found.index }];
+                return [{ key: mediaId, item, badge: undefined, start: null }];
+              }) as { key: string; item: MediaItem; badge?: string; start: number | null }[];
+              if (bannerMedia.length === 0) return null;
+
+              return (
+                <div
+                  key={banner.id}
+                  className="relative -mx-4 overflow-hidden px-4 py-6 sm:mx-0 sm:rounded-3xl sm:px-8 sm:py-8 sm:ring-1 sm:ring-white/10"
+                >
+                  <div className="absolute inset-0">
+                    {banner.backdrop && (
+                      <img
+                        src={banner.backdrop}
+                        alt=""
+                        loading="lazy"
+                        className="h-full w-full object-cover object-center opacity-40 sm:opacity-30"
+                      />
+                    )}
+                    <div className="absolute inset-0 bg-[#0a0a0b]/55 sm:hidden" />
+                    <div className="absolute inset-0 hidden bg-gradient-to-r from-[#0a0a0b] via-[#0a0a0b]/85 to-[#0a0a0b]/40 sm:block" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0b]/80 to-transparent" />
+                  </div>
+                  <div className="relative">
+                    <Row
+                      title={banner.title}
+                      subtitle={banner.subtitle}
+                      icon={<Icon name="flame" className="h-5 w-5 text-red-500" />}
+                    >
+                      {bannerMedia.map(({ key, item, badge, start }) => (
+                        <PosterCard
+                          key={key}
+                          item={item}
+                          badge={badge}
+                          locked={userLimitReached}
+                          onOpen={() => handleMediaClick(item, start)}
+                    onPrepare={() => prepareMedia(item)}
+                          className="w-[130px] sm:w-[170px]"
+                        />
+                      ))}
+                    </Row>
+                  </div>
+                </div>
+              );
+            })}
+
             {becauseYouWatched && becauseYouWatched.list.length > 0 && (
               <Row
                 title={`Parce que vous avez regardé « ${becauseYouWatched.parentTitle} »`}
@@ -933,62 +1021,6 @@ export default function Home() {
                     />
                   ))}
                 </Row>
-              );
-            })}
-
-            {customBanners.map((banner: any) => {
-              const bannerMedia: MediaItem[] = [];
-              if (banner.media_ids && Array.isArray(banner.media_ids)) {
-                for (const m of mediaList) {
-                  let found = false;
-                  for (const id of banner.media_ids) {
-                    if (String(id) === String(m.id)) {
-                      found = true;
-                      break;
-                    }
-                  }
-                  if (found) bannerMedia.push(m);
-                }
-              }
-              if (bannerMedia.length === 0) return null;
-
-              return (
-                <div
-                  key={banner.id}
-                  className="relative -mx-4 overflow-hidden px-4 py-6 sm:mx-0 sm:rounded-3xl sm:px-8 sm:py-8 sm:ring-1 sm:ring-white/10"
-                >
-                  <div className="absolute inset-0">
-                    {banner.backdrop && (
-                      <img
-                        src={banner.backdrop}
-                        alt=""
-                        loading="lazy"
-                        className="h-full w-full object-cover object-center opacity-40 sm:opacity-30"
-                      />
-                    )}
-                    <div className="absolute inset-0 bg-[#0a0a0b]/55 sm:hidden" />
-                    <div className="absolute inset-0 hidden bg-gradient-to-r from-[#0a0a0b] via-[#0a0a0b]/85 to-[#0a0a0b]/40 sm:block" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0b]/80 to-transparent" />
-                  </div>
-                  <div className="relative">
-                    <Row
-                      title={banner.title}
-                      subtitle={banner.subtitle}
-                      icon={<Icon name="flame" className="h-5 w-5 text-red-500" />}
-                    >
-                      {bannerMedia.map((item: MediaItem) => (
-                        <PosterCard
-                          key={item.id}
-                          item={item}
-                          locked={userLimitReached}
-                          onOpen={() => handleMediaClick(item)}
-                    onPrepare={() => prepareMedia(item)}
-                          className="w-[130px] sm:w-[170px]"
-                        />
-                      ))}
-                    </Row>
-                  </div>
-                </div>
               );
             })}
 
