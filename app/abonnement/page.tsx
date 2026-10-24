@@ -103,11 +103,18 @@ export default function AbonnementPage() {
     fetchCatalogueCards<Poster>(supabase).then(rows => { if (active) setCatalogue(rows); }).catch(() => {});
     return () => { active = false; };
   }, []);
-  // Back from embedded Checkout: the webhook activates VIP within seconds, so poll briefly.
+  // Back from embedded Checkout: confirm the session with Stripe, then poll briefly
+  // in case the webhook activates VIP first.
   useEffect(() => {
-    if (!new URLSearchParams(window.location.search).has('paiement')) return;
+    const sessionId = new URLSearchParams(window.location.search).get('paiement');
+    if (!sessionId) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- The return URL is only readable in the browser.
     setActivating(true);
+    void (async () => {
+      const { data: { session } } = await getPersistentSession();
+      await fetch('/api/checkout/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token ?? ''}` }, body: JSON.stringify({ sessionId }) }).catch(() => null);
+      void loadAccount();
+    })();
     let tries = 0;
     const timer = setInterval(() => { if (++tries > 15) { clearInterval(timer); setActivating(false); } else void loadAccount(); }, 2000);
     return () => clearInterval(timer);
