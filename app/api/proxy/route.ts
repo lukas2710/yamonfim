@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchPublicRemote, readRemoteText } from '@/lib/public-remote';
-import { rewritePlaylist } from '@/lib/remote-stream';
+import { rewritePlaylist, selectHlsAudio } from '@/lib/remote-stream';
 
 export async function GET(req: NextRequest) {
   const target = req.nextUrl.searchParams.get('url');
   if (!target) return new NextResponse('URL manquante', { status: 400 });
   try {
-    const headers: Record<string, string> = { 'User-Agent': 'Mozilla/5.0', Referer: 'https://iptv-org.github.io/' };
+    const headers: Record<string, string> = { 'User-Agent': 'Mozilla/5.0' };
     const range = req.headers.get('range');
     if (range) headers.Range = range;
     const { response, url } = await fetchPublicRemote(target, AbortSignal.any([req.signal, AbortSignal.timeout(15000)]), headers);
@@ -16,7 +16,8 @@ export async function GET(req: NextRequest) {
     if (playlist) {
       const text = await readRemoteText(response, 2_000_000);
       if (text.length > 2_000_000 || !text.trimStart().startsWith('#EXTM3U')) return new NextResponse('Liste de lecture invalide', { status: 502 });
-      return new NextResponse(rewritePlaylist(text, url.href), { headers: { 'Content-Type': 'application/vnd.apple.mpegurl', 'Cache-Control': 'no-store' } });
+      const audio = req.nextUrl.searchParams.get('audio') || '';
+      return new NextResponse(rewritePlaylist(selectHlsAudio(text, audio), url.href), { headers: { 'Content-Type': 'application/vnd.apple.mpegurl', 'Cache-Control': 'no-store' } });
     }
     if (!/^(video\/|audio\/|application\/(octet-stream|mp4|vnd\.apple\.mpegurl|x-mpegurl))/i.test(contentType)) {
       await response.body?.cancel();
