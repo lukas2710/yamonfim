@@ -1,27 +1,11 @@
-# Passages sur la page VIP et suivi administrateur
+# Activation depuis /vip
 
-Exécuter `migrations/20261020_vip_page_visits.sql` dans Supabase → SQL Editor,
-puis déployer/recharger le code du site.
+Comportement demandé : ouvrir `/vip` active gratuitement un an de VIP pour le compte connecté, sans vérifier un paiement Stripe. Une nouvelle ouverture relance la période d’un an, comme le prévoyait la page initiale.
 
-La page `/vip` enregistre une première et une dernière visite par compte connecté.
-Admin VIP (`/admin-vip`) propose un filtre « Passés sur /vip » et une colonne de
-dernière visite. Les membres sont relus toutes les 10 secondes lorsque l’onglet
-est visible. Si Realtime est déjà configuré et autorisé pour ces tables, leurs
-événements déclenchent également une actualisation. Les saisies non enregistrées
-de l’administrateur sont conservées pendant ces actualisations.
+Exécuter `migrations/20261027_vip_page_activation.sql` dans Supabase → SQL Editor, puis déployer le site. Cette migration ajoute uniquement la fonction `activate_my_vip()`. Elle ne modifie aucun compte au moment de son installation et conserve les politiques RLS existantes.
 
-Une visite n’est pas une confirmation de paiement. Le statut VIP affiché dans
-Admin VIP vient de `profiles.is_vip`. La page `/vip` consulte ce statut toutes
-les 5 secondes ; elle ne donne plus le VIP par simple ouverture de l’URL et ne
-modifie plus les métadonnées utilisateur pour s’autoattribuer un accès.
+Lorsqu’un membre ouvre `/vip`, la fonction met à jour uniquement la ligne `profiles` correspondant à `auth.uid()` : `is_vip = true`, `vip_started_at = now()`, `vip_duration = '1y'`. Aucun identifiant de compte ni durée ne sont acceptés en paramètre. Les visiteurs non connectés ne peuvent pas appeler cette fonction.
 
-Le projet ne contient actuellement aucun webhook Stripe vérifiant les paiements.
-Sans cette intégration, l’administrateur doit vérifier le paiement puis activer
-le compte dans Admin VIP. Les liens Stripe sont conservés. Une activation
-automatique après paiement devra être faite côté serveur à partir d’un événement
-Stripe signé, avec les clés serveur correspondantes, jamais à partir d’une visite
-ou d’un paramètre fourni par le navigateur.
+La page vérifie ensuite le statut enregistré avant d’afficher le succès et de revenir à l’accueil. En cas de migration manquante, elle affiche une erreur explicite. Les quotas, les autres comptes et les profils de visionnage ne sont pas modifiés.
 
-Le suivi commence à l’installation : il ne peut pas reconstituer les anciennes
-visites non enregistrées. Les VIP déjà présents dans `profiles` restent visibles
-dans « Comptes VIP », même s’ils n’ont aucune visite conservée sur `/vip`.
+L’activation offerte par cette page est indépendante de Stripe. Les réglages de paiement et de webhook restent à vérifier séparément.

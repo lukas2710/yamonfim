@@ -5,6 +5,7 @@ import { getPersistentSession } from '@/lib/auth-session';
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { clearClientResources } from '@/lib/resource-cache';
 
 type IconName = 'crown' | 'check' | 'close' | 'home' | 'arrowRight' | 'request';
 
@@ -29,9 +30,11 @@ function Icon({ name, className = 'w-4 h-4' }: { name: IconName; className?: str
 export default function VipActivationPage() {
   const router = useRouter();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
     let active = true;
+    let redirectTimer: ReturnType<typeof setTimeout> | undefined;
 
     async function activateVipDirectly() {
       try {
@@ -42,28 +45,30 @@ export default function VipActivationPage() {
           return;
         }
 
-        // Activation immédiate du VIP dans la table profiles
-        const { error: updateError } = await supabase
-          .from('profiles')
-          .update({
-            is_vip: true,
-            vip_started_at: new Date().toISOString(),
-            vip_duration: '1y'
-          })
-          .eq('id', session.user.id);
-
-        if (updateError) throw updateError;
+        // The database limits this deliberate free activation to auth.uid().
+        const { data: activated, error: activationError } = await supabase.rpc('activate_my_vip');
+        if (activationError) {
+          if (['PGRST202', '42883'].includes(activationError.code)) {
+            throw new Error('L’activation doit être configurée dans Supabase avec la migration 20261027_vip_page_activation.sql.');
+          }
+          throw new Error('Impossible d’activer le VIP. Vérifie ta connexion et réessaie.');
+        }
+        if (activated !== true) throw new Error('L’activation du VIP n’a pas été confirmée.');
+        const { data: profile, error: profileError } = await supabase.from('profiles')
+          .select('is_vip').eq('id', session.user.id).single();
+        if (profileError || profile?.is_vip !== true) throw new Error('Le statut VIP n’a pas pu être vérifié. Recharge la page pour réessayer.');
+        clearClientResources();
 
         if (!active) return;
         setStatus('success');
 
         // Redirection automatique vers l'accueil après 2 secondes
-        setTimeout(() => {
+        redirectTimer = setTimeout(() => {
           if (active) router.push('/');
         }, 2000);
       } catch (err) {
         console.error('Erreur activation VIP :', err);
-        if (active) setStatus('error');
+        if (active) { setErrorMessage(err instanceof Error ? err.message : 'Impossible d’activer ton statut VIP pour le moment.'); setStatus('error'); }
       }
     }
 
@@ -71,6 +76,7 @@ export default function VipActivationPage() {
 
     return () => {
       active = false;
+      if (redirectTimer) clearTimeout(redirectTimer);
     };
   }, [router]);
 
@@ -139,9 +145,9 @@ export default function VipActivationPage() {
             <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-600/10 text-red-500 ring-1 ring-red-500/30">
               <Icon name="close" className="h-7 w-7" />
             </div>
-            <h1 className="text-xl font-bold tracking-tight">Erreur d'activation</h1>
+            <h1 className="text-xl font-bold tracking-tight">Erreur d’activation</h1>
             <p className="mt-2 text-sm leading-relaxed text-zinc-400">
-              Impossible d'activer ton statut VIP pour le moment. Réessaie plus tard.
+              {errorMessage}
             </p>
 
             <button
