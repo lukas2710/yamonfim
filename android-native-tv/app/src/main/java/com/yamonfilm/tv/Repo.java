@@ -198,6 +198,10 @@ public final class Repo {
         return list;
     }
 
+    public JSONArray profileAvatars() throws IOException {
+        return api.select("profile_avatars", new Q().select("name,category,image_url").order("category.asc,name.asc"));
+    }
+
     public void saveProfile(String id, String name, String avatar) throws IOException {
         String uid = requireUser();
         JSONObject values = new JSONObject();

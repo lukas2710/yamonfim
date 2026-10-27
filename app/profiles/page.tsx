@@ -2,6 +2,8 @@
 
 import { getPersistentSession } from '@/lib/auth-session';
 
+import { DEFAULT_AVATAR_CATEGORIES as AVATAR_CATEGORIES, avatarCategories, fetchAvatars, type Avatar } from '@/lib/avatars';
+import AvatarPicker from '@/components/AvatarPicker';
 import PageHero from '@/components/PageHero';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -13,39 +15,11 @@ interface Profile {
   avatar_url: string;
 }
 
-// Vrais liens d'images stables classés par catégories (Disney, Super-héros, Gaming)
-const AVATAR_CATEGORIES = [
-  {
-    category: 'Disney & Princesses',
-    avatars: [
-      { name: 'Raiponce', url: 'https://static.wikia.nocookie.net/heros/images/4/42/Raiponce_Infobox.jpg/revision/latest?cb=20200723185055&path-prefix=fr' },
-      { name: 'Mickey', url: 'https://avatarfiles.alphacoders.com/214/214614.jpg' },
-      { name: 'Reine des Neiges', url: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRz5Y10-MulAuvwLsp9t3wrzWVcXY5o2vfv3gnwPB2sJkKn0hBlTWzAo0-9&s=10' },
-      { name: 'Le Roi Lion', url: 'https://journaldemickey.com/wp-content/uploads/2024/06/roi-lion-personnages.jpg' },
-    ],
-  },
-  {
-    category: 'Super-Héros & Comics',
-    avatars: [
-      { name: 'Spider-Man', url: 'https://avatarfiles.alphacoders.com/375/thumb-350-375896.webp' },
-      { name: 'Batman', url: 'https://image.api.playstation.com/cdn/UP1018/CUSA00133_00/Dz5i57ktol8qBJsWEVdjNy8wj3Tc5fF0Y2MyX0Poi4lAniOaUpfjH5IU2vVejxey.png' },
-      { name: 'Joker', url: 'https://img.magnific.com/free-vector/scary-clown-head-with-blue-hair-vector_43623-1371.jpg?semt=ais_hybrid&w=740&q=80' },
-      { name: 'Marvel', url: 'https://avatarfiles.alphacoders.com/604/60402.jpg' },
-    ],
-  },
-  {
-    category: 'Gaming & Séries',
-    avatars: [
-      { name: 'Mario', url: 'https://pbs.twimg.com/profile_images/1929549617441521664/dn4udfbC_400x400.jpg' },
-      { name: 'Stranger Things', url: 'https://cf-images.assettype.com/cinemaexpress%2F2026-01-01%2Fbr0w32gz%2FST5-1.jpg?w=480&auto=format%2Ccompress' },
-      { name: 'Anime', url: 'https://www.projectxparis.com/cdn/shop/articles/344_75d7d802-3d2c-42ca-b360-afcc41033d8d.jpg?v=1759397750' },
-      { name: 'Gaming Neon', url: 'https://cdn.dribbble.com/userupload/5333469/file/original-d913e65193d78f79999f30fce27114c8.png?resize=752x&vertical=center' },
-    ],
-  },
-];
 
 export default function ProfilesPage() {
   const router = useRouter();
+  const [avatars, setAvatars] = useState<Avatar[]>([]);
+  const [avatarError, setAvatarError] = useState('');
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
@@ -66,6 +40,8 @@ export default function ProfilesPage() {
         return;
       }
       setUserId(session.user.id);
+      try { setAvatars(await fetchAvatars()); setAvatarError(''); }
+      catch { setAvatarError('Les nouveaux avatars sont indisponibles. Les avatars habituels restent disponibles.'); }
 
       const { data, error } = await supabase
         .from('user_profiles')
@@ -88,6 +64,23 @@ export default function ProfilesPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchProfiles();
   }, [fetchProfiles]);
+
+  useEffect(() => {
+    if (!showModal) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape' && !saving) setShowModal(false);
+      if (event.key !== 'Tab') return;
+      const elements = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"] button:not(:disabled), [role="dialog"] input:not(:disabled), [role="dialog"] select'));
+      const first = elements[0], last = elements[elements.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }
+    document.addEventListener('keydown', onKey);
+    return () => { document.body.style.overflow = overflow; document.removeEventListener('keydown', onKey); previous?.focus(); };
+  }, [showModal, saving]);
 
   const selectProfile = (profile: Profile) => {
     localStorage.setItem('active_profile', JSON.stringify(profile));
@@ -213,7 +206,7 @@ export default function ProfilesPage() {
                 
                 <button
                   onClick={(e) => handleOpenEdit(e, profile)}
-                  className="absolute top-2 right-2 bg-black/60 hover:bg-red-600 text-white p-2 rounded-full opacity-100 sm:opacity-0 group-hover:opacity-100 focus:opacity-100 transition backdrop-blur-md"
+                  className="absolute top-2 right-2 bg-black/60 hover:bg-red-600 text-white p-2 rounded-full opacity-100 sm:opacity-100 group-hover:opacity-100 focus:opacity-100 transition backdrop-blur-md"
                   title="Modifier le profil"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -251,14 +244,14 @@ export default function ProfilesPage() {
 
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div role="dialog" aria-modal="true" aria-label={editingProfile ? 'Modifier le profil' : 'Créer un profil'} className="yf-surface bg-[#141416] border border-white/10 rounded-3xl w-full max-w-xl p-6 sm:p-8 shadow-2xl space-y-6 max-h-[90dvh] overflow-y-auto [scrollbar-width:none]">
+          <div role="dialog" aria-modal="true" aria-label={editingProfile ? 'Modifier le profil' : 'Créer un profil'} className="yf-surface bg-[#141416] border border-white/10 rounded-3xl w-full max-w-4xl p-4 sm:p-8 shadow-2xl space-y-6 max-h-[92dvh] overflow-y-auto overscroll-contain">
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-bold">
                 {editingProfile ? 'Modifier le profil' : 'Créer un profil'}
               </h3>
               <button
                 onClick={() => setShowModal(false)}
-                className="text-zinc-400 hover:text-white transition p-1"
+                aria-label="Fermer" className="text-zinc-400 hover:text-white transition p-3"
               >
                 ✕
               </button>
@@ -266,8 +259,10 @@ export default function ProfilesPage() {
 
             <form onSubmit={handleSaveProfile} className="space-y-6">
               <div>
-                <label className="block text-xs uppercase tracking-wider text-zinc-400 mb-2">Nom du profil</label>
+                <label htmlFor="profile-name" className="block text-xs uppercase tracking-wider text-zinc-400 mb-2">Nom du profil</label>
                 <input
+                  id="profile-name"
+                  autoFocus
                   type="text"
                   maxLength={40}
                   required
@@ -278,31 +273,8 @@ export default function ProfilesPage() {
                 />
               </div>
 
-              <div className="space-y-4">
-                <label className="block text-xs uppercase tracking-wider text-zinc-400">Choisir un avatar par catégorie</label>
-                
-                {AVATAR_CATEGORIES.map((cat, catIdx) => (
-                  <div key={catIdx} className="space-y-2">
-                    <p className="text-xs font-semibold text-zinc-300">{cat.category}</p>
-                    <div className="grid grid-cols-4 gap-3">
-                      {cat.avatars.map((avatar, idx) => (
-                        <button
-                          type="button"
-                          aria-label={avatar.name}
-                          aria-pressed={selectedAvatar === avatar.url}
-                          key={idx}
-                          onClick={() => setSelectedAvatar(avatar.url)}
-                          className={`relative aspect-square rounded-xl overflow-hidden cursor-pointer ring-2 transition ${
-                            selectedAvatar === avatar.url ? 'ring-red-600 scale-105' : 'ring-transparent hover:ring-white/50'
-                          }`}
-                        >
-                          <img src={avatar.url} alt={avatar.name} className="w-full h-full object-cover" />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <AvatarPicker categories={avatarCategories(avatars)} selected={selectedAvatar} onSelect={setSelectedAvatar} />
+              {avatarError && <p role="status" className="text-sm text-amber-200">{avatarError}</p>}
 
               {errorMsg && <p role="alert" className="text-sm text-red-300">{errorMsg}</p>}
               <div className="flex flex-wrap gap-3 items-center justify-between pt-2">

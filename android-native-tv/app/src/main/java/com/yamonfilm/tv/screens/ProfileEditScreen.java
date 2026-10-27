@@ -13,6 +13,9 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.ScrollView;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import com.yamonfilm.tv.App;
 import com.yamonfilm.tv.Dialogs;
@@ -34,6 +37,9 @@ public final class ProfileEditScreen extends Screen {
     private String avatar;
     private final List<View> avatarViews = new ArrayList<>();
     private boolean saving;
+    private LinearLayout grid;
+    private int avatarSize;
+    private int columns;
 
     public ProfileEditScreen(MainActivity main, Profile editing) {
         super(main);
@@ -45,7 +51,10 @@ public final class ProfileEditScreen extends Screen {
         FrameLayout root = new FrameLayout(main);
         root.setBackgroundColor(Ui.BG);
         LinearLayout col = Ui.column(main);
-        col.setPadding(dp(80), dp(44), dp(80), dp(30));
+        col.setPadding(dp(40), dp(24), dp(40), dp(30));
+        int available = main.getResources().getDisplayMetrics().widthPixels - dp(100);
+        columns = Math.max(2, Math.min(8, available / dp(120)));
+        avatarSize = Math.min(dp(96), (available - columns * dp(18)) / columns);
         Ui.noClip(col);
         col.addView(Ui.label(main, editing == null ? "Nouveau profil" : "Modifier le profil", 32, Ui.TEXT, true));
         name = Ui.input(main, "Nom du profil", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
@@ -53,34 +62,9 @@ public final class ProfileEditScreen extends Screen {
         if (editing != null) name.setText(editing.name);
         col.addView(name, Ui.lp(dp(460), Ui.WRAP, 0, dp(22), 0, 0));
         col.addView(Ui.label(main, "Choisis un avatar", 18, Ui.MUTED, true), Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(26), 0, dp(10)));
-        LinearLayout grid = Ui.column(main);
+        grid = Ui.column(main);
         Ui.noClip(grid);
-        LinearLayout line = null;
-        for (int i = 0; i < ProfilesScreen.AVATARS.length; i++) {
-            if (i % 6 == 0) { line = Ui.row(main); Ui.noClip(line); grid.addView(line, Ui.lp(Ui.WRAP, Ui.WRAP, 0, 0, 0, dp(14))); }
-            final String url = ProfilesScreen.AVATARS[i][1];
-            FrameLayout a = new FrameLayout(main);
-            a.setFocusable(true);
-            a.setClickable(true);
-            a.setTag(url);
-            a.setBackground(Ui.round(0xFF2A2E39, 50));
-            StateListDrawable ring = new StateListDrawable();
-            ring.addState(Ui.focusedState(), oval(Ui.FOCUS));
-            ring.addState(Ui.activatedState(), oval(Ui.GOLD));
-            ring.addState(new int[]{}, new android.graphics.drawable.ColorDrawable(0));
-            a.setForeground(ring);
-            a.setOutlineProvider(new ViewOutlineProvider() { @Override public void getOutline(View v, Outline o) { o.setOval(0, 0, v.getWidth(), v.getHeight()); } });
-            a.setClipToOutline(true);
-            ImageView img = new ImageView(main);
-            img.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            a.addView(img, Ui.flp(Ui.MATCH, Ui.MATCH, 0));
-            App.images().load(img, url, dp(96), dp(96));
-            a.setActivated(url.equals(avatar));
-            a.setOnClickListener(v -> { avatar = url; for (View o : avatarViews) o.setActivated(url.equals(o.getTag())); });
-            Ui.onFocus(a, 1.1f, null);
-            line.addView(a, Ui.lp(dp(96), dp(96), 0, 0, dp(22), 0));
-            avatarViews.add(a);
-        }
+        renderAvatars(new JSONArray());
         col.addView(grid);
         LinearLayout buttons = Ui.row(main);
         Ui.noClip(buttons);
@@ -97,8 +81,69 @@ public final class ProfileEditScreen extends Screen {
             buttons.addView(delete, Ui.lp(Ui.WRAP, Ui.WRAP, dp(14), 0, 0, 0));
         }
         col.addView(buttons, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(18), 0, 0));
-        root.addView(col);
+        ScrollView scroll = new ScrollView(main);
+        scroll.setFillViewport(true);
+        scroll.setClipToPadding(false);
+        scroll.addView(col);
+        root.addView(scroll);
+        io(() -> App.repo().profileAvatars(), (rows, error) -> {
+            if (error != null) { main.toast("Nouveaux avatars indisponibles. Les avatars habituels restent disponibles."); return; }
+            renderAvatars(rows);
+        });
         return root;
+    }
+
+    private void renderAvatars(JSONArray rows) {
+        grid.removeAllViews();
+        avatarViews.clear();
+        java.util.LinkedHashMap<String, List<String[]>> groups = new java.util.LinkedHashMap<>();
+        List<String[]> defaults = new ArrayList<>();
+        for (String[] item : ProfilesScreen.AVATARS) defaults.add(item);
+        groups.put("Les classiques", defaults);
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject row = rows.optJSONObject(i);
+            if (row == null || !row.optString("image_url").startsWith("https://")) continue;
+            String category = row.optString("category", "Autres");
+            if (!groups.containsKey(category)) groups.put(category, new ArrayList<>());
+            groups.get(category).add(new String[]{row.optString("name"), row.optString("image_url")});
+        }
+        for (java.util.Map.Entry<String, List<String[]>> group : groups.entrySet()) {
+            grid.addView(Ui.label(main, group.getKey(), 16, Ui.TEXT, true), Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(12), 0, dp(12)));
+            List<String[]> entries = group.getValue();
+            LinearLayout line = null;
+            for (int i = 0; i < entries.size(); i++) {
+                if (i % columns == 0) { line = Ui.row(main); Ui.noClip(line); grid.addView(line, Ui.lp(Ui.WRAP, Ui.WRAP, 0, 0, 0, dp(14))); }
+                final String url = entries.get(i)[1];
+                FrameLayout a = new FrameLayout(main);
+                a.setFocusable(true);
+                a.setClickable(true);
+                a.setTag(url);
+                a.setContentDescription(entries.get(i)[0]);
+                a.setBackground(Ui.round(0xFF2A2E39, 50));
+                StateListDrawable ring = new StateListDrawable();
+                ring.addState(Ui.focusedState(), oval(Ui.FOCUS));
+                ring.addState(Ui.activatedState(), oval(Ui.GOLD));
+                ring.addState(new int[]{}, new android.graphics.drawable.ColorDrawable(0));
+                a.setForeground(ring);
+                a.setOutlineProvider(new ViewOutlineProvider() { @Override public void getOutline(View v, Outline o) { o.setOval(0, 0, v.getWidth(), v.getHeight()); } });
+                a.setClipToOutline(true);
+                ImageView img = new ImageView(main);
+                img.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                a.addView(img, Ui.flp(Ui.MATCH, Ui.MATCH, 0));
+                App.images().load(img, url, avatarSize, avatarSize);
+                a.setActivated(url.equals(avatar));
+                a.setOnClickListener(v -> { avatar = url; for (View o : avatarViews) o.setActivated(url.equals(o.getTag())); });
+                Ui.onFocus(a, 1.1f, null);
+                LinearLayout tile = Ui.column(main);
+                tile.addView(a, Ui.lp(avatarSize, avatarSize));
+                TextView caption = Ui.label(main, entries.get(i)[0], 12, Ui.MUTED, false);
+                caption.setMaxLines(2);
+                caption.setGravity(Gravity.CENTER);
+                tile.addView(caption, Ui.lp(avatarSize, Ui.WRAP, 0, dp(6), 0, 0));
+                line.addView(tile, Ui.lp(avatarSize, Ui.WRAP, 0, 0, dp(18), 0));
+                avatarViews.add(a);
+            }
+        }
     }
 
     private static GradientDrawable oval(int color) {
