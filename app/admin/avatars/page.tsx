@@ -13,6 +13,9 @@ export default function AdminAvatarsPage() {
   const [authorized, setAuthorized] = useState(false);
   const [ready, setReady] = useState(false);
   const [avatars, setAvatars] = useState<Avatar[]>([]);
+  const [editing, setEditing] = useState<Avatar | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const form = useRef<HTMLFormElement>(null);
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
   const [image, setImage] = useState<HTMLImageElement | null>(null);
@@ -65,28 +68,64 @@ export default function AdminAvatarsPage() {
     finally { URL.revokeObjectURL(url); if (version === fileVersion.current) setDecoding(false); }
   }
 
+  function reset() {
+    ++fileVersion.current;
+    setEditing(null); setImage(null); setName(''); setCategory(''); setDecoding(false);
+    setZoom(1); setX(50); setY(50);
+    if (input.current) input.current.value = '';
+  }
+
+  function edit(avatar: Avatar) {
+    reset(); setEditing(avatar); setName(avatar.name); setCategory(avatar.category);
+    setError(''); setMessage(''); setDeleteTarget(null);
+    form.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    form.current?.querySelector<HTMLInputElement>('input[name="avatar-name"]')?.focus({ preventScroll: true });
+  }
+
+  async function remove(avatar: Avatar) {
+    if (busy || !ready) return;
+    setBusy(true); setError(''); setMessage('');
+    try {
+      const { error: deleteError } = await supabase.from('profile_avatars').delete().eq('id', avatar.id).select('id').single();
+      if (deleteError) throw deleteError;
+      setAvatars(rows => rows.filter(row => row.id !== avatar.id));
+      if (editing?.id === avatar.id) reset();
+      setDeleteTarget(null);
+      // Profiles store image URLs, so keep the file for people already using it.
+      setMessage('Avatar supprimé de la bibliothèque. Les profils qui l’utilisent conservent leur photo.');
+    } catch { setError('La suppression a échoué. Vérifie ta connexion et tes droits administrateur, puis réessaie.'); }
+    finally { setBusy(false); }
+  }
+
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (!image || !canvas.current || !name.trim() || !category.trim() || busy || !ready || decoding) return;
+    if ((!image && !editing) || (image && !canvas.current) || !name.trim() || !category.trim() || busy || !ready || decoding) return;
     setBusy(true); setError(''); setMessage('');
     const path = `${crypto.randomUUID()}.webp`;
     let uploaded = false;
     try {
-      const blob = await new Promise<Blob>((resolve, reject) => canvas.current!.toBlob(value => value ? resolve(value) : reject(new Error('Conversion impossible.')), 'image/webp', 0.9));
-      if (blob.type !== 'image/webp') throw new Error('Ce navigateur ne permet pas la conversion WebP. Essaie un navigateur récent.');
-      const { error: uploadError } = await supabase.storage.from('profile-avatars').upload(path, blob, { contentType: 'image/webp', upsert: false });
-      if (uploadError) throw uploadError;
-      uploaded = true;
-      const { data: { publicUrl } } = supabase.storage.from('profile-avatars').getPublicUrl(path);
-      const { data, error: insertError } = await supabase.from('profile_avatars').insert({ name: name.trim(), category: category.trim(), image_url: publicUrl }).select('id,name,category,image_url').single();
-      if (insertError) throw insertError;
+      let imageUrl = editing?.image_url || '';
+      if (image) {
+        const blob = await new Promise<Blob>((resolve, reject) => canvas.current!.toBlob(value => value ? resolve(value) : reject(new Error('Conversion impossible.')), 'image/webp', 0.9));
+        if (blob.type !== 'image/webp') throw new Error('Ce navigateur ne permet pas la conversion WebP. Essaie un navigateur récent.');
+        const { error: uploadError } = await supabase.storage.from('profile-avatars').upload(path, blob, { contentType: 'image/webp', upsert: false });
+        if (uploadError) throw uploadError;
+        uploaded = true;
+        imageUrl = supabase.storage.from('profile-avatars').getPublicUrl(path).data.publicUrl;
+      }
+      const payload = { name: name.trim(), category: category.trim(), image_url: imageUrl };
+      const mutation = editing
+        ? supabase.from('profile_avatars').update(payload).eq('id', editing.id)
+        : supabase.from('profile_avatars').insert(payload);
+      const { data, error: saveError } = await mutation.select('id,name,category,image_url').single();
+      if (saveError) throw saveError;
       uploaded = false;
-      setAvatars(rows => [...rows, data]); setImage(null); setName('');
-      if (input.current) input.current.value = '';
-      setMessage('Avatar publié ! Il est disponible dans la création et la modification des profils.');
+      setAvatars(rows => editing ? rows.map(row => row.id === data.id ? data : row) : [...rows, data]);
+      setMessage(editing ? 'Avatar modifié ! La nouvelle version est disponible dans le sélecteur de profils.' : 'Avatar publié ! Il est disponible dans la création et la modification des profils.');
+      reset();
     } catch (cause) {
       if (uploaded) await supabase.storage.from('profile-avatars').remove([path]);
-      setError(cause instanceof Error ? cause.message : 'Import impossible. Vérifie le stockage Supabase et réessaie.');
+      setError(cause instanceof Error ? cause.message : 'Enregistrement impossible. Vérifie ta connexion et réessaie.');
     } finally { setBusy(false); }
   }
 
@@ -95,18 +134,20 @@ export default function AdminAvatarsPage() {
   const field = 'mt-2 w-full rounded-xl border border-white/20 bg-black/30 p-3';
   return <main className="yf-page min-h-screen bg-[#0a0a0b] pb-16 text-white"><SectionNavigation admin />
     <div className="mx-auto max-w-6xl space-y-8 px-4 py-8 sm:px-8">
-      <header><p className="text-sm text-blue-300">BIBLIOTHÈQUE DES PROFILS</p><h1 className="mt-2 text-3xl font-bold sm:text-4xl">Crée un nouvel avatar</h1><p className="mt-3 text-zinc-400">Importe une image, ajuste le cadrage et choisis son nom et sa catégorie.</p><Link href="/profiles" className="mt-4 inline-block underline">Voir le sélecteur de profils →</Link></header>
+      <header><p className="text-sm text-blue-300">BIBLIOTHÈQUE DES PROFILS</p><h1 className="mt-2 text-3xl font-bold sm:text-4xl">{editing ? 'Modifier un avatar' : 'Crée un nouvel avatar'}</h1><p className="mt-3 text-zinc-400">Importe une image, ajuste le cadrage et choisis son nom et sa catégorie.</p><Link href="/profiles" className="mt-4 inline-block underline">Voir le sélecteur de profils →</Link></header>
       {error && <p role="alert" className="rounded-xl bg-red-500/10 p-4 text-red-200">{error}</p>}
       {message && <p role="status" className="rounded-xl bg-green-500/10 p-4 text-green-200">{message}</p>}
-      <form onSubmit={save} className="rounded-3xl border border-white/10 bg-white/5 p-4 sm:p-8"><fieldset disabled={busy || !ready} className="grid min-w-0 gap-8 md:grid-cols-2 disabled:opacity-60">
-        <div className="min-w-0 space-y-5"><label className="block text-sm">Image source<input ref={input} type="file" accept="image/jpeg,image/png,image/webp" onChange={event => void importImage(event.target.files?.[0])} className={`${field} file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:p-2 file:text-white`} /><span className="mt-2 block text-xs text-zinc-400">JPG, PNG ou WebP · 15 Mo maximum</span></label>
-          <label className="block text-sm">Nom de l’avatar<input required maxLength={60} value={name} onChange={event => setName(event.target.value)} className={field} placeholder="Ex. : Astronaute" /></label>
+      <form ref={form} onSubmit={save} className="rounded-3xl border border-white/10 bg-white/5 p-4 sm:p-8"><fieldset disabled={busy || !ready} className="grid min-w-0 gap-8 md:grid-cols-2 disabled:opacity-60">
+        <div className="min-w-0 space-y-5"><label className="block text-sm">Image source<input ref={input} type="file" accept="image/jpeg,image/png,image/webp" onChange={event => void importImage(event.target.files?.[0])} className={`${field} file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:p-2 file:text-white`} /><span className="mt-2 block text-xs text-zinc-400">JPG, PNG ou WebP · 15 Mo maximum{editing && ' · Facultatif : conserve l’image actuelle si tu ne choisis aucun fichier.'}</span></label>
+          <label className="block text-sm">Nom de l’avatar<input name="avatar-name" required maxLength={60} value={name} onChange={event => setName(event.target.value)} className={field} placeholder="Ex. : Astronaute" /></label>
           <label className="block text-sm">Catégorie<input required maxLength={60} list="avatar-categories" value={category} onChange={event => setCategory(event.target.value)} className={field} placeholder="Choisis ou crée une catégorie" /><datalist id="avatar-categories">{categories.map(value => <option key={value} value={value} />)}</datalist></label>
           {image && <div className="space-y-4">{[{ label: 'Zoom', value: zoom, min: 1, max: 3, step: 0.05, change: setZoom }, { label: 'Position horizontale', value: x, min: 0, max: 100, step: 1, change: setX }, { label: 'Position verticale', value: y, min: 0, max: 100, step: 1, change: setY }].map(control => <label key={control.label} className="block text-sm">{control.label}<input type="range" min={control.min} max={control.max} step={control.step} value={control.value} onChange={event => control.change(Number(event.target.value))} className="mt-2 block min-h-8 w-full accent-blue-500" /></label>)}</div>}
         </div>
-        <div className="flex min-w-0 flex-col items-center justify-center gap-4"><div className="aspect-square w-full max-w-72 overflow-hidden rounded-3xl border border-white/15 bg-black/30">{image ? <canvas ref={canvas} width={512} height={512} aria-label="Aperçu de l’avatar recadré" className="h-full w-full" /> : <div className="flex h-full items-center justify-center p-6 text-center text-zinc-500">{decoding ? 'Lecture de l’image…' : 'Ton avatar apparaîtra ici'}</div>}</div><p className="text-sm text-zinc-400">Carré · 512 × 512 · WebP</p><button disabled={!image || busy || decoding || !name.trim() || !category.trim()} type="submit" className="yf-primary min-h-12 rounded-full bg-blue-600 px-7 py-3 font-semibold disabled:opacity-40">{busy ? 'Publication…' : 'Publier l’avatar'}</button></div>
+        <div className="flex min-w-0 flex-col items-center justify-center gap-4"><div className="aspect-square w-full max-w-72 overflow-hidden rounded-3xl border border-white/15 bg-black/30">{image ? <canvas ref={canvas} width={512} height={512} aria-label="Aperçu de l’avatar recadré" className="h-full w-full" /> : editing && !decoding ? <img src={editing.image_url} alt={`Avatar actuel : ${editing.name}`} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center p-6 text-center text-zinc-500">{decoding ? 'Lecture de l’image…' : 'Ton avatar apparaîtra ici'}</div>}</div><p className="text-sm text-zinc-400">Carré · 512 × 512 · WebP</p><button disabled={(!image && !editing) || busy || decoding || !name.trim() || !category.trim()} type="submit" className="yf-primary min-h-12 rounded-full bg-blue-600 px-7 py-3 font-semibold disabled:opacity-40">{busy ? 'Enregistrement…' : editing ? 'Enregistrer les modifications' : 'Publier l’avatar'}</button>{editing && <button type="button" onClick={() => { reset(); setError(''); setMessage(''); }} className="min-h-12 rounded-full border border-white/20 px-6 py-3">Annuler la modification</button>}</div>
       </fieldset></form>
-      <section><h2 className="mb-4 text-xl font-semibold">Avatars importés ({avatars.length})</h2><div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-6">{avatars.map(avatar => <article key={avatar.id} className="min-w-0 rounded-2xl border border-white/10 bg-white/5 p-3"><img src={avatar.image_url} alt={avatar.name} className="aspect-square w-full rounded-xl object-cover" /><h3 className="mt-3 break-words text-sm font-semibold">{avatar.name}</h3><p className="mt-1 break-words text-xs text-zinc-400">{avatar.category}</p></article>)}</div>{ready && !avatars.length && <p className="text-zinc-400">Importe ta première image pour enrichir les profils.</p>}</section>
+      <section><h2 className="mb-4 text-xl font-semibold">Avatars importés ({avatars.length})</h2><div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-6">{avatars.map(avatar => <article key={avatar.id} className="min-w-0 rounded-2xl border border-white/10 bg-white/5 p-3"><img src={avatar.image_url} alt={avatar.name} className="aspect-square w-full rounded-xl object-cover" /><h3 className="mt-3 break-words text-sm font-semibold">{avatar.name}</h3><p className="mt-1 break-words text-xs text-zinc-400">{avatar.category}</p>
+          <div className="mt-3 flex flex-col gap-2"><button type="button" disabled={busy || decoding} onClick={() => edit(avatar)} aria-label={`Modifier ${avatar.name}`} className="min-h-11 rounded-lg border border-white/20 px-2 py-2 text-sm hover:bg-white/10 disabled:opacity-40">Modifier</button>
+          {deleteTarget === avatar.id ? <div className="space-y-2 rounded-lg border border-red-400/30 p-2"><p className="text-xs text-zinc-300">Retirer cet avatar du sélecteur ? Les photos des profils existants seront conservées.</p><button type="button" disabled={busy} onClick={() => void remove(avatar)} aria-label={`Confirmer la suppression de ${avatar.name}`} className="min-h-11 w-full rounded-lg bg-red-600 px-2 py-2 text-sm disabled:opacity-40">Confirmer</button><button type="button" disabled={busy} onClick={() => setDeleteTarget(null)} className="min-h-11 w-full rounded-lg border border-white/20 px-2 py-2 text-sm">Annuler</button></div> : <button type="button" disabled={busy || decoding} onClick={() => setDeleteTarget(avatar.id)} aria-label={`Supprimer ${avatar.name}`} className="min-h-11 rounded-lg border border-red-400/30 px-2 py-2 text-sm text-red-300 hover:bg-red-500/10 disabled:opacity-40">Supprimer</button>}</div></article>)}</div>{ready && !avatars.length && <p className="text-zinc-400">Importe ta première image pour enrichir les profils.</p>}</section>
     </div>
   </main>;
 }

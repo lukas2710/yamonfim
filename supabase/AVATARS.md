@@ -7,3 +7,9 @@ Ouvrir `/admin/avatars` depuis la navigation administrateur. Importer une image 
 Les avatars importés apparaissent dans `/profiles` lors de la création ou de la modification. Les anciens avatars sont conservés. En cas d’indisponibilité de la bibliothèque, le sélecteur affiche les avatars habituels et un message.
 
 Android TV : recompiler et distribuer une nouvelle version de l’APK pour bénéficier du chargement de la bibliothèque et du sélecteur défilant. La compilation Java seule ne met pas à jour l’APK déjà distribué.
+
+## Modification et suppression
+
+Les boutons Modifier et Supprimer sont disponibles sous chaque avatar importé. Modifier permet de changer le nom, la catégorie et, facultativement, de remplacer l’image avec un nouveau cadrage. Supprimer demande une confirmation puis retire l’avatar de la bibliothèque.
+
+Les fichiers précédents sont conservés dans le stockage : les profils déjà créés enregistrent l’URL de leur photo et la conservent après modification ou suppression d’un avatar. La nouvelle version est proposée aux prochaines sélections. Les politiques de la migration initiale autorisent déjà ces opérations pour l’administrateur ; aucun nouveau SQL n’est nécessaire.
