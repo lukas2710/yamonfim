@@ -1,0 +1,6 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+# Netlify detects Next.js and installs its OpenNext adapter automatically.
+# API routes need the server runtime; do not switch to a static export.
