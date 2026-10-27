@@ -49,3 +49,9 @@ export function avatarCategories(avatars: Avatar[]) {
   }
   return groups;
 }
+
+export async function fetchAvatarCategoryNames(): Promise<string[]> {
+  const { data, error } = await supabase.from('avatar_categories').select('name').order('name');
+  if (error) throw error;
+  return (data || []).map(row => row.name as string);
+}

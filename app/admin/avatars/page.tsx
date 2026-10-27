@@ -6,13 +6,17 @@ import Link from 'next/link';
 import SectionNavigation from '@/components/SectionNavigation';
 import { getPersistentSession } from '@/lib/auth-session';
 import { supabase } from '@/lib/supabase';
-import { DEFAULT_AVATAR_CATEGORIES, fetchAvatars, type Avatar } from '@/lib/avatars';
+import { DEFAULT_AVATAR_CATEGORIES, fetchAvatars, fetchAvatarCategoryNames, type Avatar } from '@/lib/avatars';
 
 export default function AdminAvatarsPage() {
   const router = useRouter();
   const [authorized, setAuthorized] = useState(false);
   const [ready, setReady] = useState(false);
   const [avatars, setAvatars] = useState<Avatar[]>([]);
+  const [savedCategories, setSavedCategories] = useState<string[]>([]);
+  const [categoryName, setCategoryName] = useState('');
+  const [categoriesReady, setCategoriesReady] = useState(false);
+  const [categoryError, setCategoryError] = useState('');
   const [editing, setEditing] = useState<Avatar | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const form = useRef<HTMLFormElement>(null);
@@ -37,8 +41,12 @@ export default function AdminAvatarsPage() {
       if (!session || session.user.email?.toLowerCase() !== 'lukas.leclerc312@gmail.com') { router.replace('/'); return; }
       if (!alive) return;
       setAuthorized(true);
-      try { const rows = await fetchAvatars(); if (alive) { setAvatars(rows); setReady(true); } }
-      catch { if (alive) setError('La bibliothèque est indisponible. Applique la migration Supabase 20261027_profile_avatars.sql puis recharge la page.'); }
+      const [library, categories] = await Promise.allSettled([fetchAvatars(), fetchAvatarCategoryNames()]);
+      if (!alive) return;
+      if (library.status === 'fulfilled') { setAvatars(library.value); setReady(true); }
+      else setError('La bibliothèque est indisponible. Applique la migration Supabase 20261027_profile_avatars.sql puis recharge la page.');
+      if (categories.status === 'fulfilled') { setSavedCategories(categories.value); setCategoriesReady(true); }
+      else setCategoryError('La création des catégories doit être activée avec le SQL 20261027_avatar_categories.sql, puis recharge cette page.');
     })().catch(() => { if (alive) setError('Impossible de vérifier la connexion. Recharge la page.'); });
     return () => { alive = false; };
   }, [router]);
@@ -66,6 +74,28 @@ export default function AdminAvatarsPage() {
       if (!name) setName(file.name.replace(/\.[^.]+$/, '').slice(0, 60));
     } catch (cause) { if (version === fileVersion.current) setError(cause instanceof Error && cause.message.startsWith('Image trop') ? cause.message : 'Cette image ne peut pas être ouverte.'); }
     finally { URL.revokeObjectURL(url); if (version === fileVersion.current) setDecoding(false); }
+  }
+
+  async function addCategory(event: FormEvent) {
+    event.preventDefault();
+    const value = categoryName.trim();
+    if (!value || value.length > 60 || busy || !categoriesReady) return;
+    if (categories.some(item => item.toLocaleLowerCase('fr') === value.toLocaleLowerCase('fr'))) {
+      setCategoryError('Cette catégorie existe déjà. Tu peux la choisir pour ton avatar.');
+      return;
+    }
+    setBusy(true); setCategoryError(''); setError(''); setMessage('');
+    try {
+      const { data, error: createError } = await supabase.from('avatar_categories').insert({ name: value }).select('name').single();
+      if (createError) {
+        setCategoryError(createError.code === '23505' ? 'Cette catégorie existe déjà. Recharge la page pour la retrouver.' : 'Impossible de créer la catégorie. Vérifie ta connexion et tes droits administrateur.');
+        return;
+      }
+      setSavedCategories(rows => [...rows, data.name]);
+      setCategory(data.name); setCategoryName('');
+      setMessage(`Catégorie « ${data.name} » créée ! Tu peux maintenant y ajouter des avatars.`);
+    } catch { setCategoryError('Impossible de créer la catégorie. Réessaie dans un instant.'); }
+    finally { setBusy(false); }
   }
 
   function reset() {
@@ -130,13 +160,23 @@ export default function AdminAvatarsPage() {
   }
 
   if (!authorized) return <main className="yf-page min-h-screen p-8 text-white"><p role="status">{error || 'Vérification de l’accès administrateur…'}</p></main>;
-  const categories = Array.from(new Set([...DEFAULT_AVATAR_CATEGORIES.map(group => group.category), ...avatars.map(avatar => avatar.category)]));
+  const categories = Array.from(new Set([...DEFAULT_AVATAR_CATEGORIES.map(group => group.category), ...savedCategories, ...avatars.map(avatar => avatar.category)]));
   const field = 'mt-2 w-full rounded-xl border border-white/20 bg-black/30 p-3';
   return <main className="yf-page min-h-screen bg-[#0a0a0b] pb-16 text-white"><SectionNavigation admin />
     <div className="mx-auto max-w-6xl space-y-8 px-4 py-8 sm:px-8">
       <header><p className="text-sm text-blue-300">BIBLIOTHÈQUE DES PROFILS</p><h1 className="mt-2 text-3xl font-bold sm:text-4xl">{editing ? 'Modifier un avatar' : 'Crée un nouvel avatar'}</h1><p className="mt-3 text-zinc-400">Importe une image, ajuste le cadrage et choisis son nom et sa catégorie.</p><Link href="/profiles" className="mt-4 inline-block underline">Voir le sélecteur de profils →</Link></header>
       {error && <p role="alert" className="rounded-xl bg-red-500/10 p-4 text-red-200">{error}</p>}
       {message && <p role="status" className="rounded-xl bg-green-500/10 p-4 text-green-200">{message}</p>}
+      <section aria-labelledby="categories-title" className="rounded-3xl border border-white/10 bg-white/5 p-4 sm:p-6">
+        <h2 id="categories-title" className="text-xl font-semibold">Catégories d’avatars</h2>
+        <p className="mt-2 text-sm text-zinc-400">Crée une catégorie, même sans image. Clique sur son nom pour la choisir dans le formulaire d’avatar.</p>
+        <form onSubmit={addCategory} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+          <label className="flex-1 text-sm" htmlFor="new-avatar-category">Nom de la nouvelle catégorie<input id="new-avatar-category" required maxLength={60} value={categoryName} onChange={event => setCategoryName(event.target.value)} placeholder="Ex. : Animaux, Manga, Football…" disabled={busy || !categoriesReady} className={field} /></label>
+          <button type="submit" disabled={busy || !categoriesReady || !categoryName.trim()} className="yf-primary min-h-12 rounded-full bg-blue-600 px-6 py-3 text-sm font-semibold disabled:opacity-40">Ajouter la catégorie</button>
+        </form>
+        {categoryError && <p role="alert" className="mt-3 text-sm text-amber-200">{categoryError}</p>}
+        <div className="mt-4 flex flex-wrap gap-2">{categories.map(value => <button key={value} type="button" disabled={busy} aria-pressed={category === value} onClick={() => { setCategory(value); setCategoryError(''); }} className={`min-h-11 max-w-full break-words rounded-full border px-4 py-2 text-left text-sm ${category === value ? 'border-blue-400 bg-blue-500/20 text-blue-100' : 'border-white/20 text-zinc-300 hover:bg-white/10'}`}>{value}<span className="ml-2 text-xs text-zinc-400">{avatars.filter(avatar => avatar.category === value).length + (DEFAULT_AVATAR_CATEGORIES.find(group => group.category === value)?.avatars.length || 0)}</span></button>)}</div>
+      </section>
       <form ref={form} onSubmit={save} className="rounded-3xl border border-white/10 bg-white/5 p-4 sm:p-8"><fieldset disabled={busy || !ready} className="grid min-w-0 gap-8 md:grid-cols-2 disabled:opacity-60">
         <div className="min-w-0 space-y-5"><label className="block text-sm">Image source<input ref={input} type="file" accept="image/jpeg,image/png,image/webp" onChange={event => void importImage(event.target.files?.[0])} className={`${field} file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:p-2 file:text-white`} /><span className="mt-2 block text-xs text-zinc-400">JPG, PNG ou WebP · 15 Mo maximum{editing && ' · Facultatif : conserve l’image actuelle si tu ne choisis aucun fichier.'}</span></label>
           <label className="block text-sm">Nom de l’avatar<input name="avatar-name" required maxLength={60} value={name} onChange={event => setName(event.target.value)} className={field} placeholder="Ex. : Astronaute" /></label>

@@ -13,3 +13,9 @@ Android TV : recompiler et distribuer une nouvelle version de l’APK pour bén�
 Les boutons Modifier et Supprimer sont disponibles sous chaque avatar importé. Modifier permet de changer le nom, la catégorie et, facultativement, de remplacer l’image avec un nouveau cadrage. Supprimer demande une confirmation puis retire l’avatar de la bibliothèque.
 
 Les fichiers précédents sont conservés dans le stockage : les profils déjà créés enregistrent l’URL de leur photo et la conservent après modification ou suppression d’un avatar. La nouvelle version est proposée aux prochaines sélections. Les politiques de la migration initiale autorisent déjà ces opérations pour l’administrateur ; aucun nouveau SQL n’est nécessaire.
+
+## Créer des catégories sans image
+
+Exécuter une fois `migrations/20261027_avatar_categories.sql` pour ajouter la table des catégories et ses règles administrateur. Aucune donnée existante n’est modifiée. Recharger `/admin/avatars`, saisir un nom dans « Catégories d’avatars », puis cliquer « Ajouter la catégorie ». Le nom est conservé même sans avatar et devient disponible pour les prochains imports. Les doublons de casse sont refusés. Les catégories des avatars déjà importés restent proposées.
+
+Les sélecteurs des membres et de la TV affichent une catégorie dès qu’elle contient un avatar ; les catégories vides sont préparées dans l’administration.
