@@ -1,16 +1,16 @@
 .hero{position:relative;isolation:isolate;margin:0 -48px;padding:72px 48px 64px;min-height:560px;display:flex;align-items:center;justify-content:center;text-align:center;overflow:hidden}
 .wall{position:absolute;inset:-40px -20px;z-index:-2;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:12px;transform:rotate(-6deg) scale(1.15);opacity:.6}
 .wall img{width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:10px;background:#18181b}
-.hero:after{content:'';position:absolute;inset:0;z-index:-1;background:radial-gradient(ellipse 55% 50% at center,#0a0a0bd9,#0a0a0b80 100%),linear-gradient(#0a0a0b,#0a0a0b00 22%,#0a0a0b00 70%,#0a0a0b)}
+.hero:after{content:'';position:absolute;inset:0;z-index:-1;background:radial-gradient(ellipse 55% 50% at center,#060a15d9,#060a1580 100%),linear-gradient(#060a15,#060a1500 22%,#060a1500 70%,#060a15)}
 .heroInner{max-width:760px}
 .status{display:inline-flex;align-items:center;gap:8px;margin:0 0 22px;padding:8px 14px;border-radius:999px;border:1px solid #ffffff1a;background:#ffffff0d;font-size:12px;color:#e4e4e7}
-.status.urgent{border-color:#ef444466;background:#ef44441f;color:#fecaca}
+.status.urgent{border-color:#064cff66;background:#064cff1f;color:#becfff}
 .status svg{width:15px!important;height:15px!important}
 .hero h1{margin:0;font-size:clamp(42px,6.4vw,82px);line-height:1;font-weight:900;letter-spacing:-.045em}
-.hero h1 em{font-style:normal;color:#ef4444}
+.hero h1 em{font-style:normal;color:#064cff}
 .lead{margin:22px auto 30px;max-width:560px;font-size:17px;line-height:1.6;color:#c4c4c8}
 .lead strong{color:#fff}
-.cta{font-size:15px!important;padding:18px 30px!important;min-height:58px!important;box-shadow:0 10px 40px #dc262655!important}
+.cta{font-size:15px!important;padding:18px 30px!important;min-height:58px!important;box-shadow:0 10px 40px #003cda55!important}
 .trust{display:flex;flex-wrap:wrap;justify-content:center;gap:10px 24px;margin:26px 0 0;padding:0;list-style:none;font-size:12px;color:#a1a1aa}
 .trust li{display:flex;align-items:center;gap:7px}
 .trust svg{width:15px!important;height:15px!important;color:#4ade80}
@@ -22,11 +22,11 @@
 .heading h2{margin:0;font-size:clamp(30px,3.6vw,44px);font-weight:850;letter-spacing:-.035em}
 .heading p{margin:10px 0 0;font-size:15px;color:#a1a1aa}
 .plans{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;align-items:stretch}
-.plan{position:relative;display:flex;flex-direction:column;padding:30px 26px 26px;border-radius:20px;border:1px solid #ffffff14;background:#121214;cursor:pointer;transition:border-color .2s,transform .2s}
+.plan{position:relative;display:flex;flex-direction:column;padding:30px 26px 26px;border-radius:20px;border:1px solid #ffffff14;background:#0c1428;cursor:pointer;transition:border-color .2s,transform .2s}
 .plan:hover{border-color:#ffffff2e;transform:translateY(-3px)}
-.plan.featured{border:2px solid #ef4444;background:radial-gradient(ellipse at 50% 0,#ef444429,transparent 65%),#141012;box-shadow:0 20px 60px #dc262622}
+.plan.featured{border:2px solid #064cff;background:radial-gradient(ellipse at 50% 0,#064cff29,transparent 65%),#0c1428;box-shadow:0 20px 60px #003cda22}
 .plan.active{outline:2px solid #ffffff40;outline-offset:3px}
-.badge{position:absolute;top:-13px;left:50%;transform:translateX(-50%);white-space:nowrap;padding:6px 14px;border-radius:999px;background:#ef4444;color:#fff;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
+.badge{position:absolute;top:-13px;left:50%;transform:translateX(-50%);white-space:nowrap;padding:6px 14px;border-radius:999px;background:#064cff;color:#fff;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
 .badge.alt{background:#27272a;color:#fde68a;border:1px solid #fbbf2455}
 .plan h3{margin:0;font-size:22px;font-weight:800}
 .tagline{margin:6px 0 0;font-size:13px;color:#a1a1aa}
@@ -47,10 +47,10 @@
 
 .versus{padding:80px 0 0}
 .vsGrid{display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:900px;margin:0 auto}
-.vsCard{padding:28px;border-radius:20px;border:1px solid #ffffff12;background:#111113}
-.vsCard.vip{border-color:#ef444466;background:linear-gradient(160deg,#ef44441a,#111113 60%)}
+.vsCard{padding:28px;border-radius:20px;border:1px solid #ffffff12;background:#0c1428}
+.vsCard.vip{border-color:#064cff66;background:linear-gradient(160deg,#064cff1a,#0c1428 60%)}
 .vsCard h3{margin:0 0 18px;display:flex;align-items:center;gap:9px;font-size:18px}
-.vsCard h3 svg{color:#ef4444}
+.vsCard h3 svg{color:#064cff}
 .vsCard ul{margin:0;padding:0;list-style:none;display:grid;gap:13px;font-size:14px}
 .vsCard li{display:flex;gap:10px;align-items:flex-start;color:#d4d4d8}
 .vsCard li svg{width:17px!important;height:17px!important;margin-top:1px}
@@ -59,7 +59,7 @@
 .wait{margin:18px 0 0;padding:12px 14px;border-radius:12px;background:#ffffff08;font-size:12px;color:#a1a1aa}
 .wait strong{color:#f4f4f5;font-variant-numeric:tabular-nums}
 
-.final{margin:80px 0 0;padding:48px 32px;border-radius:24px;text-align:center;border:1px solid #ef444440;background:radial-gradient(ellipse at 50% 0,#ef444433,transparent 70%),#120c0e}
+.final{margin:80px 0 0;padding:48px 32px;border-radius:24px;text-align:center;border:1px solid #064cff40;background:radial-gradient(ellipse at 50% 0,#064cff33,transparent 70%),#0b1327}
 .final h2{margin:0;font-size:clamp(28px,3.4vw,40px);font-weight:850;letter-spacing:-.03em}
 .final p{margin:12px 0 26px;color:#c4c4c8;font-size:15px}
 

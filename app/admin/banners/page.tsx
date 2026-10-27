@@ -208,7 +208,7 @@ export default function AdminBannersPage() {
   return (
     <main className={`yf-page yf-banners ${styles.page}`}>
       <nav className={styles.nav} aria-label="Navigation administration">
-        <a className={styles.brand} href="/">YAMON<span>FIM</span><small>STUDIO</small></a>
+        <a className={styles.brand} href="/">YAMON<span>FILM</span><small>STUDIO</small></a>
         <div className={styles.navLinks}><a href="/admin">← Administration</a><a href="/">Voir le site ↗</a></div>
       </nav>
       <SectionNavigation admin />

@@ -16,32 +16,46 @@ export function isPublicAddress(address: string): boolean {
   return isIP(address) === 6 && /^[23][0-9a-f]{3}:/i.test(address) && !address.toLowerCase().startsWith('2001:db8:');
 }
 
-export async function publicRemoteUrl(value: string): Promise<URL> {
+async function validatedRemote(value: string) {
   const url = new URL(value);
   if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || (url.port && !['80', '443'].includes(url.port))) throw new Error('Adresse distante refusée');
   const hostname = url.hostname.replace(/^\[|\]$/g, '');
-  const addresses = isIP(hostname) ? [{ address: hostname }] : await lookup(hostname, { all: true });
+  const addresses = isIP(hostname) ? [{ address: hostname, family: isIP(hostname) }] : await lookup(hostname, { all: true });
   if (!addresses.length || addresses.some(({ address }) => !isPublicAddress(address))) throw new Error('Adresse distante refusée');
-  return url;
+  return { url, addresses };
 }
+
+export async function publicRemoteUrl(value: string): Promise<URL> { return (await validatedRemote(value)).url; }
+
+// Reuse TLS connections between HLS segments. The pool key includes the checked
+// DNS answers, so a changed/private answer can never reuse an unchecked agent.
+const remoteAgents = new Map<string, { http: HttpAgent; https: HttpsAgent }>();
 
 export async function fetchPublicRemote(value: string, signal: AbortSignal, headers: Record<string, string> = {}) {
   let target = value;
   for (let redirects = 0; redirects <= 4; redirects++) {
-    const url = await publicRemoteUrl(target);
+    const { url, addresses } = await validatedRemote(target);
     // Pin the validated DNS result for the actual connection, including redirects.
     const hostname = url.hostname.replace(/^\[|\]$/g, '');
-    const addresses = isIP(hostname) ? [{ address: hostname, family: isIP(hostname) }] : await lookup(hostname, { all: true });
-    if (!addresses.length || addresses.some(({ address }) => !isPublicAddress(address))) throw new Error('Adresse distante refusée');
     const pinnedLookup: LookupFunction = (_, options, callback) => {
       if (options.all) callback(null, addresses);
       else callback(null, addresses[0].address, addresses[0].family);
     };
+    const poolKey = hostname + ':' + addresses.map(value => value.address).sort().join(',');
+    let agents = remoteAgents.get(poolKey);
+    if (!agents) {
+      agents = {
+        http: new HttpAgent({ lookup: pinnedLookup, keepAlive: true, maxSockets: 16, maxFreeSockets: 4, timeout: 15000 }),
+        https: new HttpsAgent({ lookup: pinnedLookup, keepAlive: true, maxSockets: 16, maxFreeSockets: 4, timeout: 15000 }),
+      };
+      if (remoteAgents.size >= 32) remoteAgents.delete(remoteAgents.keys().next().value!);
+      remoteAgents.set(poolKey, agents);
+    }
     const upstream = await axios.get<Readable>(url.href, {
       responseType: 'stream', maxRedirects: 0, validateStatus: () => true,
       signal, timeout: 15000, proxy: false, headers,
-      httpAgent: new HttpAgent({ lookup: pinnedLookup }),
-      httpsAgent: new HttpsAgent({ lookup: pinnedLookup }),
+      httpAgent: agents.http,
+      httpsAgent: agents.https,
     });
     const responseHeaders = new Headers();
     for (const [key, value] of Object.entries(upstream.headers)) {

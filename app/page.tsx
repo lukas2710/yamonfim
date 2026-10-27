@@ -538,7 +538,7 @@ export default function Home() {
               onClick={() => selectType('all')}
               className="shrink-0 cursor-pointer select-none text-lg font-black tracking-[0.2em] text-red-600 sm:text-xl"
             >
-              YAMON<span className="text-white">FIM</span>
+              YAMON<span className="text-white">FILM</span>
             </button>
 
             <nav className="hidden items-center gap-1 lg:flex">
@@ -695,7 +695,7 @@ export default function Home() {
                   <div className="border-t border-white/5 p-1.5">
                     <button
                       onClick={handleLogout}
-                      className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-red-400 transition hover:bg-red-500/10"
+                      className="yf-danger flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-red-400 transition hover:bg-red-500/10"
                     >
                       <Icon name="logout" /> Déconnexion
                     </button>
@@ -739,7 +739,7 @@ export default function Home() {
               {featured.description && <p className="mt-3 line-clamp-2 max-w-xl text-[13px] leading-6 text-zinc-300 sm:mt-5 sm:line-clamp-3 sm:text-base sm:leading-8">{featured.description}</p>}
               {featured.id !== null && featured.id !== undefined && (
                 <div className="mt-5 flex gap-2.5 sm:mt-8 sm:flex-wrap sm:gap-3">
-                  <button type="button" onClick={() => handleMediaClick(featured, featured.heroStart ?? null)} className="yf-primary inline-flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-3 text-sm font-bold sm:flex-none sm:gap-3 sm:px-7 sm:py-4 text-white shadow-lg shadow-red-950/40 transition hover:bg-red-500 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-red-400"><Icon name={userLimitReached ? 'lock' : 'play'} className="h-5 w-5" />{userLimitReached ? 'Découvrir le VIP' : <><span className="sm:hidden">Regarder</span><span className="hidden sm:inline">Regarder maintenant</span></>}</button>
+                  <button type="button" data-yf-play={!userLimitReached || undefined} onClick={() => handleMediaClick(featured, featured.heroStart ?? null)} className="yf-primary inline-flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-3 text-sm font-bold sm:flex-none sm:gap-3 sm:px-7 sm:py-4 text-white shadow-lg shadow-red-950/40 transition hover:bg-red-500 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-red-400"><Icon name={userLimitReached ? 'lock' : 'play'} className="h-5 w-5" />{userLimitReached ? 'Découvrir le VIP' : <><span className="sm:hidden">Regarder</span><span className="hidden sm:inline">Regarder maintenant</span></>}</button>
                   <button type="button" onClick={() => document.getElementById('catalogue-accueil')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })} className="inline-flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-sm font-semibold sm:flex-none sm:gap-3 sm:px-6 sm:py-4 text-white backdrop-blur-md transition hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"><span className="sm:hidden">Catalogue</span><span className="hidden sm:inline">Explorer le catalogue</span><Icon name="chevronRight" className="h-4 w-4" /></button>
                 </div>
               )}

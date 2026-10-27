@@ -1,3 +1,5 @@
+import { isCataloguePlayer, isSupportedEmbed } from './catalogue-source';
+import { reachedEpisodeCredits, type CreditsMarker } from './episode-credits';
 export interface PlaybackPosition { s: number; e: number }
 export function sameEpisode(a: PlaybackPosition | null, b: PlaybackPosition) { return !!a && a.s === b.s && a.e === b.e; }
 export function isDirectVideo(value: string) {
@@ -7,7 +9,7 @@ export function isMoviezPlayer(value: string) {
   try { return new URL(value).hostname === 'api.moviez.ac'; } catch { return false; }
 }
 export function isNativePlayback(value: string) {
-  return isDirectVideo(value) || isMoviezPlayer(value);
+  return isDirectVideo(value) || isMoviezPlayer(value) || isCataloguePlayer(value) || isSupportedEmbed(value);
 }
 export function nextEpisodePosition(seasons: { episodes: unknown[] }[] | undefined, position: PlaybackPosition): PlaybackPosition | null {
   if (!seasons?.[position.s]) return null;
@@ -26,12 +28,9 @@ export const RESUME_HIDE_RATIO = 0.7;
 export function isMostlyWatched(currentTime: number, duration: number) { return Number.isFinite(currentTime) && Number.isFinite(duration) && duration > 0 && currentTime / duration >= RESUME_HIDE_RATIO; }
 export function isCompleted(currentTime: number, duration: number) { return duration > 0 && currentTime / duration >= .95; }
 
-// Without editorial credits markers, use a conservative end window. Short clips
-// and unknown/live durations must never trigger early episode advancement.
-export function isEpisodeCreditsWindow(currentTime: number, duration: number) {
-  if (!Number.isFinite(currentTime) || !Number.isFinite(duration) || duration < 300) return false;
-  const creditsWindow = Math.min(90, duration * 0.1);
-  return currentTime >= duration - creditsWindow && currentTime <= duration;
+// Compatibility for older callers; absent precise markers never mean credits.
+export function isEpisodeCreditsWindow(currentTime: number, duration: number, marker: CreditsMarker | null = null) {
+  return reachedEpisodeCredits(currentTime, duration, marker);
 }
 
 export async function commitEpisodeTransition(previous: PlaybackPosition | null, next: PlaybackPosition, markPrevious: (position: PlaybackPosition) => Promise<void>, saveCurrent: () => Promise<void>) {

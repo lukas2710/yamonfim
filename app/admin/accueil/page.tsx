@@ -102,7 +102,7 @@ export default function AdminHeroPage() {
 
   if (!ready) return <main className="yf-page grid min-h-screen place-items-center bg-[#0b0c10] text-sm text-zinc-400">Vérification de ton accès administrateur…</main>;
   return <main className="yf-page min-h-screen bg-[#0b0c10] pb-16 text-zinc-100">
-    <nav className="border-b border-white/[0.07] px-5 sm:px-10" aria-label="Administration"><div className="mx-auto flex max-w-[1200px] items-center justify-between gap-4 py-5"><Link href="/" className="text-lg font-black tracking-tight text-red-500">YAMON<span className="text-white">FIM</span><span className="ml-3 border-l border-white/20 pl-3 text-[9px] font-medium tracking-[0.18em] text-zinc-500">ACCUEIL</span></Link><Link href="/" className="text-xs text-zinc-400 hover:text-white">Voir le site ↗</Link></div></nav>
+    <nav className="border-b border-white/[0.07] px-5 sm:px-10" aria-label="Administration"><div className="mx-auto flex max-w-[1200px] items-center justify-between gap-4 py-5"><Link href="/" className="text-lg font-black tracking-tight text-red-500">YAMON<span className="text-white">FILM</span><span className="ml-3 border-l border-white/20 pl-3 text-[9px] font-medium tracking-[0.18em] text-zinc-500">ACCUEIL</span></Link><Link href="/" className="text-xs text-zinc-400 hover:text-white">Voir le site ↗</Link></div></nav>
     <SectionNavigation admin />
     <div className="mx-auto max-w-[1200px] space-y-8 px-4 pt-8 sm:px-10">
       <header><h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Carrousel de l’accueil</h1><p className="mt-2 text-sm text-zinc-400">Les {HERO_SIZE} titres qui défilent en grand en haut de la page d’accueil.</p></header>

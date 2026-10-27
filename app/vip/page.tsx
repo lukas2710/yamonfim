@@ -79,7 +79,7 @@ export default function VipActivationPage() {
       <div className="pointer-events-none absolute left-1/2 top-1/2 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-[140px] bg-amber-500/20" />
 
       <span className="relative mb-10 select-none text-xl font-black tracking-[0.2em] text-red-600">
-        YAMON<span className="text-white">FIM</span>
+        YAMON<span className="text-white">FILM</span>
       </span>
 
       <div className="yf-surface relative w-full max-w-sm overflow-hidden rounded-3xl border border-white/10 bg-[#111113]/90 p-8 text-center shadow-2xl backdrop-blur-xl">

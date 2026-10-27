@@ -222,7 +222,7 @@ export default function AdminPromotionsPage() {
       <header className="yf-topbar sticky top-0 z-40 border-b border-white/5 bg-[#0a0a0b]/85 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-8">
           <div className="flex items-center gap-3">
-            <span className="select-none text-lg font-black tracking-[0.2em] text-red-600">YAMON<span className="text-white">FIM</span></span>
+            <span className="select-none text-lg font-black tracking-[0.2em] text-red-600">YAMON<span className="text-white">FILM</span></span>
             <span className="rounded-full bg-red-600/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-red-300 ring-1 ring-red-500/30">Promotions</span>
           </div>
           <div className="flex items-center gap-2">

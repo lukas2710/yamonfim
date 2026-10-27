@@ -1,4 +1,4 @@
-.card{position:fixed;right:20px;bottom:24px;z-index:60;width:min(340px,calc(100vw - 32px));padding:22px 22px 14px;border-radius:22px;border:1px solid #fbbf2440;background:radial-gradient(ellipse at 50% 0,#fbbf2422,transparent 70%),#121214;color:#fff;text-align:center;box-shadow:0 20px 60px #000a;animation:enter .5s cubic-bezier(.2,1.3,.4,1)}
+.card{position:fixed;right:20px;bottom:24px;z-index:60;width:min(340px,calc(100vw - 32px));padding:22px 22px 14px;border-radius:22px;border:1px solid #fbbf2440;background:radial-gradient(ellipse at 50% 0,#fbbf2422,transparent 70%),#0c1428;color:#fff;text-align:center;box-shadow:0 20px 60px #000a;animation:enter .5s cubic-bezier(.2,1.3,.4,1)}
 .close{position:absolute;top:8px;right:8px;width:32px;height:32px;border:0;border-radius:50%;background:#ffffff10;color:#a1a1aa;font-size:18px;cursor:pointer}
 .close:hover{color:#fff}
 .kicker{margin:0;font-size:10px;font-weight:800;letter-spacing:.18em;color:#fbbf24}

@@ -110,7 +110,7 @@ export default function AdminCollectionsPage() {
   if (!authorized) return <main className="yf-page min-h-screen bg-[#0a0a0b] p-10 text-zinc-400" role="status">Vérification de l’accès administrateur…</main>;
 
   return <main className="yf-page yf-collection-admin min-h-screen bg-[#0a0a0b] pb-20 text-white">
-    <header className="yf-collection-admin-top"><Link href="/">YAMON<span>FIM</span></Link><Link href="/">Retour au site ↗</Link></header>
+    <header className="yf-collection-admin-top"><Link href="/">YAMON<span>FILM</span></Link><Link href="/">Retour au site ↗</Link></header>
     <SectionNavigation admin />
     <PageHero eyebrow="ADMINISTRATION · COLLECTIONS" title="Un univers." accent="Tous ses films." description="Rassemble les titres d’une saga et donne-leur une place sur l’accueil. Tu choisis les histoires, l’image et l’ordre de lecture." cardLabel="LES SAGAS DU CATALOGUE" cardTitle="Les collections" cardDetail={`${collections.length} collection${collections.length > 1 ? 's' : ''}`} variant="collection" />
     <div className="yf-collection-workspace">

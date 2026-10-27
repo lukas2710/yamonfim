@@ -288,7 +288,7 @@ export default function AdminVipPage() {
             ← Retour
           </button>
           <span className="text-lg font-black tracking-[0.2em] text-red-600">
-            YAMON<span className="text-white">FIM</span>
+            YAMON<span className="text-white">FILM</span>
           </span>
           <span className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-bold text-amber-300 ring-1 ring-amber-500/30">
             👑 Admin VIP

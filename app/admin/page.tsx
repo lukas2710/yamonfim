@@ -13,8 +13,12 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { findContentDuplicate, duplicateErrorMessage } from '@/lib/content-identity';
 import { checkContentDuplicate } from '@/lib/content-duplicates';
+import { getPersistentSession } from '@/lib/auth-session';
+import { cataloguePlayer } from '@/lib/catalogue-source';
+import { normalizeSeriesParts, isLupin } from '@/lib/series-parts';
 
 interface Episode {
+  sourcePosition?: { s: number; e: number };
   number: number;
   title: string;
   embedUrl: string;
@@ -99,6 +103,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 const episodeCount = (seasons?: Season[] | null) =>
   (seasons || []).reduce((n, s) => n + (s.episodes?.length || 0), 0);
+interface SourceCheck { available: boolean; url?: string; provider?: string; streamVerified?: boolean; embeds?: string[] }
 
 export default function AdminPage() {
   const router = useRouter();
@@ -112,6 +117,8 @@ export default function AdminPage() {
   const [tmdbSearchResults, setTmdbSearchResults] = useState<any[]>([]);
   const [selectedTmdbId, setSelectedTmdbId] = useState('');
   const [searchingTmdb, setSearchingTmdb] = useState(false);
+  const [collectionStatus, setCollectionStatus] = useState('');
+  const sourceChecks = useRef(new Map<string, { time: number; result: SourceCheck }>());
 
   const [title, setTitle] = useState('');
   const [type, setType] = useState<'movie' | 'series'>('movie');
@@ -193,17 +200,43 @@ export default function AdminPage() {
     }, 300);
   };
 
-  const checkUrlAvailable = async (testUrl: string): Promise<boolean> => {
-    try {
-      const res = await fetch(testUrl);
-      const text = await res.text();
-      if (text.includes("n'est pas encore disponible") || text.includes("pas encore disponible")) {
-        return false;
-      }
-      return true;
-    } catch {
-      return true;
+  const checkUrlAvailable = async (testUrl: string) => {
+    const cached = sourceChecks.current.get(testUrl);
+    if (cached && Date.now() - cached.time < 10 * 60 * 1000) return cached.result;
+    const { data: { session } } = await getPersistentSession();
+    if (!session) throw new Error('Session expirée. Reconnecte-toi.');
+    const res = await fetch('/api/source-check', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ url: testUrl }),
+    });
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.error || 'Vérification des sources impossible');
+    const checked = result as SourceCheck;
+    if (checked.available) {
+      const entry = { time: Date.now(), result: checked };
+      sourceChecks.current.set(testUrl, entry);
+      if (checked.url) sourceChecks.current.set(checked.url, entry);
     }
+    return checked;
+  };
+
+  const collectSeriesSources = async (input: Season[]) => {
+    const collected = input.map(season => ({ ...season, episodes: season.episodes.map(episode => ({ ...episode })) }));
+    const episodes = collected.flatMap(season => season.episodes).filter(episode => episode.embedUrl?.trim());
+    let cursor = 0, completed = 0, available = 0, links = 0;
+    setCollectionStatus(`Recherche automatique Moviez et Movix : 0/${episodes.length} épisodes…`);
+    await Promise.all(Array.from({ length: Math.min(3, episodes.length) }, async () => {
+      while (cursor < episodes.length) {
+        const episode = episodes[cursor++];
+        const checked = await checkUrlAvailable(episode.embedUrl);
+        if (checked.available && checked.url) { available++; links += checked.embeds?.length || 1; episode.embedUrl = checked.url; }
+        else episode.embedUrl = '';
+        completed++;
+        setCollectionStatus(`Recherche automatique Moviez et Movix : ${completed}/${episodes.length} épisodes · ${links} liens trouvés`);
+      }
+    }));
+    setCollectionStatus(`${links} liens collectés pour ${available}/${episodes.length} épisodes. Les épisodes sans source compatible restent indisponibles.`);
+    return { seasons: collected, available };
   };
 
   const handleSelectTmdbItem = async (item: any) => {
@@ -256,6 +289,7 @@ export default function AdminPage() {
     setLoading(true);
     setErrorMsg('');
     setMessage('');
+    setCollectionStatus('Recherche automatique des liens sur Moviez et Movix…');
 
     const moviezParams = new URLSearchParams({
       autoplay: '1',
@@ -292,26 +326,24 @@ export default function AdminPage() {
 
         if (type === 'movie') {
           const streamUrl = `https://api.moviez.ac/${tmdbId}?${moviezParams}`;
-          const isAvailable = await checkUrlAvailable(streamUrl);
+          const source = await checkUrlAvailable(streamUrl);
 
-          if (!isAvailable) {
+          if (!source.available) {
             setErrorMsg(`⚠️ Le film "${itemName}" n'est pas encore disponible sur le lecteur externe.`);
             setUrl('');
             setEmbedUrl('');
+            setCollectionStatus('Aucun lien compatible trouvé. Ajout impossible.');
           } else {
-            const iframeCode = `<iframe src="${streamUrl}" width="100%" height="100%" frameborder="0" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" referrerpolicy="origin" allowfullscreen></iframe>`;
+            const iframeCode = `<iframe src="${source.url}" width="100%" height="100%" frameborder="0" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" referrerpolicy="origin" allowfullscreen></iframe>`;
             setUrl(iframeCode);
             setEmbedUrl(iframeCode);
-            setMessage('Informations TMDb récupérées et lecteur vérifié avec succès !');
+            setMessage(`${source.embeds?.length || 1} lien(s) collecté(s), lecture vérifiée via ${source.provider}. Le lecteur changera de source en cas de panne.`);
+            setCollectionStatus(`${source.embeds?.length || 1} lien(s) collecté(s) sur Moviez et Movix. Changement automatique de source en cas de panne.`);
           }
         }
 
         if (type === 'series' && data.number_of_seasons) {
           const fetchedSeasons: Season[] = [];
-          let firstEpAvailable = true;
-
-          const testSeriesUrl = `https://api.moviez.ac/serie/${tmdbId}/1/1?autoplay=1&next=1&color=e8213f&info=title,year,rating,duration,synopsis`;
-          firstEpAvailable = await checkUrlAvailable(testSeriesUrl);
 
           for (let sNum = 1; sNum <= data.number_of_seasons; sNum++) {
             try {
@@ -326,16 +358,7 @@ export default function AdminPage() {
                   : mainPoster;
 
                 const episodesList = seasonData.episodes.map((ep: any) => {
-                  const seriesParams = new URLSearchParams({
-                    autoplay: '1',
-                    next: '1',
-                    color: 'e8213f',
-                    info: 'title,year,rating,duration,synopsis'
-                  }).toString();
-                  
-                  const autoEmbed = firstEpAvailable
-                    ? `<iframe src="https://api.moviez.ac/serie/${tmdbId}/${sNum}/${ep.episode_number}?${seriesParams}" width="100%" height="100%" frameborder="0" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" referrerpolicy="origin" allowfullscreen></iframe>`
-                    : '';
+                  const autoEmbed = cataloguePlayer({ id: String(tmdbId), type: 'tv', season: sNum, episode: ep.episode_number });
 
                   return {
                     number: ep.episode_number,
@@ -358,14 +381,11 @@ export default function AdminPage() {
           }
 
           if (fetchedSeasons.length > 0) {
-            setSeasons(fetchedSeasons);
+            const collected = await collectSeriesSources(fetchedSeasons);
+            setSeasons(collected.seasons);
             setOpenSeason(0);
-          }
-
-          if (!firstEpAvailable) {
-            setErrorMsg(`⚠️ La série "${itemName}" n'est pas encore disponible sur le lecteur externe.`);
-          } else {
-            setMessage('Informations TMDb récupérées et épisodes générés avec succès !');
+            if (!collected.available) setErrorMsg(`Aucun lien compatible trouvé pour « ${itemName} ». Ajout impossible.`);
+            else setMessage('Liens collectés pour les épisodes disponibles. Tu peux enregistrer la série.');
           }
         }
       } else {
@@ -373,7 +393,8 @@ export default function AdminPage() {
       }
     } catch (err) {
       console.error(err);
-      setErrorMsg('Erreur lors de la récupération TMDb.');
+      setCollectionStatus('La collecte des liens n’a pas abouti. Réessaie.');
+      setErrorMsg(err instanceof Error ? err.message : 'Erreur lors de la récupération TMDb.');
     }
     setLoading(false);
   };
@@ -397,6 +418,7 @@ export default function AdminPage() {
   };
 
   const handleCancel = () => {
+    setCollectionStatus('');
     const currentType = type;
     setEditingId(null);
     setSelectedTmdbId('');
@@ -437,6 +459,32 @@ export default function AdminPage() {
     );
   };
 
+  const saveEpisodeLink = async (sIndex: number, eIndex: number) => {
+    if (editingId == null || loading || submitLock.current) return;
+    const value = seasons[sIndex]?.episodes[eIndex]?.embedUrl?.trim();
+    if (!value) return;
+    submitLock.current = true; setLoading(true); setErrorMsg(''); setMessage('Vérification du lien de cet épisode…');
+    try {
+      const { data: { session } } = await getPersistentSession();
+      if (session?.user.email !== ADMIN_EMAIL) throw new Error('Connexion administrateur requise.');
+      const checked = await checkUrlAvailable(value);
+      if (!checked.available || !checked.url) throw new Error('Ce lien ne peut pas être vérifié. Aucun changement enregistré.');
+      const { data: latest, error: readError } = await supabase.from('media').select('seasons').eq('id', editingId).single();
+      if (readError || !latest?.seasons?.[sIndex]?.episodes?.[eIndex]) throw new Error('Épisode introuvable. Recharge sa fiche.');
+      const original = mediaList.find(item => String(item.id) === String(editingId))?.seasons?.[sIndex]?.episodes[eIndex]?.embedUrl;
+      if (latest.seasons[sIndex].episodes[eIndex].embedUrl !== original) throw new Error('Cet épisode a été modifié ailleurs. Recharge sa fiche.');
+      const updated = structuredClone(latest.seasons) as Season[];
+      updated[sIndex].episodes[eIndex].embedUrl = checked.url;
+      const { error: writeError } = await supabase.from('media').update({ seasons: updated }).eq('id', editingId);
+      if (writeError) throw writeError;
+      clearClientResources();
+      updateEpisodeField(sIndex, eIndex, 'embedUrl', checked.url);
+      setMediaList(items => items.map(item => String(item.id) === String(editingId) ? { ...item, seasons: updated } : item));
+      setMessage('Lien de cet épisode enregistré. Les autres épisodes sont conservés.');
+    } catch (error) { setMessage(''); setErrorMsg(error instanceof Error ? error.message : 'Impossible d’enregistrer ce lien.'); }
+    finally { submitLock.current = false; setLoading(false); }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading || submitLock.current) return;
@@ -471,6 +519,19 @@ export default function AdminPage() {
       void fetchMedia();
       return;
     }
+    setMessage('Vérification des liens avant enregistrement…');
+    if (type === 'movie') {
+      if (!url.trim()) throw new Error('Ajout refusé : aucun lien de lecteur pour ce film.');
+      const checked = await checkUrlAvailable(url);
+      if (!checked.available) throw new Error('Ajout refusé : aucun lien disponible sur Moviez ou Movix pour ce film.');
+      if (checked.url) { payload.url = checked.url; payload.embedUrl = checked.url; }
+    } else if (type === 'series') {
+      const collected = await collectSeriesSources(seasons);
+      if (!collected.available) throw new Error('Ajout refusé : aucun lien disponible pour les épisodes de cette série sur Moviez ou Movix.');
+      payload.seasons = collected.seasons;
+      setSeasons(collected.seasons);
+    }
+    setMessage('');
     if (editingId !== null && editingId !== undefined) {
       clearClientResources();
       const { error } = await supabase.from('media').update(payload).eq('id', editingId);
@@ -500,6 +561,7 @@ export default function AdminPage() {
       }
     }
     } catch (error) {
+      setMessage('');
       setErrorMsg(error instanceof Error ? error.message : 'Impossible de vérifier et d’enregistrer ce titre. Réessaie.');
     } finally {
       submitLock.current = false;
@@ -523,6 +585,8 @@ export default function AdminPage() {
     return findContentDuplicate({ title, type, tmdb_id: selectedTmdbId }, mediaList, editingId) as MediaItem | null;
   }, [title, type, selectedTmdbId, mediaList, editingId]);
 
+  const displayedSeasons = useMemo(() => normalizeSeriesParts({ title, tmdb_id: selectedTmdbId, seasons }).seasons, [title, selectedTmdbId, seasons]);
+
   if (loadingAuth) {
     return (
       <main className="yf-page yf-admin flex min-h-screen items-center justify-center bg-[#0a0a0b] text-white">
@@ -536,6 +600,7 @@ export default function AdminPage() {
 
   const isEditing = editingId !== null && editingId !== undefined;
   const totalEpisodes = episodeCount(seasons);
+  const seasonUnit = isLupin({ title, tmdb_id: selectedTmdbId }) ? 'partie' : 'saison';
 
   return (
     <main className="yf-page yf-admin min-h-screen bg-[#0a0a0b] pb-24 font-sans text-white antialiased selection:bg-red-600 selection:text-white">
@@ -543,7 +608,7 @@ export default function AdminPage() {
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-8">
           <div className="flex items-center gap-3">
             <span className="select-none text-lg font-black tracking-[0.2em] text-red-600">
-              YAMON<span className="text-white">FIM</span>
+              YAMON<span className="text-white">FILM</span>
             </span>
             <span className="rounded-full bg-red-600/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-red-300 ring-1 ring-red-500/30">
               Admin
@@ -726,6 +791,10 @@ export default function AdminPage() {
                 )}
               </div>
 
+              <div role="status" className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-zinc-300">
+                <p className="font-semibold text-white">Liens de lecture automatiques</p>
+                <p className="mt-1">{collectionStatus || 'Sélectionne un film ou une série dans la recherche : les liens Moviez et Movix seront récupérés ici automatiquement.'}</p>
+              </div>
               {(poster || backdrop) && (
                 <div className="relative overflow-hidden rounded-2xl ring-1 ring-white/10">
                   {backdrop && <img src={backdrop} alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" />}
@@ -741,7 +810,7 @@ export default function AdminPage() {
                       <p className="mt-1.5 line-clamp-2 text-base font-bold leading-snug">{title || 'Sans titre'}</p>
                       {type === 'series' && (
                         <p className="mt-0.5 text-xs text-zinc-400">
-                          {seasons.length} saison{seasons.length > 1 ? 's' : ''} · {totalEpisodes} épisode{totalEpisodes > 1 ? 's' : ''}
+                          {displayedSeasons.length} {seasonUnit}{displayedSeasons.length > 1 ? 's' : ''} · {totalEpisodes} épisode{totalEpisodes > 1 ? 's' : ''}
                         </p>
                       )}
                     </div>
@@ -816,11 +885,11 @@ export default function AdminPage() {
                   <p className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-zinc-400">
                     <span>Saisons & épisodes</span>
                     <span className="font-normal normal-case tracking-normal text-zinc-600">
-                      {seasons.length} saison{seasons.length > 1 ? 's' : ''} · {totalEpisodes} épisode{totalEpisodes > 1 ? 's' : ''}
+                      {displayedSeasons.length} {seasonUnit}{displayedSeasons.length > 1 ? 's' : ''} · {totalEpisodes} épisode{totalEpisodes > 1 ? 's' : ''}
                     </span>
                   </p>
                   <div className="space-y-2">
-                    {seasons.map((season, sIndex) => {
+                    {displayedSeasons.map((season, sIndex) => {
                       const open = openSeason === sIndex;
                       const missing = season.episodes.filter(ep => !ep.embedUrl?.trim()).length;
                       return (
@@ -830,7 +899,7 @@ export default function AdminPage() {
                             onClick={() => setOpenSeason(open ? null : sIndex)}
                             className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-white/[0.03]"
                           >
-                            <span className="text-sm font-semibold">Saison {season.seasonNumber}</span>
+                            <span className="text-sm font-semibold">{seasonUnit === 'partie' ? 'Partie' : 'Saison'} {season.seasonNumber}</span>
                             <span className="flex items-center gap-2 text-xs text-zinc-500">
                               {missing > 0 && (
                                 <span className="rounded-full bg-red-600/15 px-2 py-0.5 font-semibold text-red-300">
@@ -849,18 +918,19 @@ export default function AdminPage() {
                                   <input
                                     type="text"
                                     value={ep.title}
-                                    onChange={e => updateEpisodeField(sIndex, eIndex, 'title', e.target.value)}
+                                    onChange={e => updateEpisodeField(ep.sourcePosition?.s ?? sIndex, ep.sourcePosition?.e ?? eIndex, 'title', e.target.value)}
                                     className="w-full rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-xs text-white outline-none focus:border-red-600/70 sm:w-1/3"
                                   />
                                   <input
                                     type="text"
                                     placeholder="Lien de l'épisode"
                                     value={ep.embedUrl}
-                                    onChange={e => updateEpisodeField(sIndex, eIndex, 'embedUrl', e.target.value)}
+                                    onChange={e => updateEpisodeField(ep.sourcePosition?.s ?? sIndex, ep.sourcePosition?.e ?? eIndex, 'embedUrl', e.target.value)}
                                     className={`w-full flex-1 rounded-lg border bg-black/30 px-2.5 py-1.5 font-mono text-[11px] text-white outline-none focus:border-red-600/70 ${
                                       ep.embedUrl?.trim() ? 'border-white/10' : 'border-red-500/40'
                                     }`}
                                   />
+                                  {editingId != null && <button type="button" disabled={loading || !ep.embedUrl?.trim()} onClick={() => void saveEpisodeLink(ep.sourcePosition?.s ?? sIndex, ep.sourcePosition?.e ?? eIndex)} aria-label={`Enregistrer le lien de la ${seasonUnit} ${season.seasonNumber}, épisode ${ep.number}`} className="shrink-0 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Enregistrer ce lien</button>}
                                 </div>
                               ))}
                             </div>
@@ -874,7 +944,7 @@ export default function AdminPage() {
 
               <button
                 type="submit"
-                disabled={loading || !!duplicate}
+                disabled={loading || !!duplicate || (type === 'movie' ? !url.trim() : !seasons.some(season => season.episodes.some(episode => episode.embedUrl?.trim())))}
                 className="yf-primary flex w-full items-center justify-center gap-2 rounded-full bg-red-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-red-600/25 transition hover:bg-red-500 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? (
@@ -968,7 +1038,7 @@ export default function AdminPage() {
                             {item.type === 'movie' ? 'Film' : 'Série'}
                           </span>
                           {item.type === 'series' && item.seasons && (
-                            <span>{item.seasons.length} s. · {eps} ép.</span>
+                            <span>{normalizeSeriesParts(item).seasons?.length} {isLupin(item) ? 'parties' : 's.'} · {eps} ép.</span>
                           )}
                           {item.genres && item.genres.length > 0 && (
                             <span className="truncate">{item.genres.slice(0, 2).join(', ')}</span>

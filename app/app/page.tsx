@@ -6,7 +6,7 @@ export const metadata: Metadata = {
 };
 
 const APK = '/yamonfilm-tv.apk';
-const VERSION = '2.0.0';
+const VERSION = '2.4.1';
 
 const GUIDES = [
   {
@@ -31,7 +31,7 @@ const GUIDES = [
   {
     title: 'Décodeur Bbox (Bouygues)',
     steps: [
-      'Fonctionne sur le décodeur TV 4K HDR récent (Android TV 8 ou plus). L’ancienne Bbox Miami n’est pas compatible.',
+      'Nécessite Android TV 8 ou plus. La compatibilité du lecteur dépend du modèle de la box et doit être vérifiée sur l’appareil.',
       'Paramètres → Préférences de l’appareil → À propos : clique 7 fois sur « Build », puis autorise les sources inconnues.',
       'Suis ensuite les étapes Android TV ci-dessus, ou copie le fichier sur une clé USB et ouvre-le avec un gestionnaire de fichiers.',
     ],

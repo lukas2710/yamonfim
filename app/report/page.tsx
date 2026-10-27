@@ -156,7 +156,7 @@ export default function ReportPage() {
             Accueil
           </button>
           <span className="text-lg font-black tracking-[0.2em] text-red-600">
-            YAMON<span className="text-white">FIM</span>
+            YAMON<span className="text-white">FILM</span>
           </span>
           {isAdmin ? (
             <span className="hidden items-center gap-1.5 rounded-full bg-red-600/15 px-3 py-1.5 text-xs font-bold text-red-300 ring-1 ring-red-500/30 sm:flex">

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchPublicRemote, readRemoteText } from '@/lib/public-remote';
-import { rewritePlaylist, selectHlsAudio } from '@/lib/remote-stream';
+import { rewritePlaylist, selectHlsAudio, selectTvHls } from '@/lib/remote-stream';
 
 export async function GET(req: NextRequest) {
   const target = req.nextUrl.searchParams.get('url');
@@ -17,7 +17,8 @@ export async function GET(req: NextRequest) {
       const text = await readRemoteText(response, 2_000_000);
       if (text.length > 2_000_000 || !text.trimStart().startsWith('#EXTM3U')) return new NextResponse('Liste de lecture invalide', { status: 502 });
       const audio = req.nextUrl.searchParams.get('audio') || '';
-      return new NextResponse(rewritePlaylist(selectHlsAudio(text, audio), url.href), { headers: { 'Content-Type': 'application/vnd.apple.mpegurl', 'Cache-Control': 'no-store' } });
+      const tv = req.nextUrl.searchParams.get('profile') === 'android-tv';
+      return new NextResponse(rewritePlaylist(selectHlsAudio(tv ? selectTvHls(text) : text, audio), url.href, tv), { headers: { 'Content-Type': 'application/vnd.apple.mpegurl', 'Cache-Control': 'no-store' } });
     }
     if (!/^(video\/|audio\/|application\/(octet-stream|mp4|vnd\.apple\.mpegurl|x-mpegurl))/i.test(contentType)) {
       await response.body?.cancel();

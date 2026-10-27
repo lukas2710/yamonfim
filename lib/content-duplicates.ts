@@ -5,7 +5,7 @@ export async function readContentIdentities(client: SupabaseClient, table: 'medi
   const rows: ContentIdentity[] = [];
   let total = Infinity;
   while (rows.length < total) {
-    const columns = table === 'requests' ? 'id,title,type,tmdb_id,status' : 'id,title,type,tmdb_id';
+    const columns = table === 'requests' ? 'id,title,type,tmdb_id,status' : 'id,title,type,tmdb_id,url,embedUrl';
     const { data, error, count } = await client.from(table).select(columns, { count: 'exact' }).order('id').range(rows.length, rows.length + 499);
     if (error) throw new Error('Impossible de vérifier les doublons. Réessaie avant d’enregistrer.');
     if (count !== null) total = count;

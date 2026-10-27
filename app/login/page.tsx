@@ -314,7 +314,7 @@ export default function LoginPage() {
 
         <div className="relative z-10 flex flex-col justify-between p-12 xl:p-16">
           <span className="select-none text-2xl font-black tracking-[0.2em] text-red-600">
-            YAMON<span className="text-white">FIM</span>
+            YAMON<span className="text-white">FILM</span>
           </span>
 
           <div className="max-w-lg">
@@ -356,7 +356,7 @@ export default function LoginPage() {
           <div className="mb-8 text-center lg:hidden">
             <h1 className="text-4xl font-black tracking-[0.15em] sm:text-5xl">
               <span className="text-red-600">YAMON</span>
-              <span className="text-white">FIM</span>
+              <span className="text-white">FILM</span>
             </h1>
             <p className="mt-2 text-xs uppercase tracking-[0.3em] text-zinc-500">
               Films · Séries · Divertissement

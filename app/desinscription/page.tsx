@@ -24,7 +24,7 @@ export default function Desinscription() {
   const valid = !!params?.email && !!params.token;
   return <main className="yf-page grid min-h-screen place-items-center bg-[#0a0a0b] px-4 text-white">
     <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#121214] p-8 text-center">
-      <Link href="/" className="text-lg font-black tracking-tight text-red-500">YAMON<span className="text-white">FIM</span></Link>
+      <Link href="/" className="text-lg font-black tracking-tight text-red-500">YAMON<span className="text-white">FILM</span></Link>
       {state === 'done' ? <>
         <h1 className="mt-6 text-2xl font-bold">C’est fait.</h1>
         <p className="mt-3 text-sm leading-6 text-zinc-400">Tu ne recevras plus nos emails d’offres et de nouveautés. Tu peux changer d’avis à tout moment depuis la page Mon abonnement.</p>

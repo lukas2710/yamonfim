@@ -7,7 +7,10 @@ import { supabase } from '@/lib/supabase';
 import { loadWatchMedia } from '@/lib/client-media';
 import { withTimeout } from '@/lib/with-timeout';
 import WatchPlayer, { type WatchPlayerControl } from '@/components/WatchPlayer';
-import { isNativePlayback as isDirectVideo, isCompleted, sameEpisode, playbackProgress, preparePlayerUrl, nextEpisodePosition as nextPositionOf, isEpisodeCreditsWindow } from '@/lib/watch-progress';
+import { playbackRequest } from '@/lib/playback-request';
+import { isNativePlayback as isDirectVideo, isCompleted, sameEpisode, playbackProgress, preparePlayerUrl, nextEpisodePosition as nextPositionOf } from '@/lib/watch-progress';
+import { episodeCreditsDecision, playbackCreditsMarker, type CreditsMarker } from '@/lib/episode-credits';
+import { creditsTmdb } from '@/lib/credits-identity';
 import useDelayedSeen from '@/components/useDelayedSeen';
 import useEstimatedEpisodeClock from '@/components/useEstimatedEpisodeClock';
 import { episodeDurationSeconds } from '@/lib/episode-clock';
@@ -16,6 +19,7 @@ import WatchDetails from '@/components/WatchDetails';
 import VipQuotaModal from '@/components/VipQuotaModal';
 import { incrementWatchCount } from '@/lib/subscription';
 import './watch.css';
+import { normalizeSeriesParts, displayToStored, storedToDisplay, remapWatchedKey, isLupin } from '@/lib/series-parts';
 
 interface Episode {
   number: number;
@@ -24,6 +28,7 @@ interface Episode {
   still_path?: string;
   runtime?: number;
   tmdb_id?: number | string;
+  sourcePosition?: { s: number; e: number };
 }
 
 interface Season {
@@ -34,6 +39,7 @@ interface Season {
 
 interface MediaItem {
   id: any;
+  tmdb_id?: string | number | null;
   title: string;
   type: 'movie' | 'series';
   poster: string;
@@ -165,7 +171,27 @@ export default function WatchPage() {
   const [resumeAt, setResumeAt] = useState(0);
   const [nextCountdown, setNextCountdown] = useState<number | null>(null);
   const nextLaunchRef = useRef<() => void>(() => {});
+  const preparedEpisodeRef = useRef('');
   const autoNextOfferedRef = useRef(false);
+  const creditsRef = useRef<{ key: string; marker: CreditsMarker | null; checkedAt: number } | null>(null);
+  const creditsRequestRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    // Each source starts a fresh next-episode cycle. Old media events must not
+    // leave the following episode marked as already offered/cancelled.
+    autoNextOfferedRef.current = false;
+    endedRef.current = false;
+    creditsRequestRef.current?.abort();
+    creditsRef.current = null;
+    setNextCountdown(null);
+  }, [stableUrl]);
+  useEffect(() => () => creditsRequestRef.current?.abort(), []);
+  useEffect(() => {
+    const refreshCredits = (event: StorageEvent) => {
+      if (event.key === 'yamonfim_credits_updated' && creditsRef.current) creditsRef.current.checkedAt = 0;
+    };
+    window.addEventListener('storage', refreshCredits);
+    return () => window.removeEventListener('storage', refreshCredits);
+  }, []);
   const playerControlRef = useRef<WatchPlayerControl>(null);
   const lastPlaybackRef = useRef<Position | null>(null);
   const resumeProgressRef = useRef<{ position: Position; time: number; duration: number } | null>(null);
@@ -174,14 +200,6 @@ export default function WatchPage() {
   const historyQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   const currentProgressRef = useRef<{ currentTime: number; duration: number }>({ currentTime: 0, duration: 0 });
-
-  useEffect(() => {
-    if (!isPlaying || nextCountdown === null) return;
-    if (isPlayerPaused && !endedRef.current) return;
-    if (nextCountdown === 0) { nextLaunchRef.current(); return; }
-    const timer = setTimeout(() => setNextCountdown(value => value === null ? null : value - 1), 1000);
-    return () => clearTimeout(timer);
-  }, [isPlaying, isPlayerPaused, nextCountdown]);
 
   useEffect(() => { mediaRef.current = media; }, [media]);
 
@@ -206,7 +224,7 @@ export default function WatchPage() {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isPlaying) closePlayer();
+      if (e.key === 'Escape' && isPlaying && !e.defaultPrevented && !document.fullscreenElement) closePlayer();
     };
     if (isPlaying) window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -226,8 +244,9 @@ export default function WatchPage() {
   }, [isPlaying]);
 
   const requestFullscreenPlayer = () => {
-    if (playerWrapperRef.current && !document.fullscreenElement) {
-      playerWrapperRef.current.requestFullscreen().catch(() => {});
+    const target = playerWrapperRef.current?.querySelector<HTMLElement>('[data-controls]') || playerWrapperRef.current;
+    if (target?.requestFullscreen && !document.fullscreenElement) {
+      void target.requestFullscreen().catch(() => {});
     }
   };
 
@@ -322,7 +341,7 @@ export default function WatchPage() {
         void fetchComments(String(id)).catch(() => { /* Comments do not block playback. */ });
         const userWatched: Record<string, boolean> = {};
 
-        const item: MediaItem = { ...(mediaData as MediaItem), watched: userWatched };
+        const item: MediaItem = { ...normalizeSeriesParts(mediaData as MediaItem), watched: userWatched };
         mediaRef.current = item;
         setMedia(item);
         setLoading(false);
@@ -337,6 +356,7 @@ export default function WatchPage() {
         if (sParam !== null && eParam !== null) {
           sIdx = parseInt(sParam, 10);
           eIdx = parseInt(eParam, 10);
+          ({ s: sIdx, e: eIdx } = storedToDisplay(item, sIdx, eIdx));
           fromHistory = true;
         }
 
@@ -350,14 +370,15 @@ export default function WatchPage() {
             watchedTask, historyQuery.abortSignal(controller.signal).maybeSingle()
           ]);
           if (cancelled) return;
-          (watchedRes.data || []).forEach((row: { ep_key: string }) => { userWatched[row.ep_key] = true; });
+          (watchedRes.data || []).forEach((row: { ep_key: string }) => { userWatched[remapWatchedKey(item, row.ep_key, 'display')] = true; });
           setMedia(prev => prev ? { ...prev, watched: { ...prev.watched, ...userWatched } } : prev);
           const userHistory = historyRes.data;
           // A slow history response must never move an episode the user has already launched.
           if (!userHistory || lastPlaybackRef.current) return;
           const seasons = item.seasons || [];
-          const historySeason = clampIndex(userHistory.season_idx || 0, seasons.length);
-          const historyEpisode = clampIndex(userHistory.episode_idx || 0, seasons[historySeason]?.episodes?.length || 0);
+          const historyPosition = storedToDisplay(item, userHistory.season_idx || 0, userHistory.episode_idx || 0);
+          const historySeason = clampIndex(historyPosition.s, seasons.length);
+          const historyEpisode = clampIndex(historyPosition.e, seasons[historySeason]?.episodes?.length || 0);
           if (sParam === null || eParam === null) {
             setSelectedSeasonIdx(historySeason); setSelectedEpisodeIdx(historyEpisode);
             posRef.current = { s: historySeason, e: historyEpisode };
@@ -400,10 +421,11 @@ export default function WatchPage() {
     const season = current.seasons?.[sIdx];
     const runtime = season?.episodes?.[eIdx]?.runtime || current.runtime || 0;
     const progress = playbackProgress(currentTime, duration || runtime * 60);
+    const storedPosition = displayToStored(current, sIdx, eIdx);
     const payload = {
       user_id: uid, profile_id: profileId, media_id: String(current.id), type: current.type,
-      season_idx: sIdx, episode_idx: eIdx, season_number: season?.seasonNumber || 1,
-      episode_number: season?.episodes?.[eIdx]?.number || 1,
+      season_idx: storedPosition.s, episode_idx: storedPosition.e, season_number: season?.episodes[eIdx]?.sourcePosition ? storedPosition.s + 1 : season?.seasonNumber || 1,
+      episode_number: season?.episodes[eIdx]?.sourcePosition ? storedPosition.e + 1 : season?.episodes[eIdx]?.number || 1,
       current_time: Math.floor(progress.currentTime), duration: Math.floor(progress.duration),
       updated_at: new Date().toISOString(),
     };
@@ -443,7 +465,7 @@ export default function WatchPage() {
           user_id: uid,
           profile_id: pid,
           media_id: mediaId,
-          ep_key: k,
+          ep_key: remapWatchedKey(current, k, 'stored'),
           watched_at: new Date().toISOString()
         })),
         { onConflict: 'user_id,profile_id,media_id,ep_key' }
@@ -453,7 +475,7 @@ export default function WatchPage() {
         .eq('user_id', uid)
         .eq('profile_id', pid)
         .eq('media_id', mediaId)
-        .in('ep_key', keys);
+        .in('ep_key', keys.map(key => remapWatchedKey(current, key, 'stored')));
     }
   };
 
@@ -552,6 +574,8 @@ export default function WatchPage() {
       endedRef.current = false;
       autoNextOfferedRef.current = false;
       lastPlaybackRef.current = next;
+      creditsRequestRef.current?.abort();
+      creditsRef.current = null;
       posRef.current = next;
 
       void saveWatchHistory(sIdx, eIdx, progress.currentTime, progress.duration);
@@ -620,7 +644,8 @@ export default function WatchPage() {
     if (position) void saveWatchHistory(position.s, position.e, progress.currentTime, progress.duration);
   };
 
-  const handleProgress = (time: number, duration: number) => {
+  const handleProgress = (time: number, duration: number, paused = false, source?: string) => {
+    if (source && source !== stableUrl) return;
     if (busyRef.current) return;
     if (endedRef.current && duration > 0 && time < duration - 5) {
       endedRef.current = false;
@@ -629,12 +654,49 @@ export default function WatchPage() {
     currentProgressRef.current = playbackProgress(time, duration);
     const position = lastPlaybackRef.current;
     if (!position) return;
-    if (!autoNextOfferedRef.current && mediaRef.current?.type === 'series' &&
-        isEpisodeCreditsWindow(time, duration) && nextPositionOf(mediaRef.current.seasons, position)) {
-      autoNextOfferedRef.current = true;
-      setNextCountdown(8);
+    const hasNext = mediaRef.current?.type === 'series' && !!nextPositionOf(mediaRef.current.seasons, position);
+    const series = mediaRef.current;
+    const season = series?.seasons?.[position.s];
+    const episode = season?.episodes[position.e];
+    // sourcePosition preserves the original episode numbering for split seasons.
+    const stored = episode?.sourcePosition;
+    const seasonNumber = stored ? stored.s + 1 : season?.seasonNumber;
+    const episodeNumber = stored ? stored.e + 1 : episode?.number;
+    const creditsKey = `${series?.id}:${position.s}:${position.e}:${stableUrl}:${Math.round(duration)}`;
+    if (series?.type === 'series' && duration >= 300 && series.id && seasonNumber && episodeNumber && (creditsRef.current?.key !== creditsKey || Date.now() - creditsRef.current.checkedAt >= 30000)) {
+      creditsRequestRef.current?.abort();
+      const controller = new AbortController();
+      creditsRequestRef.current = controller;
+      creditsRef.current = { key: creditsKey, marker: creditsRef.current?.key === creditsKey ? creditsRef.current.marker : null, checkedAt: Date.now() };
+      const tmdb = creditsTmdb(series, stableUrl);
+      const query = new URLSearchParams({ media: String(series.id), ...(tmdb ? { tmdb } : {}), season: String(seasonNumber), episode: String(episodeNumber), duration: String(duration) });
+      void fetch(`/api/episode-credits?${query}`, { signal: controller.signal })
+        .then(response => response.ok ? response.json() : null)
+        .then(data => {
+          if (!controller.signal.aborted && creditsRef.current?.key === creditsKey && data) {
+            creditsRef.current.marker = playbackCreditsMarker(data.marker ?? null, duration);
+          }
+        }).catch(() => {});
     }
-    if (nextCountdown !== null && !isEpisodeCreditsWindow(time, duration)) setNextCountdown(null);
+    if (hasNext && !paused && duration > 60 && duration - time <= 60 && duration - time > 30 && preparedEpisodeRef.current !== stableUrl) {
+      preparedEpisodeRef.current = stableUrl;
+      const next = nextPositionOf(mediaRef.current?.seasons, position);
+      const episode = next && mediaRef.current?.seasons?.[next.s]?.episodes?.[next.e];
+      const url = getCleanEmbedUrl(episode?.embedUrl || '');
+      if (url && isDirectVideo(url)) void getPersistentSession().then(({ data: { session } }) => {
+        if (session) return playbackRequest(url, session.access_token);
+      }).catch(() => {});
+    }
+    const decision = episodeCreditsDecision(time, duration, creditsRef.current?.key === creditsKey ? creditsRef.current.marker : null, paused, autoNextOfferedRef.current, hasNext);
+    if (decision.advance) {
+      autoNextOfferedRef.current = true;
+      setNextCountdown(null);
+      nextLaunchRef.current();
+      return;
+    }
+    // This notice follows the VIDEO clock: pausing, buffering and seeking never
+    // cause a wall-clock countdown to advance while the video is stopped.
+    if (decision.countdown !== nextCountdown) setNextCountdown(decision.countdown);
     const key = mediaRef.current?.type === 'series' ? epKey(position.s, position.e) : 'movie_main';
     if (isCompleted(time, duration) && !mediaRef.current?.watched?.[key]) void markAsWatched(key);
     if (Math.abs(time - lastProgressSaveRef.current) >= 10) {
@@ -653,7 +715,7 @@ export default function WatchPage() {
     const next = nextPositionOf(mediaRef.current?.seasons, position);
     if (next && !autoNextOfferedRef.current) {
       autoNextOfferedRef.current = true;
-      setNextCountdown(8);
+      nextLaunchRef.current();
     }
     setNotice(next ? 'Épisode terminé. La suite t’attend.' : 'Lecture terminée. Ton historique est à jour.');
   };
@@ -745,6 +807,7 @@ export default function WatchPage() {
   const isSeries = media.type === 'series' && !!media.seasons && media.seasons.length > 0;
   const currentSeason = media.seasons?.[selectedSeasonIdx] || media.seasons?.[0];
   const currentEpisode = currentSeason?.episodes?.[selectedEpisodeIdx] || currentSeason?.episodes?.[0];
+  const seasonLabel = isLupin(media) ? 'Partie' : 'Saison';
   const w = media.watched || {};
 
 
@@ -804,7 +867,7 @@ export default function WatchPage() {
               </div>
             )}
             <span className="font-black text-lg tracking-[0.2em] text-red-600 select-none">
-              YAMON<span className="text-white">FIM</span>
+              YAMON<span className="text-white">FILM</span>
             </span>
           </div>
         </div>
@@ -817,7 +880,7 @@ export default function WatchPage() {
               <div className="watch-launch-card">
                 <span className="watch-kicker">TA SÉANCE COMMENCE</span>
                 <h2>{media.title}</h2>
-                {isSeries && <p>Saison {currentSeason?.seasonNumber} · Épisode {currentEpisode?.number}</p>}
+                {isSeries && <p>{seasonLabel} {currentSeason?.seasonNumber} · Épisode {currentEpisode?.number}</p>}
                 <p className="watch-muted">Ton épisode est enregistré dans ton historique instantanément.</p>
                 <button disabled={isStarting} onClick={handleLaunchClick} className="watch-main-button"><Icon name="play" /> Lancer ma séance</button>
                 <button onClick={closePlayer} className="watch-text-button">Revenir à la fiche</button>
@@ -826,21 +889,14 @@ export default function WatchPage() {
           ) : (
             <div ref={playerWrapperRef} className="watch-screen">
               <div className="watch-playback-layout"><div className="watch-video-area">
-                <div className="watch-floating-controls" aria-label="Commandes du lecteur">
+                {!isDirectVideo(stableUrl) && <div className="watch-floating-controls" aria-label="Commandes du lecteur">
                   <button onClick={closePlayer} className="watch-icon-button" aria-label="Fermer le lecteur"><Icon name="back" /></button>
                   {!isDirectVideo(stableUrl) && <button onClick={isFullscreen ? exitFullscreenPlayer : requestFullscreenPlayer} className="watch-icon-button" aria-label={isFullscreen ? 'Quitter le plein écran' : 'Plein écran'}><Icon name={isFullscreen ? 'minimize' : 'maximize'} /></button>}
-                </div>
-                <WatchPlayer key={stableUrl} src={stableUrl} title={media.title} resumeAt={resumeAt} controlRef={playerControlRef} onProgress={handleProgress} onState={paused => { setIsPlayerPaused(paused); if (paused) persistProgress(); }} onEnded={() => void handlePlaybackEnded()} />
-                {nextCountdown !== null && <div role="status" className="absolute bottom-20 right-4 z-20 max-w-sm rounded-2xl border border-white/15 bg-black/90 p-5 shadow-2xl sm:right-6">
-                  <p className="text-lg font-bold">Épisode suivant dans {nextCountdown} s</p>
-                  {isPlayerPaused && !endedRef.current && <p className="mt-1 text-sm text-zinc-400">Compte à rebours en pause</p>}
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <button onClick={() => nextLaunchRef.current()} disabled={isStarting} className="watch-main-button"><Icon name="next" /> Lancer maintenant</button>
-                    <button onClick={() => setNextCountdown(null)} className="watch-secondary-button">Continuer le générique</button>
-                  </div>
                 </div>}
+                <WatchPlayer src={stableUrl} title={media.title} resumeAt={resumeAt} controlRef={playerControlRef} onExit={closePlayer} onProgress={handleProgress} onState={paused => { setIsPlayerPaused(paused); if (paused) persistProgress(); }} onEnded={source => { if (!source || source === stableUrl) void handlePlaybackEnded(); }}
+                  nextEpisodeIn={nextCountdown} nextEpisodeSource={creditsRef.current?.marker?.source} onPlayNext={() => nextLaunchRef.current()} onCancelNext={() => { autoNextOfferedRef.current = true; setNextCountdown(null); }} />
               </div>
-              {isSeries && <EpisodeQueue key={selectedSeasonIdx} seasons={media.seasons || []} active={{ s: selectedSeasonIdx, e: selectedEpisodeIdx }} watched={w} poster={media.poster} disabled={isStarting} onSelect={(s, e) => void startPlaying(s, e, true)} />}
+              {isSeries && <EpisodeQueue key={selectedSeasonIdx} seasons={media.seasons || []} active={{ s: selectedSeasonIdx, e: selectedEpisodeIdx }} seasonLabel={seasonLabel} watched={w} poster={media.poster} disabled={isStarting} onSelect={(s, e) => void startPlaying(s, e, true)} />}
               </div>
 
             </div>
@@ -851,7 +907,7 @@ export default function WatchPage() {
       <WatchDetails title={media.title} description={media.description || ''} poster={media.poster} backdrop={media.backdrop}
         series={isSeries} runtime={media.runtime} seasonCount={media.seasons?.length || 0} seen={seenEpisodes} total={totalEpisodes}
         watched={isSeries ? seriesDone : movieSeen} playLabel={playLabel}
-        episodeLabel={`Saison ${currentSeason?.seasonNumber || 1} · Épisode ${currentEpisode?.number || 1}${currentEpisode?.title ? ' — ' + currentEpisode.title : ''}`}
+        episodeLabel={`${seasonLabel} ${currentSeason?.seasonNumber || 1} · Épisode ${currentEpisode?.number || 1}${currentEpisode?.title ? ' — ' + currentEpisode.title : ''}`}
         disabled={isStarting} showRestart={showRestart} onPlay={() => void startPlaying(selectedSeasonIdx, selectedEpisodeIdx)}
         onRestart={restartFromBeginning} onToggleWatched={() => void toggleMovieWatched()} />
 
@@ -861,7 +917,7 @@ export default function WatchPage() {
             <div>
               <h2 className="text-2xl sm:text-3xl font-black tracking-tight">Épisodes <span className="text-red-500">.</span></h2>
               <p className="text-sm text-zinc-500 mt-0.5">
-                Saison {currentSeason.seasonNumber} · {currentSeasonSeen} / {episodesCount} vu{currentSeasonSeen > 1 ? 's' : ''}
+                {seasonLabel} {currentSeason.seasonNumber} · {currentSeasonSeen} / {episodesCount} vu{currentSeasonSeen > 1 ? 's' : ''}
               </p>
             </div>
 
@@ -874,7 +930,7 @@ export default function WatchPage() {
               }`}
             >
               <Icon name="check" className="w-3.5 h-3.5" />
-              {currentSeasonDone ? `Saison ${currentSeason.seasonNumber} vue` : `Marquer la saison ${currentSeason.seasonNumber} comme vue`}
+              {currentSeasonDone ? `${seasonLabel} ${currentSeason.seasonNumber} vue` : `Marquer la saison ${currentSeason.seasonNumber} comme vue`}
             </button>
           </div>
 
@@ -892,7 +948,7 @@ export default function WatchPage() {
                       key={sIdx}
                       type="button"
                       aria-pressed={isSelected}
-                      aria-label={`Saison ${season.seasonNumber}, ${seen} épisode${seen > 1 ? 's' : ''} vu${seen > 1 ? 's' : ''} sur ${total}`}
+                      aria-label={`${seasonLabel} ${season.seasonNumber}, ${seen} épisode${seen > 1 ? 's' : ''} vu${seen > 1 ? 's' : ''} sur ${total}`}
                       onClick={() => {
                         if (sIdx === selectedSeasonIdx) return;
                         if (isPlaying) { void startPlaying(sIdx, 0, true); return; }
@@ -901,11 +957,11 @@ export default function WatchPage() {
                       }}
                       className={`relative flex w-[88px] shrink-0 snap-start flex-col items-start overflow-hidden rounded-2xl border px-3.5 pb-3 pt-2.5 text-left transition duration-200 cursor-pointer active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 ${
                         isSelected
-                          ? 'border-red-500/70 bg-gradient-to-br from-red-600/30 to-red-950/40 shadow-[0_10px_30px_-14px_rgba(239,68,68,0.9)]'
+                          ? 'border-red-500/70 bg-gradient-to-br from-red-600/30 to-red-950/40 shadow-[0_10px_30px_-14px_rgba(6,76,255,0.9)]'
                           : 'border-white/10 bg-white/[0.04] hover:border-white/25 hover:bg-white/[0.08]'
                       }`}
                     >
-                      <span className={`text-[9px] font-bold uppercase tracking-[0.18em] ${isSelected ? 'text-red-200' : 'text-zinc-500'}`}>Saison</span>
+                      <span className={`text-[9px] font-bold uppercase tracking-[0.18em] ${isSelected ? 'text-red-200' : 'text-zinc-500'}`}>{seasonLabel}</span>
                       <span className={`mt-0.5 text-2xl font-black leading-none tabular-nums ${isSelected ? 'text-white' : 'text-zinc-300'}`}>{season.seasonNumber}</span>
                       <span className="mt-2 text-[10px] tabular-nums text-zinc-400">{done ? 'Terminée' : `${seen}/${total} vus`}</span>
                       <span className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-white/10">
@@ -944,7 +1000,7 @@ export default function WatchPage() {
                   }}
                   className={`group relative flex gap-4 p-3 rounded-2xl border transition cursor-pointer scroll-mt-24 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-600 ${
                     isSelected
-                      ? 'bg-gradient-to-br from-red-950/70 to-[#111114] border-red-500/60 ring-1 ring-red-500/25 shadow-[0_8px_35px_-20px_rgba(239,68,68,0.65)]'
+                      ? 'bg-gradient-to-br from-red-950/70 to-[#111114] border-red-500/60 ring-1 ring-red-500/25 shadow-[0_8px_35px_-20px_rgba(6,76,255,0.65)]'
                       : isWatched
                         ? 'bg-gradient-to-br from-emerald-950/20 to-[#0e0e10] border-emerald-500/20 hover:border-emerald-500/40'
                         : 'bg-[#111114]/80 border-white/[0.07] hover:bg-[#18181c] hover:border-white/20 hover:-translate-y-0.5 hover:shadow-xl'

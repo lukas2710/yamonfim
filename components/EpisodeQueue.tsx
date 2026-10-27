@@ -5,14 +5,15 @@ interface Season { seasonNumber: number; episodes: { number: number; title: stri
 interface Props {
   seasons: Season[]; active: { s: number; e: number }; watched: Record<string, boolean>;
   poster: string; disabled: boolean; onSelect: (season: number, episode: number) => void;
+  seasonLabel?: string;
 }
-export default function EpisodeQueue({ seasons, active, watched, poster, disabled, onSelect }: Props) {
+export default function EpisodeQueue({ seasons, active, watched, poster, disabled, onSelect, seasonLabel = 'Saison' }: Props) {
   const [browseSeason, setBrowseSeason] = useState(active.s);
   const season = seasons[browseSeason] || seasons[active.s];
   if (!season) return null;
   return <aside className="watch-queue" aria-label="Liste des épisodes">
     <div className="watch-queue-heading"><span className="watch-kicker">CONTINUE TON HISTOIRE</span><h3>Les épisodes <span>{season.episodes.length}</span></h3>
-      {seasons.length > 1 && <div className="watch-queue-seasons" role="group" aria-label="Saison des épisodes du lecteur">{seasons.map((item, index) => <button type="button" key={index} aria-pressed={browseSeason === index} onClick={() => setBrowseSeason(index)} className="watch-queue-season-chip">Saison {item.seasonNumber}</button>)}</div>}
+      {seasons.length > 1 && <div className="watch-queue-seasons" role="group" aria-label={`${seasonLabel} des épisodes du lecteur`}>{seasons.map((item, index) => <button type="button" key={index} aria-pressed={browseSeason === index} onClick={() => setBrowseSeason(index)} className="watch-queue-season-chip">{seasonLabel} {item.seasonNumber}</button>)}</div>}
     </div>
     <ol className="watch-queue-list">{season.episodes.map((episode, index) => {
       const selected = browseSeason === active.s && index === active.e;

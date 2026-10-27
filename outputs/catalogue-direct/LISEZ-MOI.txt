@@ -1,0 +1,14 @@
+CATALOGUES YAMONFIM — FILMS ET SÉRIES
+
+Sur n’importe quel ordinateur, ouvre :
+Films : https://yamonfim.vercel.app/catalogues/catalogue-films-moviez.html
+Séries : https://yamonfim.vercel.app/catalogues/catalogue-series-moviez.html
+
+Les deux fichiers HTML de ce dossier ouvrent ces mêmes pages en ligne.
+Une connexion Internet est nécessaire pour ajouter un titre et synchroniser.
+Connecte-toi avec ton compte administrateur sur chaque ordinateur.
+Un clic sur Ajouter au site enregistre le titre sur le site.
+Les autres ordinateurs actualisent les coches toutes les 15 secondes
+lorsque le catalogue est visible, et à son retour au premier plan.
+Les fiches, le suivi et les vérifications des doublons utilisent le même site.
+Aucun mot de passe ni clé administrateur n’est inclus dans cette archive.

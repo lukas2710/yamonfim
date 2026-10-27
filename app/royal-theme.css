@@ -1,0 +1,100 @@
+/* YAMONFILM — royal blue cinema palette. Layout and media remain unchanged. */
+:root {
+  --background: #060a15;
+  --foreground: #ffffff;
+  --yf-bg: #060a15;
+  --yf-surface: #0c1428;
+  --yf-raised: #111d36;
+  --yf-foreground: #ffffff;
+  --yf-muted: #a4b0ca;
+  --yf-border: #003cda40;
+  --yf-accent: #003cda;
+  --yf-accent-bright: #064cff;
+  --yf-accent-soft: #003cda1a;
+  --yf-signal: #f02d3f;
+  /* Existing utility classes share the new palette on every page. */
+  --color-red-50: #eef2ff;
+  --color-red-100: #dce5ff;
+  --color-red-200: #becfff;
+  --color-red-300: #a3baff;
+  --color-red-400: #87a5ff;
+  --color-red-500: #064cff;
+  --color-red-600: #003cda;
+  --color-red-700: #002ca6;
+  --color-red-800: #00217b;
+  --color-red-900: #102147;
+  --color-red-950: #071431;
+  --color-blue-500: #064cff;
+  --color-blue-600: #003cda;
+  color-scheme: dark;
+}
+
+body, .yf-page { background-color: var(--yf-bg); color: #fff; }
+body { background-color: var(--yf-bg) !important; }
+.yf-topbar { background-color: #060a15ed; border-color: #003cda40; }
+.yf-site-footer { background: #060a15; border-color: #003cda35; }
+.yf-section-nav { background: #091124; border-color: #003cda35; }
+.yf-wordmark { color: #003cda; }
+.yf-wordmark span { color: #fff; }
+.yf-page [class*="_brand__"] { color: #003cda !important; }
+.yf-page [class*="_brand__"]>span { color: #fff; }
+.yf-profiles::before {
+  content: 'YAMONFILM';
+  background: linear-gradient(90deg,#003cda 0 55.5%,#fff 55.5% 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.yf-primary, .watch-main-button {
+  background: #003cda;
+  color: #fff;
+  border-color: #003cda;
+  box-shadow: 0 6px 26px #003cda26;
+  transition: background-color .18s, border-color .18s, box-shadow .18s;
+}
+.yf-primary:hover:not(:disabled), .watch-main-button:hover:not(:disabled) {
+  background: #064cff;
+  border-color: #064cff;
+  box-shadow: 0 8px 30px #064cff38;
+  filter: none;
+}
+
+/* A sharp red accent on the right, with blue occupying about 90%. */
+.yf-primary[data-yf-play="true"], .watch-main-button.yf-play {
+  background: linear-gradient(112deg, #003cda 0 89.5%, #f02d3f 90% 100%);
+  color: #fff;
+  border-color: #003cda;
+}
+.yf-primary[data-yf-play="true"]:hover:not(:disabled), .watch-main-button.yf-play:hover:not(:disabled) {
+  background: linear-gradient(112deg, #064cff 0 89.5%, #f02d3f 90% 100%);
+  border-color: #064cff;
+}
+
+.yf-page :where(button,a,input,select,textarea,summary):focus-visible {
+  outline-color: #064cff;
+}
+.yf-page :where(input,textarea,select):focus {
+  border-color: #064cff;
+  box-shadow: 0 0 0 3px #003cda24;
+}
+.yf-page :where(input[type="range"],input[type="checkbox"],input[type="radio"],progress) {
+  accent-color: #003cda;
+}
+.yf-section-nav a[aria-current="page"] { color: #a3baff; }
+.yf-section-nav a[aria-current="page"]::after { background: #003cda; box-shadow: 0 0 12px #003cda66; }
+.yf-collection-card[aria-expanded="true"] { border-color: #064cff; box-shadow: 0 0 0 2px #003cda26; }
+.yf-collection-card:hover { border-color: #064cff80; }
+.yf-collection-grid { scrollbar-color: #003cda #ffffff08; }
+.yf-collection-card-copy>span:first-child { color: #a3baff; }
+.yf-collection-card { background: radial-gradient(ellipse at 85% 10%,#003cda24,transparent 80%),#0c1428; }
+.yf-eyebrow::before { background: #f02d3f; box-shadow: 0 0 10px #f02d3f26; }
+
+/* Keep intentional warning/destructive accents red rather than brand blue. */
+.yf-danger, .yf-page [role="alert"] { color: #ff9aa5; }
+.yf-danger:hover { background-color: #f02d3f18; color: #fff; }
+.yf-page button[aria-label^="Supprimer"], .yf-page button[aria-label*="déconnexion"] { color: #f02d3f; }
+.yf-page button[aria-label^="Supprimer"]:hover { background: #f02d3f20; }
+::selection { background: #003cda; color: #fff; }
+@media(prefers-reduced-motion:reduce) {
+  .yf-primary, .watch-main-button { transition: none; }
+}

@@ -1,0 +1,214 @@
+{
+  "id": 156,
+  "title": "Lupin",
+  "type": "series",
+  "poster": "https://image.tmdb.org/t/p/w500/sOUWRai0215iUSMackrZx3Y1j05.jpg",
+  "backdrop": "https://image.tmdb.org/t/p/original/aY7zv2pfk9H0QxaaL3PBjvalbKQ.jpg",
+  "url": "",
+  "description": "Inspiré par les aventures d'Arsène Lupin, le gentleman cambrioleur Assane Diop décide de venger son père d'une terrible injustice.",
+  "genres": [
+    "Crime",
+    "Drame",
+    "Mystère"
+  ],
+  "runtime": null,
+  "created_at": "2026-10-19T08:27:50.055516+00:00",
+  "embedurl": null,
+  "embedUrl": "",
+  "seasons": [
+    {
+      "episodes": [
+        {
+          "title": "Chapitre 1",
+          "number": 1,
+          "runtime": 47,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=1&episode=1&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F1%2F1&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2Flh1syrih0w4z&embed=https%3A%2F%2Ffsvid.lol%2Fembed-onw2ijc3l2gr.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-kdl14s5qili7.html&embed=https%3A%2F%2Fuqload.vc%2Fembed-zv8jab6naoyi.html&embed=https%3A%2F%2Ftrakx.lol%2Fmoon2%2FnewPlayer.php%3Fid%3D810f9dc1-d8c9-40c5-be09-cafc16c712b4&embed=https%3A%2F%2Ftrakx.lol%2Fvoe1%2FnewPlayer.php%3Fid%3D570eb0aa-dad7-45c7-8ec7-aa20e865e349&embed=https%3A%2F%2Fvidara.to%2Fe%2F4ASFU1KIjDre9&embed=https%3A%2F%2Fjeremyparticipantanything.com%2Fe%2Fm49tuzfozsus&embed=https%3A%2F%2Fflemmix.upns.pro%2F%2331khn1&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D1%26episode%3D1&embed=https%3A%2F%2Fralphysuccessfull.org%2Fe%2Fqr9nrnvrx4c5&embed=https%3A%2F%2Fuqload.vc%2Fembed-qn8xhxtyyrbb.html&embed=https%3A%2F%2Fyounetu.org%2Fplayer%2Fembed_player.php%3Fvid%3DC7YsDKu4bYn8%26autoplay%3Dno&embed=https%3A%2F%2Fdoply.net%2Fe%2Fmajo3w6b4rit&embed=https%3A%2F%2Fuptostream.link%2Fiframe%2Fswgud3xczcci&embed=https%3A%2F%2Fvidoza.net%2Fembed-gmrxozr5wdjb.html&embed=https%3A%2F%2Fuptostream.link%2Fswgud3xczcci",
+          "still_path": "https://image.tmdb.org/t/p/w500/edgLqKlZR1dB73duRSO3fgBqhOP.jpg"
+        },
+        {
+          "title": "Chapitre 2",
+          "number": 2,
+          "runtime": 52,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=1&episode=2&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F1%2F2&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2Fc65t1vj47hx1&embed=https%3A%2F%2Fuqload.net%2Fembed-8sza5ci805qc.html&embed=https%3A%2F%2Fbysebuho.com%2Fe%2Fwjh1skghj021&embed=https%3A%2F%2Fneocine.embedseek.com%2F%23k155e&embed=https%3A%2F%2Ffsvid.lol%2Fembed-0lgejgd7rjqv.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-iob2f6blaouy.html&embed=https%3A%2F%2Fuqload.vc%2Fembed-eiwaer8uyvv1.html&embed=https%3A%2F%2Ftrakx.lol%2Fmoon2%2FnewPlayer.php%3Fid%3D0085ef05-76c2-41c0-bb27-bc6c982bf105&embed=https%3A%2F%2Ftrakx.lol%2Fvoe1%2FnewPlayer.php%3Fid%3D520a81d4-1600-4671-b72a-f4db0e8db1b6&embed=https%3A%2F%2Fvidara.to%2Fe%2FFafK3BPkteJkW&embed=https%3A%2F%2Fjeremyparticipantanything.com%2Fe%2F8k4kuj8bmnzf&embed=https%3A%2F%2Fflemmix.upns.pro%2F%23tfusnt&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D1%26episode%3D2&embed=https%3A%2F%2Fralphysuccessfull.org%2Fe%2Feplcnesqvy9m&embed=https%3A%2F%2Fuqload.vc%2Fembed-7umexdukmcu8.html&embed=https%3A%2F%2Fdoply.net%2Fe%2Fkquvqlq4xb5a&embed=https%3A%2F%2Fuptostream.link%2Fiframe%2Fr7k27qfkga7p&embed=https%3A%2F%2Fvidoza.net%2Fembed-bhg5rdzefwfj.html&embed=https%3A%2F%2Fuptostream.link%2Fr7k27qfkga7p",
+          "still_path": "https://image.tmdb.org/t/p/w500/71i63q3dtI3iSaEifHS72AvRbsl.jpg"
+        },
+        {
+          "title": "Chapitre 3",
+          "number": 3,
+          "runtime": 42,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=1&episode=3&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F1%2F3&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2F4gcpvkyl4amh&embed=https%3A%2F%2Fuqload.net%2Fembed-z4msy7py7q4b.html&embed=https%3A%2F%2Fbysebuho.com%2Fe%2Fb2nxyuo772y3&embed=https%3A%2F%2Fneocine.embedseek.com%2F%231pfz8&embed=https%3A%2F%2Ffsvid.lol%2Fembed-zhk107sy1qcc.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-3bvpaqxa0wyj.html&embed=https%3A%2F%2Fuqload.vc%2Fembed-w0na4olp43v3.html&embed=https%3A%2F%2Ftrakx.lol%2Fmoon2%2FnewPlayer.php%3Fid%3D1319e82b-423d-4d38-909d-07701a9776cd&embed=https%3A%2F%2Ftrakx.lol%2Fvoe1%2FnewPlayer.php%3Fid%3D7c4f8141-c91c-4b0c-b58f-c0c41e07cfbd&embed=https%3A%2F%2Fvidara.to%2Fe%2Fkay0QulMgYOqn&embed=https%3A%2F%2Fjeremyparticipantanything.com%2Fe%2Fbma2mbjtf6lo&embed=https%3A%2F%2Fflemmix.upns.pro%2F%23xstjwt&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D1%26episode%3D3&embed=https%3A%2F%2Fralphysuccessfull.org%2Fe%2F09mokh5x3oqz&embed=https%3A%2F%2Fuqload.vc%2Fembed-f01sl6bmez6o.html&embed=https%3A%2F%2Fyounetu.org%2Fplayer%2Fembed_player.php%3Fvid%3Dej6PFlCraCFq%26autoplay%3Dno&embed=https%3A%2F%2Fdoply.net%2Fe%2Fun86mi1fmycy&embed=https%3A%2F%2Fuptostream.link%2Fiframe%2Fof87f4qjlglo&embed=https%3A%2F%2Fvidoza.net%2Fembed-qh4iqh6mg3ic.html&embed=https%3A%2F%2Fuptostream.link%2Fof87f4qjlglo",
+          "still_path": "https://image.tmdb.org/t/p/w500/7VcD2tQw5epoBmc8JyNGpVniV8X.jpg"
+        },
+        {
+          "title": "Chapitre 4",
+          "number": 4,
+          "runtime": 47,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=1&episode=4&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F1%2F4&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2Fnpfk5wqyzods&embed=https%3A%2F%2Fuqload.net%2Fembed-blik2k4eggx5.html&embed=https%3A%2F%2Fbysebuho.com%2Fe%2Fxljksapodq9e&embed=https%3A%2F%2Fneocine.embedseek.com%2F%23gtmmo&embed=https%3A%2F%2Ffsvid.lol%2Fembed-qo0x9y66ox43.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-yxwmn84urhx1.html&embed=https%3A%2F%2Fuqload.vc%2Fembed-nuoycl9m3tq2.html&embed=https%3A%2F%2Ftrakx.lol%2Fmoon2%2FnewPlayer.php%3Fid%3D1e458c2c-6236-4180-9ffd-0652dbf0cfa1&embed=https%3A%2F%2Ftrakx.lol%2Fvoe1%2FnewPlayer.php%3Fid%3D77498991-e011-4e16-b1ad-1be419ec5970&embed=https%3A%2F%2Fvidara.to%2Fe%2FJwyLYDdVlGBAn&embed=https%3A%2F%2Fjeremyparticipantanything.com%2Fe%2Ffwvydfvqoyx1&embed=https%3A%2F%2Fflemmix.upns.pro%2F%23pryagx&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D1%26episode%3D4&embed=https%3A%2F%2Fralphysuccessfull.org%2Fe%2Fgxgtl0gragox&embed=https%3A%2F%2Fuqload.vc%2Fembed-okvm9j4vijke.html&embed=https%3A%2F%2Fyounetu.org%2Fplayer%2Fembed_player.php%3Fvid%3DroIvCe0Oxfck%26autoplay%3Dno&embed=https%3A%2F%2Fdoply.net%2Fe%2Fln306rssfvyc&embed=https%3A%2F%2Fuptostream.link%2Fiframe%2Fy02mtfeooggr&embed=https%3A%2F%2Fvidoza.net%2Fembed-t0dirj7wm3e9.html&embed=https%3A%2F%2Fuptostream.link%2Fy02mtfeooggr",
+          "still_path": "https://image.tmdb.org/t/p/w500/9W14cjDqiXJTM3eVhoBPSujMy6D.jpg"
+        },
+        {
+          "title": "Chapitre 5",
+          "number": 5,
+          "runtime": 43,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=1&episode=5&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F1%2F5&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2Fs3o5h23yn57s&embed=https%3A%2F%2Fuqload.net%2Fembed-jei45b2l6ffu.html&embed=https%3A%2F%2Fbysebuho.com%2Fe%2Fwhjvmraokdky&embed=https%3A%2F%2Fneocine.embedseek.com%2F%23munng&embed=https%3A%2F%2Ffsvid.lol%2Fembed-7l39np54axw7.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-zokq79wqbj3c.html&embed=https%3A%2F%2Fuqload.vc%2Fembed-suqs8twpxsjv.html&embed=https%3A%2F%2Ftrakx.lol%2Fmoon2%2FnewPlayer.php%3Fid%3D7d4688fb-bbe7-4188-bf90-02189480652f&embed=https%3A%2F%2Ftrakx.lol%2Fvoe1%2FnewPlayer.php%3Fid%3Dba5f5c71-ad25-4521-91e8-2b6848fd0c57&embed=https%3A%2F%2Fvidara.to%2Fe%2FWRGymW1Fgodd3&embed=https%3A%2F%2Fjeremyparticipantanything.com%2Fe%2Fobrcwjmnwsae&embed=https%3A%2F%2Fflemmix.upns.pro%2F%23mp5q16&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D1%26episode%3D5&embed=https%3A%2F%2Fralphysuccessfull.org%2Fe%2Fbgj2xjpylxdg&embed=https%3A%2F%2Fuqload.vc%2Fembed-sqjykc4uec5e.html&embed=https%3A%2F%2Fyounetu.org%2Fplayer%2Fembed_player.php%3Fvid%3DzWOjPmwZ2Apk%26autoplay%3Dno&embed=https%3A%2F%2Fdoply.net%2Fe%2F2ujj00xsqczh&embed=https%3A%2F%2Fvidoza.net%2Fembed-yc8fwte4gk9l.html&embed=https%3A%2F%2Fuptostream.link%2Fiframe%2Fhgkwx7w18lgt&embed=https%3A%2F%2Fuptostream.link%2Fhgkwx7w18lgt",
+          "still_path": "https://image.tmdb.org/t/p/w500/eAnPhMtxJCdvrDfzTz8VGuMBCyS.jpg"
+        },
+        {
+          "title": "Chapitre 6",
+          "number": 6,
+          "runtime": 43,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=1&episode=6&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F1%2F6&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2F8dze0dxdv7uh&embed=https%3A%2F%2Fuqload.net%2Fembed-8x1mby16v0lq.html&embed=https%3A%2F%2Fneocine.embedseek.com%2F%23t8u99&embed=https%3A%2F%2Ffsvid.lol%2Fembed-bt62pjgs3oe9.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-8hmjuaendlm8.html&embed=https%3A%2F%2Fuqload.vc%2Fembed-nypgzuq208dh.html&embed=https%3A%2F%2Ftrakx.lol%2Fmoon2%2FnewPlayer.php%3Fid%3D4259eb5c-2021-49f6-acb6-1614eca6d4c5&embed=https%3A%2F%2Ftrakx.lol%2Fvoe1%2FnewPlayer.php%3Fid%3D4a95975a-772d-4ae1-b253-6e257f681a1b&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D1%26episode%3D6",
+          "still_path": "https://image.tmdb.org/t/p/w500/jfpWnI2oJktIFD0hBoZ91fIPQ7n.jpg"
+        },
+        {
+          "title": "Chapitre 7",
+          "number": 7,
+          "runtime": 44,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=1&episode=7&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F1%2F7&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2Fam2fu1ju186e&embed=https%3A%2F%2Fuqload.net%2Fembed-6jrfet0k1acy.html&embed=https%3A%2F%2Fneocine.embedseek.com%2F%23ak99a&embed=https%3A%2F%2Ffsvid.lol%2Fembed-h6w8maraaizs.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-fw5ftchdvyam.html&embed=https%3A%2F%2Fuqload.vc%2Fembed-f064zrktqolp.html&embed=https%3A%2F%2Ftrakx.lol%2Fmoon2%2FnewPlayer.php%3Fid%3D1c3179ea-27e2-4184-9335-f3ffb8715c17&embed=https%3A%2F%2Ftrakx.lol%2Fvoe1%2FnewPlayer.php%3Fid%3D8f167d29-01bf-4376-a378-83a5bafb1187&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D1%26episode%3D7",
+          "still_path": "https://image.tmdb.org/t/p/w500/ppOlBCFMZ6OoFNlqboSuxAzYlGV.jpg"
+        },
+        {
+          "title": "Chapitre 8",
+          "number": 8,
+          "runtime": 41,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=1&episode=8&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F1%2F8&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2Frbsxwbh2d6tn&embed=https%3A%2F%2Fuqload.net%2Fembed-fu1ek2iq82l8.html&embed=https%3A%2F%2Fneocine.embedseek.com%2F%23eawwa&embed=https%3A%2F%2Ffsvid.lol%2Fembed-z2mfcdbkbt2n.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-ofpg6bdsckh2.html&embed=https%3A%2F%2Fuqload.vc%2Fembed-wuvhgj0lhgid.html&embed=https%3A%2F%2Ftrakx.lol%2Fmoon2%2FnewPlayer.php%3Fid%3D8bb35389-8309-48b1-91ae-200860fe938c&embed=https%3A%2F%2Ftrakx.lol%2Fvoe1%2FnewPlayer.php%3Fid%3D4030fa90-c467-4f63-b720-caa1c811000c&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D1%26episode%3D8",
+          "still_path": "https://image.tmdb.org/t/p/w500/2zToF3bdwh0oSpaAbrHezZ7H8lx.jpg"
+        },
+        {
+          "title": "Chapitre 9",
+          "number": 9,
+          "runtime": 47,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=1&episode=9&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F1%2F9&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2Fmagmg94qm1sp&embed=https%3A%2F%2Fuqload.net%2Fembed-0n7lkj1mbq10.html&embed=https%3A%2F%2Fneocine.embedseek.com%2F%23xnkkw&embed=https%3A%2F%2Ffsvid.lol%2Fembed-pegxneeqo471.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-m55mmgzrzen0.html&embed=https%3A%2F%2Fuqload.vc%2Fembed-hkrqvgc7qqcz.html&embed=https%3A%2F%2Ftrakx.lol%2Fmoon2%2FnewPlayer.php%3Fid%3D9872394f-fd7a-4992-9f1a-4fc8010ae54e&embed=https%3A%2F%2Ftrakx.lol%2Fvoe1%2FnewPlayer.php%3Fid%3D28d82a0f-bab3-43a8-a893-0552e3ea79c5&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D1%26episode%3D9",
+          "still_path": "https://image.tmdb.org/t/p/w500/tgsXccjn6bVFqJwtTr97WuOm1Z9.jpg"
+        },
+        {
+          "title": "Chapitre 10",
+          "number": 10,
+          "runtime": 50,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=1&episode=10&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F1%2F10&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2Ff1v5jfzfnlhi&embed=https%3A%2F%2Fuqload.net%2Fembed-1ir00qcg4bd1.html&embed=https%3A%2F%2Fneocine.embedseek.com%2F%23phogo&embed=https%3A%2F%2Ffsvid.lol%2Fembed-6ivlpuwseg1j.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-2vbir06ttjgx.html&embed=https%3A%2F%2Fuqload.vc%2Fembed-hfqspszn51ap.html&embed=https%3A%2F%2Ftrakx.lol%2Fmoon2%2FnewPlayer.php%3Fid%3D1ed11cfc-988f-4074-aaca-f4a3d17bf3a2&embed=https%3A%2F%2Ftrakx.lol%2Fvoe1%2FnewPlayer.php%3Fid%3Da622d011-5d3a-402f-bc03-1183ca99e0f9&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D1%26episode%3D10",
+          "still_path": "https://image.tmdb.org/t/p/w500/8r8dgHAINYk6SuZvKbjS0df8Rjs.jpg"
+        }
+      ],
+      "poster_path": "https://image.tmdb.org/t/p/w500/m0h30upC0XgXMQFJaNrT5P2X1t0.jpg",
+      "seasonNumber": 1
+    },
+    {
+      "episodes": [
+        {
+          "title": "Chapitre 1",
+          "number": 1,
+          "runtime": 52,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=2&episode=1&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F2%2F1&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2Fwvqc8jnrf12h&embed=https%3A%2F%2Fuqload.net%2Fembed-nypgzuq208dh.html&embed=https%3A%2F%2Fbysebuho.com%2Fe%2Fm5eefbqmw05c&embed=https%3A%2F%2Fneocine.embedseek.com%2F%23osemr&embed=https%3A%2F%2Ffsvid.lol%2Fembed-bt62pjgs3oe9.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-8hmjuaendlm8.html&embed=https%3A%2F%2Fuqload.vc%2Fembed-nypgzuq208dh.html&embed=https%3A%2F%2Ftrakx.lol%2Fmoon2%2FnewPlayer.php%3Fid%3D4259eb5c-2021-49f6-acb6-1614eca6d4c5&embed=https%3A%2F%2Ftrakx.lol%2Fvoe1%2FnewPlayer.php%3Fid%3D4a95975a-772d-4ae1-b253-6e257f681a1b&embed=https%3A%2F%2Fvidara.to%2Fe%2FjFz8b6uHhGPVQ&embed=https%3A%2F%2Fjeremyparticipantanything.com%2Fe%2Fhbbzxt7yxbfi&embed=https%3A%2F%2Fflemmix.upns.pro%2F%23rtex98&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D2%26episode%3D1&embed=https%3A%2F%2Fralphysuccessfull.org%2Fe%2F8hcoqbawctnb&embed=https%3A%2F%2Fuqload.vc%2Fembed-7ih0hfjz91nn.html&embed=https%3A%2F%2Fyounetu.org%2Fplayer%2Fembed_player.php%3Fvid%3DUywrdqiWAMnJ%26autoplay%3Dno&embed=https%3A%2F%2Fkaydendown.lol%2Fe%2Fcmpeffucu14s&embed=https%3A%2F%2Fdoply.net%2Fe%2Fmhgzvtqtmrzm&embed=https%3A%2F%2Fuptostream.link%2Fiframe%2F58sxyse982wj&embed=https%3A%2F%2Fvidoza.net%2Fembed-l9jzaz1f6eku.html&embed=https%3A%2F%2Fuptostream.link%2F58sxyse982wj",
+          "still_path": "https://image.tmdb.org/t/p/w500/2r2k4OBkLJWWbR6GROVI4M3wQhZ.jpg"
+        },
+        {
+          "title": "Chapitre 2",
+          "number": 2,
+          "runtime": 49,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=2&episode=2&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F2%2F2&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2Ftz90ze3s1uvj&embed=https%3A%2F%2Fuqload.net%2Fembed-f064zrktqolp.html&embed=https%3A%2F%2Fbysebuho.com%2Fe%2Fllregu4fw3r1&embed=https%3A%2F%2Fneocine.embedseek.com%2F%23b3jox&embed=https%3A%2F%2Ffsvid.lol%2Fembed-h6w8maraaizs.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-fw5ftchdvyam.html&embed=https%3A%2F%2Fuqload.vc%2Fembed-f064zrktqolp.html&embed=https%3A%2F%2Ftrakx.lol%2Fmoon2%2FnewPlayer.php%3Fid%3D1c3179ea-27e2-4184-9335-f3ffb8715c17&embed=https%3A%2F%2Ftrakx.lol%2Fvoe1%2FnewPlayer.php%3Fid%3D8f167d29-01bf-4376-a378-83a5bafb1187&embed=https%3A%2F%2Fvidara.to%2Fe%2FwegZpn9a0z7CX&embed=https%3A%2F%2Fjeremyparticipantanything.com%2Fe%2Fcoqalmcw2amg&embed=https%3A%2F%2Fflemmix.upns.pro%2F%23glv811&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D2%26episode%3D2&embed=https%3A%2F%2Fralphysuccessfull.org%2Fe%2Fbvzsssatduka&embed=https%3A%2F%2Fuqload.vc%2Fembed-0ptvvlvzghxl.html&embed=https%3A%2F%2Fyounetu.org%2Fplayer%2Fembed_player.php%3Fvid%3DN5C5p5nJO2np%26autoplay%3Dno&embed=https%3A%2F%2Fdoply.net%2Fe%2Fptsw65h4c7s1&embed=https%3A%2F%2Fuptostream.link%2Fiframe%2Fslj2ui6gijhm&embed=https%3A%2F%2Fuptostream.link%2Fslj2ui6gijhm",
+          "still_path": "https://image.tmdb.org/t/p/w500/28Z7kKNDJkYzydXLVLkYmFGClfj.jpg"
+        },
+        {
+          "title": "Chapitre 3",
+          "number": 3,
+          "runtime": 53,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=2&episode=3&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F2%2F3&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2Fimd1ck0stxmu&embed=https%3A%2F%2Fuqload.net%2Fembed-wuvhgj0lhgid.html&embed=https%3A%2F%2Fbysebuho.com%2Fe%2Ftdgk5m4doh0t&embed=https%3A%2F%2Fneocine.embedseek.com%2F%23hrste&embed=https%3A%2F%2Ffsvid.lol%2Fembed-z2mfcdbkbt2n.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-ofpg6bdsckh2.html&embed=https%3A%2F%2Fuqload.vc%2Fembed-wuvhgj0lhgid.html&embed=https%3A%2F%2Ftrakx.lol%2Fmoon2%2FnewPlayer.php%3Fid%3D8bb35389-8309-48b1-91ae-200860fe938c&embed=https%3A%2F%2Ftrakx.lol%2Fvoe1%2FnewPlayer.php%3Fid%3D4030fa90-c467-4f63-b720-caa1c811000c&embed=https%3A%2F%2Fvidara.to%2Fe%2FSQLnkBs961LpQ&embed=https%3A%2F%2Fjeremyparticipantanything.com%2Fe%2Fm1lw95630zwx&embed=https%3A%2F%2Fflemmix.upns.pro%2F%23u8gfhb&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D2%26episode%3D3&embed=https%3A%2F%2Fralphysuccessfull.org%2Fe%2Fqitzy1ovx0sm&embed=https%3A%2F%2Fuqload.vc%2Fembed-jlqvgbkorx4h.html&embed=https%3A%2F%2Fyounetu.org%2Fplayer%2Fembed_player.php%3Fvid%3D2mdsWdLxQcMt%26autoplay%3Dno&embed=https%3A%2F%2Fkaydendown.lol%2Fe%2Ftukpokq8237x&embed=https%3A%2F%2Fuptostream.link%2Fiframe%2Fbvg9q3z2ldx0&embed=https%3A%2F%2Fuptostream.link%2Fbvg9q3z2ldx0&embed=https%3A%2F%2Fvidoza.net%2Fembed-2s2vrlwwsjyr.html&embed=https%3A%2F%2Fdoply.net%2Fe%2Fer0l0udgt7cr",
+          "still_path": "https://image.tmdb.org/t/p/w500/zv7hM1Puwmn2nF1kj15uboXwUGu.jpg"
+        },
+        {
+          "title": "Chapitre 4",
+          "number": 4,
+          "runtime": 43,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=2&episode=4&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F2%2F4&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2Flomwboxllbuy&embed=https%3A%2F%2Fuqload.net%2Fembed-hkrqvgc7qqcz.html&embed=https%3A%2F%2Fbysebuho.com%2Fe%2F4ju8j84g85g4&embed=https%3A%2F%2Fneocine.embedseek.com%2F%23n61yk&embed=https%3A%2F%2Ffsvid.lol%2Fembed-pegxneeqo471.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-m55mmgzrzen0.html&embed=https%3A%2F%2Fuqload.vc%2Fembed-hkrqvgc7qqcz.html&embed=https%3A%2F%2Ftrakx.lol%2Fmoon2%2FnewPlayer.php%3Fid%3D9872394f-fd7a-4992-9f1a-4fc8010ae54e&embed=https%3A%2F%2Ftrakx.lol%2Fvoe1%2FnewPlayer.php%3Fid%3D28d82a0f-bab3-43a8-a893-0552e3ea79c5&embed=https%3A%2F%2Fvidara.to%2Fe%2FR56LviTIe3dpA&embed=https%3A%2F%2Fjeremyparticipantanything.com%2Fe%2F20mgfdy6abs3&embed=https%3A%2F%2Fflemmix.upns.pro%2F%23prya6k&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D2%26episode%3D4&embed=https%3A%2F%2Fralphysuccessfull.org%2Fe%2Fnvogyjqebaly&embed=https%3A%2F%2Fuqload.vc%2Fembed-c099nrtdezvc.html&embed=https%3A%2F%2Fyounetu.org%2Fplayer%2Fembed_player.php%3Fvid%3DAejBJ4Y4d9NS%26autoplay%3Dno&embed=https%3A%2F%2Fkaydendown.lol%2Fe%2Fymwph03quuvb&embed=https%3A%2F%2Fdoply.net%2Fe%2Felrs9mrzm4et&embed=https%3A%2F%2Fuptostream.link%2Fiframe%2F3ni4hdywhdsr&embed=https%3A%2F%2Fvidoza.net%2Fembed-bo64a8nn971h.html&embed=https%3A%2F%2Fuptostream.link%2F3ni4hdywhdsr",
+          "still_path": "https://image.tmdb.org/t/p/w500/8b2Ac0RCImtLU7nqU8WSMsI8oyn.jpg"
+        },
+        {
+          "title": "Chapitre 5",
+          "number": 5,
+          "runtime": 43,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=2&episode=5&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F2%2F5&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2F81zzpj1ye6sw&embed=https%3A%2F%2Fuqload.net%2Fembed-hfqspszn51ap.html&embed=https%3A%2F%2Fbysebuho.com%2Fe%2Flh5hpxro2ul6&embed=https%3A%2F%2Fneocine.embedseek.com%2F%236ipjr&embed=https%3A%2F%2Ffsvid.lol%2Fembed-6ivlpuwseg1j.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-2vbir06ttjgx.html&embed=https%3A%2F%2Fuqload.vc%2Fembed-hfqspszn51ap.html&embed=https%3A%2F%2Ftrakx.lol%2Fmoon2%2FnewPlayer.php%3Fid%3D1ed11cfc-988f-4074-aaca-f4a3d17bf3a2&embed=https%3A%2F%2Ftrakx.lol%2Fvoe1%2FnewPlayer.php%3Fid%3Da622d011-5d3a-402f-bc03-1183ca99e0f9&embed=https%3A%2F%2Fvidara.to%2Fe%2FIQICqouuIpRtY&embed=https%3A%2F%2Fjeremyparticipantanything.com%2Fe%2Fqwdk0rrvqok1&embed=https%3A%2F%2Fflemmix.upns.pro%2F%23kqm1hn&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D2%26episode%3D5&embed=https%3A%2F%2Fralphysuccessfull.org%2Fe%2F3blmx110drff&embed=https%3A%2F%2Fuqload.vc%2Fembed-yo1i9o09n378.html&embed=https%3A%2F%2Fyounetu.org%2Fplayer%2Fembed_player.php%3Fvid%3DDlAdl1qahWyN%26autoplay%3Dno&embed=https%3A%2F%2Fkaydendown.lol%2Fe%2Fz6g1vwp1in0v&embed=https%3A%2F%2Fuptostream.link%2Fiframe%2Fr2diqmxt9aue&embed=https%3A%2F%2Fvidoza.net%2Fembed-ew6errtbdnyq.html&embed=https%3A%2F%2Fuptostream.link%2Fr2diqmxt9aue",
+          "still_path": "https://image.tmdb.org/t/p/w500/z0WHlhvYhANQYWE0f0NDH5EtmPd.jpg"
+        },
+        {
+          "title": "Chapitre 6",
+          "number": 6,
+          "runtime": 43,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=2&episode=6&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F2%2F6&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2Ff705douc2i7l&embed=https%3A%2F%2Fuqload.net%2Fembed-3syfn7up7uhl.html&embed=https%3A%2F%2Fneocine.embedseek.com%2F%23lyick&embed=https%3A%2F%2Ffsvid.lol%2Fembed-haoady9zel0a.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-ypzubmloqjnw.html&embed=https%3A%2F%2Fuqload.vc%2Fembed-3syfn7up7uhl.html&embed=https%3A%2F%2Ftrakx.lol%2Fmoon2%2FnewPlayer.php%3Fid%3D20ad571a-ce92-43aa-a472-78d8d565ee48&embed=https%3A%2F%2Ftrakx.lol%2Fvoe1%2FnewPlayer.php%3Fid%3Db9e4bec9-4e31-4a57-9e7d-142548639ccf&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D2%26episode%3D6&embed=https%3A%2F%2Fralphysuccessfull.org%2Fe%2Fe3jlyqi5kkmb&embed=https%3A%2F%2Fuqload.vc%2Fembed-tw50z90yp1up.html&embed=https%3A%2F%2Fyounetu.org%2Fplayer%2Fembed_player.php%3Fvid%3DuonWAQTGpUsA%26autoplay%3Dno&embed=https%3A%2F%2Fdoply.net%2Fe%2Fkzmxjt8c99qt&embed=https%3A%2F%2Fvidoza.net%2Fembed-x1p78w5dgh8v.html",
+          "still_path": "https://image.tmdb.org/t/p/w500/uRGdq1pUs1IgZ9zoIHs9wXGkFdw.jpg"
+        },
+        {
+          "title": "Chapitre 7",
+          "number": 7,
+          "runtime": 52,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=2&episode=7&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F2%2F7&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2F25yo64nd6l9c&embed=https%3A%2F%2Fuqload.net%2Fembed-5ldjccihwlp9.html&embed=https%3A%2F%2Fneocine.embedseek.com%2F%2395bo9&embed=https%3A%2F%2Ffsvid.lol%2Fembed-rtusk6rygbne.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-lq5awhkw1aae.html&embed=https%3A%2F%2Fuqload.vc%2Fembed-5ldjccihwlp9.html&embed=https%3A%2F%2Ftrakx.lol%2Fmoon2%2FnewPlayer.php%3Fid%3Dd6f579f2-058c-42d7-a526-ca6f202b656b&embed=https%3A%2F%2Ftrakx.lol%2Fvoe1%2FnewPlayer.php%3Fid%3D66182b9c-82fc-44ca-911c-c725ab983a90&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D2%26episode%3D7&embed=https%3A%2F%2Fralphysuccessfull.org%2Fe%2Fg3jclobqiofw&embed=https%3A%2F%2Fuqload.vc%2Fembed-lc65gmv58ui5.html&embed=https%3A%2F%2Fyounetu.org%2Fplayer%2Fembed_player.php%3Fvid%3D1ncc2rvPQyTC%26autoplay%3Dno&embed=https%3A%2F%2Fkaydendown.lol%2Fe%2Fy14oqm2kswsi&embed=https%3A%2F%2Fdoply.net%2Fe%2F3vgr8t00pslu&embed=https%3A%2F%2Fvidoza.net%2Fembed-cxrjyood5cpg.html",
+          "still_path": "https://image.tmdb.org/t/p/w500/dd3xE8GzdMNgeFVK3Cavg8ox36r.jpg"
+        }
+      ],
+      "poster_path": "https://image.tmdb.org/t/p/w500/6HQQRIBmQNO98d5gmGPd7M3QxeC.jpg",
+      "seasonNumber": 2
+    },
+    {
+      "episodes": [
+        {
+          "title": "Chapitre 1",
+          "number": 1,
+          "runtime": 40,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=3&episode=1&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F3%2F1&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2Fh8jlblj2cx1u&embed=https%3A%2F%2Fvidara.to%2Fe%2FTtaV6WD1cTlYJ&embed=https%3A%2F%2Fuqload.vc%2Fembed-h8ib6qb7xk2l.html&embed=https%3A%2F%2Ffsvid.lol%2Fembed-pw0ohlefo6ip.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-um9qch4o16c9.html&embed=https%3A%2F%2Fkokoflix.lol%2Fgrandline_go.php%3Fid%3DG5ZkX6oCevHygacRIBjDV&embed=https%3A%2F%2Fkokoflix.lol%2Fosaka_go.php%3Fid%3DmTBS3kfsWYa91KNUFG082&embed=https%3A%2F%2Fvidara.to%2Fe%2F7uoyOD96v2Hmw&embed=https%3A%2F%2Fjeremyparticipantanything.com%2Fe%2Fcdsj4cq7elhb&embed=https%3A%2F%2Fflemmix.upns.pro%2F%23u8gf96&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D3%26episode%3D1&embed=https%3A%2F%2Fralphysuccessfull.org%2Fe%2F9x0gmkblm0px&embed=https%3A%2F%2Fuqload.vc%2Fembed-rqr49rg27uv4.html&embed=https%3A%2F%2Fyounetu.org%2Fplayer%2Fembed_player.php%3Fvid%3Dy7iMoksdpefm%26autoplay%3Dno&embed=https%3A%2F%2Fdoply.net%2Fe%2F1bxq2eyzyw2y&embed=https%3A%2F%2Fkaydendown.lol%2Fe%2F12t145ifhhvl&embed=https%3A%2F%2Fvidoza.net%2Fembed-23u8mflb2eg6.html",
+          "still_path": "https://image.tmdb.org/t/p/w500/mqD8Gw3iM5hqTCkhMlS3zIlzWvX.jpg"
+        },
+        {
+          "title": "Chapitre 2",
+          "number": 2,
+          "runtime": 44,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=3&episode=2&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F3%2F2&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2Fd4detwt503w5&embed=https%3A%2F%2Fvidara.to%2Fe%2FywksvB2xqZz2Q&embed=https%3A%2F%2Fuqload.vc%2Fembed-b4d8q3krndib.html&embed=https%3A%2F%2Ffsvid.lol%2Fembed-6chb2g8xe3gp.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-uohkak6kcb99.html&embed=https%3A%2F%2Fkokoflix.lol%2Fgrandline_go.php%3Fid%3DBNf8C5WLTGjmKizpyFJQ1&embed=https%3A%2F%2Fkokoflix.lol%2Fosaka_go.php%3Fid%3DPstnFwZOq5H9KXc0AVmzB&embed=https%3A%2F%2Fvidara.to%2Fe%2FrkC88Pq3r6RIA&embed=https%3A%2F%2Fjeremyparticipantanything.com%2Fe%2Fnjsjvwj4sbyl&embed=https%3A%2F%2Fflemmix.upns.pro%2F%23tfuscw&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D3%26episode%3D2&embed=https%3A%2F%2Fralphysuccessfull.org%2Fe%2Fbfkigbreipxs&embed=https%3A%2F%2Fuqload.vc%2Fembed-z0pco8mct6r8.html&embed=https%3A%2F%2Fyounetu.org%2Fplayer%2Fembed_player.php%3Fvid%3Dcg5ExHB2olUr%26autoplay%3Dno&embed=https%3A%2F%2Fkaydendown.lol%2Fe%2Flntd8ilmw318&embed=https%3A%2F%2Fdoply.net%2Fe%2Fw4387wdk7ckr&embed=https%3A%2F%2Fvidoza.net%2Fembed-aj01vmfgajrh.html",
+          "still_path": "https://image.tmdb.org/t/p/w500/3f1LLYsVE3NkYdVugdtAVUzsBbN.jpg"
+        },
+        {
+          "title": "Chapitre 3",
+          "number": 3,
+          "runtime": 51,
+          "embedUrl": "https://embedorigin.cc/e/h8jlblj2cx1u",
+          "still_path": "https://image.tmdb.org/t/p/w500/cViiGADu0Jhcy00MuWY0dwFLZDr.jpg"
+        },
+        {
+          "title": "Chapitre 4",
+          "number": 4,
+          "runtime": 42,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=3&episode=4&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F3%2F4&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2Fimq63wzctacr&embed=https%3A%2F%2Fvidara.to%2Fe%2FW7AkVk1D1Ovmx&embed=https%3A%2F%2Fuqload.vc%2Fembed-jfjq0z95daws.html&embed=https%3A%2F%2Ffsvid.lol%2Fembed-0y9ylukhz43d.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-w78pt4smkryi.html&embed=https%3A%2F%2Fkokoflix.lol%2Fgrandline_go.php%3Fid%3Ds8AmnWFNq0Yivj25bh1QO&embed=https%3A%2F%2Fkokoflix.lol%2Fosaka_go.php%3Fid%3DjhWL7S1EVigqfFAUo2u3w&embed=https%3A%2F%2Fvidara.to%2Fe%2F6cPVKnF9NUPRa&embed=https%3A%2F%2Fjeremyparticipantanything.com%2Fe%2Fhiqaqdvnbbc8&embed=https%3A%2F%2Fflemmix.upns.pro%2F%23pryahd&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D3%26episode%3D4&embed=https%3A%2F%2Fralphysuccessfull.org%2Fe%2Ffqg09zbxyqi7&embed=https%3A%2F%2Fuqload.vc%2Fembed-vj0dhzx1dmy6.html&embed=https%3A%2F%2Fyounetu.org%2Fplayer%2Fembed_player.php%3Fvid%3DLQAwhyRE2ZzM%26autoplay%3Dno&embed=https%3A%2F%2Fkaydendown.lol%2Fe%2Fbnvs5txm81da&embed=https%3A%2F%2Fvidoza.net%2Fembed-asv1n1rogk9y.html&embed=https%3A%2F%2Fdoply.net%2Fe%2Fgf86pzsdruzm",
+          "still_path": "https://image.tmdb.org/t/p/w500/9LK0JHS54AYKSCjTLDuNd2Fis9t.jpg"
+        },
+        {
+          "title": "Chapitre 5",
+          "number": 5,
+          "runtime": 48,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=3&episode=5&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F3%2F5&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2Frat9j3nywtso&embed=https%3A%2F%2Fvidara.to%2Fe%2FPGfOS8yVxtX0D&embed=https%3A%2F%2Fuqload.vc%2Fembed-cuwwqfh3c7wf.html&embed=https%3A%2F%2Ffsvid.lol%2Fembed-2d8rathos6vh.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-o5x1oo0nhwlh.html&embed=https%3A%2F%2Fkokoflix.lol%2Fgrandline_go.php%3Fid%3DtZduVC2U8jbNaAYOhFGSL&embed=https%3A%2F%2Fkokoflix.lol%2Fosaka_go.php%3Fid%3DvwkotCd5qJ0WOryBNhTg9&embed=https%3A%2F%2Fvidara.to%2Fe%2FCSM04xcQpV5O5&embed=https%3A%2F%2Fjeremyparticipantanything.com%2Fe%2Fmfkvrc0j5b22&embed=https%3A%2F%2Fflemmix.upns.pro%2F%23ho15il&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D3%26episode%3D5&embed=https%3A%2F%2Fuqload.vc%2Fembed-xwtfidhuq70g.html&embed=https%3A%2F%2Fyounetu.org%2Fplayer%2Fembed_player.php%3Fvid%3DDCMjZH7IXrOd%26autoplay%3Dno&embed=https%3A%2F%2Fdoply.net%2Fe%2Fhajobdv68x34&embed=https%3A%2F%2Fkaydendown.lol%2Fe%2Fc2mcf50yhsvf&embed=https%3A%2F%2Fvidoza.net%2Fembed-jzpe0uanuq6z.html",
+          "still_path": "https://image.tmdb.org/t/p/w500/oGDMmGivVZGfuuoh4TuYpXniihF.jpg"
+        },
+        {
+          "title": "Chapitre 6",
+          "number": 6,
+          "runtime": 44,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=3&episode=6&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F3%2F6&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2F4pnl064auqgy&embed=https%3A%2F%2Fvidara.to%2Fe%2FqBf5WIHff2Ofb&embed=https%3A%2F%2Fuqload.vc%2Fembed-jlm8vd6alwtk.html&embed=https%3A%2F%2Ffsvid.lol%2Fembed-55x44d12fx3g.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-l9vf9n25573h.html&embed=https%3A%2F%2Fkokoflix.lol%2Fgrandline_go.php%3Fid%3DzsX53wlGxcm9SFKejPHyb&embed=https%3A%2F%2Fkokoflix.lol%2Fosaka_go.php%3Fid%3DKh7qsSUnJf1O5YyGdzPVA&embed=https%3A%2F%2Fvidara.to%2Fe%2FimLfYMyFs1Mo7&embed=https%3A%2F%2Fjeremyparticipantanything.com%2Fe%2Fjgjamxnflxk3&embed=https%3A%2F%2Fflemmix.upns.pro%2F%23d3ibuz&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D3%26episode%3D6&embed=https%3A%2F%2Fralphysuccessfull.org%2Fe%2Fsdjvj8dnrqqg&embed=https%3A%2F%2Fuqload.vc%2Fembed-d85i3oy3c8fi.html&embed=https%3A%2F%2Fdoply.net%2Fe%2Fdfse07nyrbn0&embed=https%3A%2F%2Fkaydendown.lol%2Fe%2F0wib83wltbzi&embed=https%3A%2F%2Fvidoza.net%2Fembed-65yeed1gouix.html&embed=https%3A%2F%2Fyounetu.org%2Fplayer%2Fembed_player.php%3Fvid%3DTlryLFZkCZVe%26autoplay%3Dno",
+          "still_path": "https://image.tmdb.org/t/p/w500/1uhKLaDXYvpRslIoSYhwgqPMnBn.jpg"
+        },
+        {
+          "title": "Chapitre 7",
+          "number": 7,
+          "runtime": 46,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=3&episode=7&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F3%2F7&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2F5knd95n58bbo&embed=https%3A%2F%2Fvidara.to%2Fe%2FuY3CmWH71OYzz&embed=https%3A%2F%2Fuqload.vc%2Fembed-muqf676qdcg9.html&embed=https%3A%2F%2Ffsvid.lol%2Fembed-3wjx14vtpt3u.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-93k8823fvsyz.html&embed=https%3A%2F%2Fkokoflix.lol%2Fgrandline_go.php%3Fid%3DpyS4uVfQw9g5xqeotIElB&embed=https%3A%2F%2Fkokoflix.lol%2Fosaka_go.php%3Fid%3Dls97IRMkKgPZLE1QX23uO&embed=https%3A%2F%2Fvidara.to%2Fe%2Fge1NEIOnUPssA&embed=https%3A%2F%2Fjeremyparticipantanything.com%2Fe%2Fc0qbwz60tpw2&embed=https%3A%2F%2Fflemmix.upns.pro%2F%23mp5qba&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D3%26episode%3D7&embed=https%3A%2F%2Fralphysuccessfull.org%2Fe%2Fsf89ffaunrf4&embed=https%3A%2F%2Fuqload.vc%2Fembed-1hnrw7rbr526.html&embed=https%3A%2F%2Fyounetu.org%2Fplayer%2Fembed_player.php%3Fvid%3DPSUpVgQxNZ3Z%26autoplay%3Dno&embed=https%3A%2F%2Fkaydendown.lol%2Fe%2Fsjs1xygfla7s&embed=https%3A%2F%2Fdoply.net%2Fe%2Fjmryfoksuh7y&embed=https%3A%2F%2Fvidoza.net%2Fembed-lzuuokj9psz5.html",
+          "still_path": "https://image.tmdb.org/t/p/w500/kqJK5hmnnnhCACq3qX4F400jERM.jpg"
+        },
+        {
+          "title": "Chapitre 8",
+          "number": 8,
+          "runtime": 49,
+          "embedUrl": "/api/catalogue-player?tmdb=96677&type=tv&season=3&episode=8&embed=https%3A%2F%2Fapi.moviez.ac%2Fserie%2F96677%2F3%2F8&embed=https%3A%2F%2Fembedorigin.cc%2Fe%2Fr688bz96qfy7&embed=https%3A%2F%2Fvidara.to%2Fe%2FbIbi0vVpEWWCb&embed=https%3A%2F%2Fuqload.vc%2Fembed-5w53f5x67qtn.html&embed=https%3A%2F%2Ffsvid.lol%2Fembed-mfhi8usq9wkx.html&embed=https%3A%2F%2Fvidzy.cc%2Fembed-ygsqih3hx0vh.html&embed=https%3A%2F%2Fkokoflix.lol%2Fgrandline_go.php%3Fid%3DPMctNVwuJ9UFbk6zpxRGL&embed=https%3A%2F%2Fkokoflix.lol%2Fosaka_go.php%3Fid%3DPQwvWYfqIz92hDJduxmGU&embed=https%3A%2F%2Fblinkflux.lol%2Fapi%2Fv1%2Findex.php%3Froute%3Dseries%2F96677%2Fplayer%26api_key%3Dff_5ae9661d6220e612a00645cb2889d6da5231504cbb68cc32214030b1a783e8e3%26season%3D3%26episode%3D8",
+          "still_path": "https://image.tmdb.org/t/p/w500/1aItG8O2cybTEtGEFqTV1KO5Oi4.jpg"
+        }
+      ],
+      "poster_path": "https://image.tmdb.org/t/p/w500/augcHFx5YPhiqfk49k7ou7KDIpq.jpg",
+      "seasonNumber": 3
+    }
+  ],
+  "tmdb_id": "96677"
+}

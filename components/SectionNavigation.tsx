@@ -16,6 +16,7 @@ const ADMIN_LINKS = [
   { href: '/admin/accueil', label: 'Carrousel' },
   { href: '/admin/banners', label: 'Bannières' },
   { href: '/admin/collections', label: 'Collections' },
+  { href: '/admin/generiques', label: 'Génériques' },
   { href: '/admin/promotions', label: 'Promotions' },
   { href: '/admin-vip', label: 'Membres & VIP' },
   { href: '/admin/stats', label: 'Statistiques' },

@@ -379,7 +379,7 @@ export default function RequestsPage() {
             Accueil
           </button>
           <button onClick={() => router.push('/')} className="cursor-pointer select-none text-lg font-black tracking-[0.2em] text-red-600">
-            YAMON<span className="text-white">FIM</span>
+            YAMON<span className="text-white">FILM</span>
           </button>
           {isAdmin ? (
             <span className="hidden items-center gap-1.5 rounded-full bg-red-600/15 px-3 py-1.5 text-xs font-bold text-red-300 ring-1 ring-red-500/30 sm:flex">

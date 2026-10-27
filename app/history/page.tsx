@@ -403,7 +403,7 @@ export default function HistoryPage() {
             <Icon name="back" className="h-4 w-4 transition group-hover:-translate-x-0.5" /> Accueil
           </button>
           <span className="select-none text-lg font-black tracking-[0.2em] text-red-600">
-            YAMON<span className="text-white">FIM</span>
+            YAMON<span className="text-white">FILM</span>
           </span>
           {activeProfile ? (
             <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-2.5 py-1.5 rounded-full">
