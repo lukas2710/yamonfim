@@ -1,5 +1,5 @@
 // The catalogue and background worker share the site's authenticated origin.
-const importSite = 'https://yamonfim.vercel.app';
+const importSite = location.protocol === 'file:' ? 'https://yamonfi.netlify.app' : location.origin;
 const importStates = new Map(), importQueue = [];
 let importFrame = null, importChannel = '', importPending = null, importReady = false, catalogueStatusReady = false;
 function sendImport() {

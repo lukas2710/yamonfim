@@ -6,7 +6,7 @@ export const metadata: Metadata = {
 };
 
 const APK = '/yamonfilm-tv.apk';
-const VERSION = '2.4.1';
+const VERSION = '2.4.2';
 
 const GUIDES = [
   {
@@ -15,7 +15,7 @@ const GUIDES = [
       'Paramètres → Ma Fire TV → À propos : clique 7 fois sur le nom de l’appareil pour activer les options pour les développeurs.',
       'Installe l’application « Downloader » depuis l’Appstore Amazon.',
       'Paramètres → Ma Fire TV → Options pour les développeurs → Installer des applications inconnues : active Downloader.',
-      'Ouvre Downloader et tape l’adresse : yamonfim.vercel.app/yamonfilm-tv.apk',
+      'Ouvre Downloader et tape l’adresse : yamonfi.netlify.app/yamonfilm-tv.apk',
       'Installe, puis ouvre YAMONFILM depuis « Vos applications ».',
     ],
   },
@@ -23,7 +23,7 @@ const GUIDES = [
     title: 'Android TV et Google TV (TCL, Sony, Philips, Xiaomi…)',
     steps: [
       'Installe un navigateur depuis le Play Store de la TV (par exemple « TV Bro ») ou l’application « Downloader ».',
-      'Ouvre yamonfim.vercel.app/app et appuie sur « Télécharger l’application ».',
+      'Ouvre yamonfi.netlify.app/app et appuie sur « Télécharger l’application ».',
       'Si Android le demande, autorise l’installation pour ce navigateur (« Sources inconnues »).',
       'Installe, puis ouvre YAMONFILM depuis la liste des applications.',
     ],
@@ -61,7 +61,7 @@ export default function TvAppPage() {
           <p className="text-sm text-zinc-400">Version {VERSION} · Android TV 8 ou plus · environ 1 Mo</p>
         </div>
         <p className="mt-6 text-sm text-zinc-500">
-          Sur la télé, tape simplement : <span className="font-mono text-zinc-200">yamonfim.vercel.app/app</span>
+          Sur la télé, tape simplement : <span className="font-mono text-zinc-200">yamonfi.netlify.app/app</span>
         </p>
       </section>
 

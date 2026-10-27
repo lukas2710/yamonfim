@@ -11,4 +11,4 @@ Définir les variables serveur dans Netlify, pour les fonctions et la compilatio
 
 La base Supabase existante reste la même ; aucune suppression ni migration de films n'est nécessaire. Ajouter le nouveau domaine dans les URL autorisées de Supabase Auth et vérifier les URL des webhooks Stripe.
 
-L'application Android TV actuelle contient encore l'adresse Vercel. Dès que le domaine Netlify définitif est connu, remplacer les adresses du site et les contrôles d'hôte dans les sources Android, reconstruire l'APK avec la clé de signature existante, puis publier la mise à jour.
+Le site de production est https://yamonfi.netlify.app/. L'application Android TV 2.4.2 utilise cette adresse pour les flux, les minutages et les liens du site. Installer cette mise à jour sur les téléviseurs pour remplacer l'ancienne adresse Vercel.

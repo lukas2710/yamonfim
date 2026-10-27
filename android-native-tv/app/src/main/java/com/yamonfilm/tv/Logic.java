@@ -172,7 +172,7 @@ public final class Logic {
         } catch (Exception e) { return false; }
     }
 
-    static final String SITE_BASE = "https://yamonfim.vercel.app/";
+    static final String SITE_BASE = "https://yamonfi.netlify.app/";
 
     /** Prépare l'adresse du lecteur comme preparePlayerUrl(). Chaîne vide si invalide. */
     public static String preparePlayerUrl(String value) {
@@ -233,7 +233,7 @@ public final class Logic {
                 Matcher movie = Pattern.compile("^/([1-9][0-9]{0,9})/?$").matcher(uri.getPath());
                 if (movie.matches()) return new PlayerSource(movie.group(1), 0, 0);
             }
-            if ("yamonfim.vercel.app".equalsIgnoreCase(uri.getHost()) && "/api/catalogue-player".equals(uri.getPath())) {
+            if ("yamonfi.netlify.app".equalsIgnoreCase(uri.getHost()) && "/api/catalogue-player".equals(uri.getPath())) {
                 java.util.Map<String,String> params = new java.util.HashMap<>();
                 if (uri.getRawQuery() != null) for (String part : uri.getRawQuery().split("&")) { String[] pair = part.split("=", 2); if (pair.length == 2) params.put(pair[0], java.net.URLDecoder.decode(pair[1], "UTF-8")); }
                 String id = params.get("tmdb"), type = params.get("type");

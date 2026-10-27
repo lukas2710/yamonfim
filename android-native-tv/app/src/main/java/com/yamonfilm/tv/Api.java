@@ -26,7 +26,7 @@ public final class Api {
     public static final String SUPABASE_URL = "https://nftiussedwyjheqrmlbw.supabase.co";
     public static final String SUPABASE_KEY = "sb_publishable_a07rZpPFzuy0BgrmCsr_Kw_Mq-TQ8x5";
     public static final String ADMIN_EMAIL = "lukas.leclerc312@gmail.com";
-    public static final String SITE = "https://yamonfim.vercel.app/";
+    public static final String SITE = "https://yamonfi.netlify.app/";
     public static final String TMDB_KEY = "af281c5089038e174e83c576ff765be9";
     public static final String USER_AGENT = "Mozilla/5.0 (Linux; Android 12; Android TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
@@ -98,7 +98,7 @@ public final class Api {
         if (result.status != 200 || data == null) throw new IOException("Le flux vidéo est indisponible. Réessaie dans un instant.");
         try {
             java.net.URI resolved = java.net.URI.create(SITE).resolve(data.optString("url", ""));
-            if (!"https".equals(resolved.getScheme()) || !"yamonfim.vercel.app".equals(resolved.getHost()) ||
+            if (!"https".equals(resolved.getScheme()) || !"yamonfi.netlify.app".equals(resolved.getHost()) ||
                 !"/api/proxy/stream.m3u8".equals(resolved.getPath()) || resolved.getUserInfo() != null || resolved.getPort() != -1)
                 throw new IOException("Adresse du flux invalide.");
             data.put("url", Logic.setParam(resolved.toString(), "profile", "android-tv"));

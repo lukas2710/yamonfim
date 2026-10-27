@@ -1,7 +1,7 @@
 // Fill in every « À COMPLÉTER » value before publishing: the law requires real identification.
 export const LEGAL = {
   siteName: 'YAMONFIM',
-  siteUrl: 'https://yamonfim.vercel.app', // À COMPLÉTER si le site a un autre domaine
+  siteUrl: 'https://yamonfi.netlify.app', // À COMPLÉTER si le site a un autre domaine
   publisher: 'À COMPLÉTER : nom et prénom, ou raison sociale',
   status: 'À COMPLÉTER : particulier / micro-entreprise / société (forme juridique)',
   address: 'À COMPLÉTER : adresse postale',

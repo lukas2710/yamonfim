@@ -26,7 +26,7 @@ for (const name of ['catalogue-films-moviez.html', 'catalogue-series-moviez.html
     if (!html.includes(actions)) throw Error('Actions introuvables');
     html = html.replace(actions, "actions.className='actions';actions.append(importButton(x));actions.append(");
   }
-  if (!html.includes('if(location.protocol==="file:")location.replace(')) html = html.replace('<head>', '<head><script>if(location.protocol==="file:")location.replace("https://yamonfim.vercel.app/catalogues/' + name + '");</script>');
+  if (!html.includes('if(location.protocol==="file:")location.replace(')) html = html.replace('<head>', '<head><script>if(location.protocol==="file:")location.replace("https://yamonfi.netlify.app/catalogues/' + name + '");</script>');
   const presenceStart = html.includes('const catalogueIdentity =') ? html.indexOf('const catalogueIdentity =') : html.indexOf('async function syncDatabase(){');
   const presenceEnd = html.indexOf("$('#syncNow').onclick=syncDatabase;", presenceStart);
   if (presenceStart < 0 || presenceEnd < 0) throw Error('Suivi du catalogue introuvable');

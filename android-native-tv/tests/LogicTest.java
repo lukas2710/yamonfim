@@ -103,7 +103,7 @@ public final class LogicTest {
         next.cancel(); check(!next.update(2970000,3000000,true,true), "annulation respectée");
         next.reset(); check(!next.update(2970000,3000000,true,false), "dernier épisode");
         check(Logic.isResolvedPlayer("/api/catalogue-player?tmdb=1396&type=tv&season=1&episode=2"), "catalogue résolu sans page 404");
-        check(!Logic.isResolvedPlayer("https://yamonfim.vercel.app.evil.test/api/catalogue-player?tmdb=1396&type=movie"), "hôte catalogue exact");
+        check(!Logic.isResolvedPlayer("https://yamonfi.netlify.app.evil.test/api/catalogue-player?tmdb=1396&type=movie"), "hôte catalogue exact");
         check(Logic.seekTarget(5000, -10000, 60000) == 0, "retour limité au début");
         check(Logic.seekTarget(55000, 30000, 60000) == 59000, "avance limitée à la fin");
         check(Logic.seekTarget(0, 10000, 500) == 0, "durée très courte");

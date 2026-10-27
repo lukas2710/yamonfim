@@ -146,7 +146,7 @@ public final class VipScreen extends Screen {
         p.addView(intro, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(8), 0, dp(14)));
         TextView steps = Ui.label(main,
                 "1.  Prends ton téléphone ou ton ordinateur\n"
-                        + "2.  Va sur yamonfim.vercel.app\n"
+                        + "2.  Va sur yamonfi.netlify.app\n"
                         + "3.  Connecte-toi avec le même compte : " + App.repo().email() + "\n"
                         + "4.  Ouvre « Abonnement » et choisis l'offre " + plan + "\n"
                         + "5.  Une fois ton accès VIP activé, relance l'application sur la TV",

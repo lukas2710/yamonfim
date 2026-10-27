@@ -86,7 +86,7 @@ public final class Dialogs {
         p.addView(Ui.label(main, "Tu as utilisé tes 5 visions gratuites.", 16, Ui.MUTED, false), Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(8), 0, 0));
         Countdown countdown = new Countdown(main, true);
         p.addView(countdown, Ui.lp(dp(560), Ui.WRAP, 0, dp(18), 0, dp(14)));
-        TextView pitch = Ui.label(main, "Tu ne veux pas de restriction ? Passe au VIP pour regarder sans limite.\nL'abonnement se prend sur ton téléphone ou ton ordinateur, sur yamonfim.vercel.app.", 15, Ui.TEXT, false);
+        TextView pitch = Ui.label(main, "Tu ne veux pas de restriction ? Passe au VIP pour regarder sans limite.\nL'abonnement se prend sur ton téléphone ou ton ordinateur, sur yamonfi.netlify.app.", 15, Ui.TEXT, false);
         pitch.setGravity(Gravity.CENTER);
         p.addView(pitch, Ui.lp(dp(540), Ui.WRAP));
         TextView benefits = Ui.label(main, "✓ Visionnage illimité     ✓ Tous les films et séries     ✓ Continue tes épisodes sans quota", 13, Ui.MUTED, false);
