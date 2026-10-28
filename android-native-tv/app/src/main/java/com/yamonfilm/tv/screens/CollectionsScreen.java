@@ -53,7 +53,7 @@ public final class CollectionsScreen extends Screen {
                 if (items.isEmpty()) continue;
                 Card card = new Card(main, 300, 169, true, true);
                 card.caption("COLLECTION · " + items.size() + " titre" + (items.size() > 1 ? "s" : ""), c.title);
-                String cover = c.safeCover().isEmpty() ? items.get(0).image() : c.safeCover();
+                String cover = (App.repo().childProfile() || c.safeCover().isEmpty()) ? items.get(0).image() : c.safeCover();
                 card.bindImage(Logic.tmdbSize(cover, "w780"), c.title);
                 card.setOnClickListener(v -> main.push(new BrowseScreen(main, c)));
                 cards.add(card);

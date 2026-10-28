@@ -331,6 +331,7 @@ public final class MainActivity extends Activity {
 
     /** Ouvre une rubrique, en conservant son état si elle a déjà été ouverte. */
     public void openRail(String id) {
+        if (App.repo().childProfile() && ("live".equals(id) || "requests".equals(id))) { toast("Cette rubrique est réservée aux profils Standard."); return; }
         Screen s = roots.get(id);
         if (s == null) {
             switch (id) {

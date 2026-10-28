@@ -4,6 +4,8 @@ import "./globals.css";
 import "./site-theme.css";
 import "./collections.css";
 import "./royal-theme.css";
+import ReviewPrompt from '@/components/ReviewPrompt';
+import ProfileAccess from '@/components/ProfileAccess';
 import SessionRecovery from "@/components/SessionRecovery";
 import PresenceTracker from "@/components/PresenceTracker";
 import SiteFooter from "@/components/SiteFooter";
@@ -46,7 +48,8 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-[#0a0a0b] text-white">
         <SessionRecovery />
         <PresenceTracker />
-        {children}
+        <ReviewPrompt />
+        <ProfileAccess>{children}</ProfileAccess>
         <SiteFooter />
       </body>
     </html>

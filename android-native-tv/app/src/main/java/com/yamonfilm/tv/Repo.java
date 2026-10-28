@@ -69,10 +69,12 @@ public final class Repo {
 
     // ------------------------------------------------------------ Catalogue (lib/catalogue.ts)
 
-    public static final String CARD_COLUMNS = "id,title,type,poster,backdrop,description,genres,tmdb_id";
+    public static final String CARD_COLUMNS = "id,title,type,poster,backdrop,description,genres,tmdb_id,audience,release_year";
 
-    public List<Media> catalogue() { return catalogue; }
-    public Media cached(String id) { return byId.get(id); }
+    public boolean childProfile() { return profile != null && !"standard".equals(profile.mode); }
+    public boolean allowed(Media media) { return media != null && Logic.canWatch(media.audience, profile == null ? "standard" : profile.mode); }
+    public List<Media> catalogue() { List<Media> visible = new ArrayList<>(); for (Media m : catalogue) if (allowed(m)) visible.add(m); return visible; }
+    public Media cached(String id) { Media m = byId.get(id); return allowed(m) ? m : null; }
 
     /** Catalogue enregistré lors de la dernière ouverture : affichage immédiat. */
     public boolean loadCachedCatalogue() {
@@ -84,7 +86,15 @@ public final class Repo {
         } catch (Exception e) { return false; }
     }
 
+    private void refreshActiveProfile() throws IOException {
+        Profile current = profile;
+        if (current == null) return;
+        JSONArray rows = api.select("user_profiles", new Q().select("*").eq("id", current.id).eq("user_id", requireUser()));
+        if (rows.length() == 0) { setProfile(null); throw new IOException("Choisis un profil pour continuer."); }
+        if (profile != null && current.id.equals(profile.id)) setProfile(Profile.from(rows.optJSONObject(0)));
+    }
     public List<Media> refreshCatalogue() throws IOException {
+        refreshActiveProfile();
         List<Media> rows = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         int total = Integer.MAX_VALUE, offset = 0;
@@ -122,9 +132,12 @@ public final class Repo {
     }
 
     public Media media(String id) throws IOException {
+        refreshActiveProfile();
         JSONArray rows = api.select("media", new Q().select("*").eq("id", id));
         if (rows.length() == 0) throw new IOException("Ce contenu n'existe pas ou n'est plus disponible.");
-        return Media.from(rows.optJSONObject(0));
+        Media media = Media.from(rows.optJSONObject(0));
+        if (!allowed(media)) throw new IOException("Ce contenu est indisponible pour ce profil.");
+        return media;
     }
 
     // ------------------------------------------------------------ Abonnement / quota (lib/subscription.ts)
@@ -202,17 +215,17 @@ public final class Repo {
         return api.select("profile_avatars", new Q().select("name,category,image_url").order("category.asc,name.asc"));
     }
 
-    public void saveProfile(String id, String name, String avatar) throws IOException {
+    public void saveProfile(String id, String name, String avatar, String mode) throws IOException {
         String uid = requireUser();
         JSONObject values = new JSONObject();
-        try { values.put("name", name.trim()); values.put("avatar_url", avatar); } catch (Exception ignored) { }
+        try { values.put("name", name.trim()); values.put("avatar_url", avatar); values.put("profile_mode", mode); } catch (Exception ignored) { }
         if (id == null) {
             try { values.put("user_id", uid); } catch (Exception ignored) { }
             api.insert("user_profiles", new JSONArray().put(values), null, false);
         } else {
             api.update("user_profiles", new Q().eq("id", id).eq("user_id", uid), values);
             Profile p = profile;
-            if (p != null && id.equals(p.id)) { Profile n = new Profile(); n.id = id; n.name = name.trim(); n.avatar = avatar; setProfile(n); }
+            if (p != null && id.equals(p.id)) { Profile n = new Profile(); n.id = id; n.name = name.trim(); n.avatar = avatar; n.mode = mode; setProfile(n); }
         }
     }
 
@@ -356,7 +369,7 @@ public final class Repo {
     public List<Media> collectionItems(Collection c) {
         List<Media> items = new ArrayList<>();
         Map<String, Media> index = byId;
-        for (String id : c.mediaIds) { Media m = index.get(id); if (m != null) items.add(m); }
+        for (String id : c.mediaIds) { Media m = index.get(id); if (allowed(m)) items.add(m); }
         return items;
     }
 

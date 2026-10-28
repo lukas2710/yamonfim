@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // The home page needs cards, not the large JSON season/episode player payloads.
-export const CATALOGUE_CARD_COLUMNS = 'id,title,type,poster,backdrop,description,genres,tmdb_id';
+export const CATALOGUE_CARD_COLUMNS = 'id,title,type,poster,backdrop,description,genres,tmdb_id,audience,release_year';
 export async function fetchCatalogueRows<T extends { id: string | number }>(client: SupabaseClient, columns: string, onPage?: (rows: T[]) => void): Promise<T[]> {
   const rows: T[] = [];
   let total = Infinity, offset = 0;

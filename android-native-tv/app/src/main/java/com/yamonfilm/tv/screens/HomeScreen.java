@@ -328,7 +328,7 @@ public final class HomeScreen extends Screen {
             Card c = new Card(main, 260, 146, true, true);
             c.data = col;
             c.caption("COLLECTION · " + items.size() + " titre" + (items.size() > 1 ? "s" : ""), col.title);
-            String cover = col.safeCover();
+            String cover = App.repo().childProfile() ? "" : col.safeCover();
             if (cover.isEmpty()) cover = items.get(0).image();
             c.bindImage(Logic.tmdbSize(cover, "w780"), "");
             c.setOnClickListener(v -> main.push(new BrowseScreen(main, col)));

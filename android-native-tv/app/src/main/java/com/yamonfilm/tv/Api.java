@@ -77,6 +77,8 @@ public final class Api {
     private JSONObject cachedPlayback;
     private long cachedUntil;
 
+    public synchronized void invalidatePlayback() { cachedPlayback = null; cachedUntil = 0; }
+
     public JSONObject playback(String source) throws IOException {
         return playback(source, new java.util.HashSet<>());
     }

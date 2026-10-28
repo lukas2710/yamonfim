@@ -106,6 +106,21 @@ public final class PlayerActivity extends Activity implements App.Alive {
     private String sourceUrl = "", activeEmbed = "";
     private final Set<String> failedEmbeds = new HashSet<>();
     private int recoveryAttempts;
+    private long loadingSince = -1;
+    private boolean recovering;
+    private void recoverStream() {
+        if (recovering || !alive) return;
+        recovering = true;
+        long saved = prepared ? safePosition() : resumeAtMs;
+        if (recoveryAttempts >= 3) { loadingSince = -1; showError("Le flux ne répond pas. Réessaie ou choisis une autre source."); return; }
+        recoveryAttempts++;
+        releasePlayer(); spinner.setVisibility(View.VISIBLE);
+        if (!activeEmbed.isEmpty()) failedEmbeds.add(activeEmbed);
+        App.repo().api.invalidatePlayback();
+        final int generation = openGeneration;
+        final String retrySource = sourceUrl;
+        App.MAIN.postDelayed(() -> { if (alive && generation == openGeneration) open(retrySource, saved); }, recoveryAttempts * 1000L);
+    }
 
     private final Runnable hideOverlay = () -> { if (player != null && prepared && player.isPlaying()) showOverlay(false); };
     private final Runnable commitSeek = this::commitSeek;
@@ -164,6 +179,7 @@ public final class PlayerActivity extends Activity implements App.Alive {
     private void open(String url, long resumeMs) {
         final int generation = ++openGeneration;
         autoNext.reset();
+        recovering = false; loadingSince = SystemClock.elapsedRealtime();
         creditsRequestKey = "";
         if (!url.equals(sourceUrl)) { failedEmbeds.clear(); recoveryAttempts = 0; }
         sourceUrl = url;
@@ -186,7 +202,7 @@ public final class PlayerActivity extends Activity implements App.Alive {
             final Set<String> excluded = new HashSet<>(failedEmbeds);
             App.io(this, () -> App.repo().api.playback(url, excluded), (data, error) -> {
                 if (generation != openGeneration) return;
-                if (error != null) { showError(App.message(error)); return; }
+                if (error != null) { recoverStream(); return; }
                 playbackBase = data.optString("url", "");
                 activeEmbed = data.optString("embed", "");
                 JSONArray tracks = data.optJSONArray("audioTracks");
@@ -271,7 +287,7 @@ public final class PlayerActivity extends Activity implements App.Alive {
             mp.setScreenOnWhilePlaying(true);
             mp.setOnPreparedListener(p -> {
                 if (p != player) return;
-                prepared = true;
+                prepared = true; loadingSince = -1;
                 spinner.setVisibility(View.GONE);
                 long duration = safeDuration();
                 boolean restoring = !live && resumeAtMs > 0 && duration > 0 && resumeAtMs < duration - 1000;
@@ -287,28 +303,20 @@ public final class PlayerActivity extends Activity implements App.Alive {
             });
             mp.setOnVideoSizeChangedListener((p, w, h) -> { videoW = w; videoH = h; fitSurface(); });
             mp.setOnInfoListener((p, what, extra) -> {
-                if (what == MediaPlayer.MEDIA_INFO_BUFFERING_START) spinner.setVisibility(View.VISIBLE);
-                else if (what == MediaPlayer.MEDIA_INFO_BUFFERING_END || what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) spinner.setVisibility(View.GONE);
+                if (p != player) return true;
+                if (what == MediaPlayer.MEDIA_INFO_BUFFERING_START) { if (loadingSince < 0) loadingSince = SystemClock.elapsedRealtime(); spinner.setVisibility(View.VISIBLE); }
+                else if (what == MediaPlayer.MEDIA_INFO_BUFFERING_END || what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) { loadingSince = -1; spinner.setVisibility(View.GONE); }
                 return false;
             });
             mp.setOnCompletionListener(p -> { if (p == player) onEnded(); });
             mp.setOnErrorListener((p, what, extra) -> {
                 if (p != player) return true;
-                if (!live && Logic.isResolvedPlayer(sourceUrl) && recoveryAttempts < 2) {
-                    long saved = prepared ? safePosition() : resumeAtMs;
-                    if (!activeEmbed.isEmpty()) failedEmbeds.add(activeEmbed);
-                    recoveryAttempts++;
-                    message("Nouvelle tentative avec une autre source compatible…");
-                    final String retrySource = sourceUrl;
-                    App.MAIN.post(() -> { if (alive && retrySource.equals(sourceUrl)) open(retrySource, saved); });
-                    return true;
-                }
-                showError(live ? "Cette chaîne est indisponible pour le moment. Essaie une autre chaîne." : "Ce flux est indisponible. Tu peux réessayer ou signaler le problème sur le site.");
+                recoverStream();
                 return true;
             });
             mp.prepareAsync();
         } catch (Exception e) {
-            showError("Ce flux ne peut pas être lu sur cette télévision.");
+            recoverStream();
         }
     }
 
@@ -931,6 +939,8 @@ public final class PlayerActivity extends Activity implements App.Alive {
 
     private void onTick() {
         if (!resumed) return;
+        if (direct && wantPlay && loadingSince >= 0 && SystemClock.elapsedRealtime() - loadingSince > 25000 && (prepared || !Logic.isResolvedPlayer(sourceUrl))) { recoverStream(); return; }
+        if (ended && autoNext.active() && !switching && !panelVisible()) { autoNext.cancel(); step(1); return; }
         long played = playedMs + (playingSince >= 0 ? SystemClock.elapsedRealtime() - playingSince : 0);
         if (direct) {
             boolean playing = player != null && prepared && player.isPlaying();
@@ -1041,6 +1051,7 @@ public final class PlayerActivity extends Activity implements App.Alive {
         errorExtra.setOnClickListener(v -> { if (live && errorExtra.getText().toString().startsWith("Chaîne")) zap(1); else finish(); });
         errorRetry.setOnClickListener(v -> {
             hideError();
+            recoveryAttempts = 0; failedEmbeds.clear(); App.repo().api.invalidatePlayback();
             if (live) open(ps.channels.get(ps.channel).url, 0);
             else open(media.playerUrl(season, episode), safePositionForRetry());
         });

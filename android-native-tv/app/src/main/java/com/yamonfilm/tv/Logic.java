@@ -25,6 +25,13 @@ public final class Logic {
         return Math.max(0, duration > 0 ? Math.min(Math.max(0, duration - 1000), target) : target);
     }
     private Logic() { }
+    public static boolean canWatch(String audience, String mode) {
+        return "standard".equals(mode) || "kids".equals(audience) || ("junior".equals(mode) && "junior".equals(audience));
+    }
+    public static int releaseYear(String title) {
+        Matcher m = Pattern.compile("\\((18[0-9]{2}|19[0-9]{2}|20[0-9]{2}|2100)\\)\\s*$").matcher(title == null ? "" : title);
+        return m.find() ? Integer.parseInt(m.group(1)) : 0;
+    }
 
     public static final int FREE_WATCH_LIMIT = 5;
     public static final long SEEN_DELAY_MS = 5000;
@@ -264,7 +271,7 @@ public final class Logic {
         public boolean update(long positionMs, long durationMs, boolean playing, boolean hasNext) {
             if (cancelled || !hasNext || durationMs < 60000 || positionMs < 0 || positionMs > durationMs) { remaining = -1; return false; }
             boolean validMarker = creditsStart >= 0 && creditsStart < durationMs && Math.abs(creditsDuration - durationMs) <= 2000;
-            long target = validMarker ? Math.min(creditsStart + 5000, durationMs) : durationMs - 30000;
+            long target = validMarker ? Math.min(creditsStart + 5000, durationMs) : durationMs;
             long left = target - positionMs;
             remaining = left > 0 && left <= 5000 ? (int) ((left + 999) / 1000) : left <= 0 ? 0 : -1;
             return playing && left <= 0;

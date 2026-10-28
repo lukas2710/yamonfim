@@ -13,6 +13,7 @@ interface Profile {
   id: string;
   name: string;
   avatar_url: string;
+  profile_mode?: string;
 }
 
 
@@ -29,6 +30,7 @@ export default function ProfilesPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
   const [profileName, setProfileName] = useState('');
+  const [profileMode, setProfileMode] = useState('standard');
   const [selectedAvatar, setSelectedAvatar] = useState(AVATAR_CATEGORIES[0].avatars[0].url);
 
   const fetchProfiles = useCallback(async () => {
@@ -90,6 +92,7 @@ export default function ProfilesPage() {
   const handleOpenCreate = () => {
     setEditingProfile(null);
     setProfileName('');
+    setProfileMode('standard');
     setSelectedAvatar(AVATAR_CATEGORIES[0].avatars[0].url);
     setShowModal(true);
   };
@@ -98,6 +101,7 @@ export default function ProfilesPage() {
     e.stopPropagation();
     setEditingProfile(profile);
     setProfileName(profile.name);
+    setProfileMode(profile.profile_mode || 'standard');
     setSelectedAvatar(profile.avatar_url || AVATAR_CATEGORIES[0].avatars[0].url);
     setShowModal(true);
   };
@@ -112,7 +116,7 @@ export default function ProfilesPage() {
     if (editingProfile) {
       const { error } = await supabase
         .from('user_profiles')
-        .update({ name: profileName.trim(), avatar_url: selectedAvatar })
+        .update({ name: profileName.trim(), avatar_url: selectedAvatar, profile_mode: profileMode })
         .eq('id', editingProfile.id).eq('user_id', userId);
       if (error) throw error;
 
@@ -122,7 +126,7 @@ export default function ProfilesPage() {
           try {
             const parsed = JSON.parse(active);
             if (parsed.id === editingProfile.id) {
-              localStorage.setItem('active_profile', JSON.stringify({ ...parsed, name: profileName.trim(), avatar_url: selectedAvatar }));
+              localStorage.setItem('active_profile', JSON.stringify({ ...parsed, name: profileName.trim(), avatar_url: selectedAvatar, profile_mode: profileMode }));
             }
           } catch {}
         }
@@ -132,7 +136,7 @@ export default function ProfilesPage() {
     } else {
       const { error } = await supabase
         .from('user_profiles')
-        .insert([{ user_id: userId, name: profileName.trim(), avatar_url: selectedAvatar }]);
+        .insert([{ user_id: userId, name: profileName.trim(), avatar_url: selectedAvatar, profile_mode: profileMode }]);
       if (error) throw error;
 
       if (!error) {
@@ -215,7 +219,7 @@ export default function ProfilesPage() {
                 </button>
               </div>
               <span className="text-zinc-400 group-hover:text-white font-medium text-sm sm:text-base tracking-wide transition">
-                {profile.name}
+                {profile.name}{profile.profile_mode === 'kids' ? ' · Kids' : profile.profile_mode === 'junior' ? ' · Junior' : ''}
               </span>
             </div>
           ))}
@@ -273,6 +277,11 @@ export default function ProfilesPage() {
                 />
               </div>
 
+              <label className="block text-sm">Type de profil
+                <select value={profileMode} onChange={e => setProfileMode(e.target.value)} className="mt-2 block w-full rounded-xl bg-zinc-900 p-3">
+                  <option value="standard">Standard — tout le catalogue</option><option value="kids">Kids — petits enfants</option><option value="junior">Junior — enfants plus grands</option>
+                </select><span className="mt-2 block text-xs text-zinc-400">Kids : titres validés pour les petits. Junior : titres Kids et Junior. Le choix du profil reste libre, sans code parental.</span>
+              </label>
               <AvatarPicker categories={avatarCategories(avatars)} selected={selectedAvatar} onSelect={setSelectedAvatar} />
               {avatarError && <p role="status" className="text-sm text-amber-200">{avatarError}</p>}
 

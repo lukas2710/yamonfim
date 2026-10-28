@@ -1,5 +1,6 @@
 'use client';
 
+import { canWatch, releaseYear } from '@/lib/profile-audience';
 import { getPersistentSession } from '@/lib/auth-session';
 
 import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
@@ -17,7 +18,6 @@ import PromoBanner from '@/components/PromoBanner';
 import HomeCollections from '@/components/HomeCollections';
 import TvAppAnnouncement from '@/components/TvAppAnnouncement';
 import DailyAdditions from '@/components/DailyAdditions';
-import ReviewPrompt from '@/components/ReviewPrompt';
 import { MarketingConsentBanner } from '@/components/MarketingConsent';
 import { parseBannerEntry, findSeason, type SeasonSummary } from '@/lib/banner-items';
 import { parseHeroSetting, pickHeroItems, HERO_SIZE } from '@/lib/home-hero';
@@ -31,6 +31,8 @@ interface MediaItem {
   url?: string;
   description: string;
   genres?: string[];
+  audience?: string;
+  release_year?: number;
   seasons?: any[];
   runtime?: number;
   heroSeason?: number;
@@ -207,6 +209,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [resultLimit, setResultLimit] = useState(60);
   const [selectedType, setSelectedType] = useState<'all' | 'movie' | 'series'>('all');
+  const [selectedYear, setSelectedYear] = useState('all');
   const [selectedGenre, setSelectedGenre] = useState<string>('all');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -251,6 +254,10 @@ export default function Home() {
           return;
         }
 
+        const verified = await supabase.from('user_profiles').select('*').eq('id', currentProfile.id).eq('user_id', user.id).single();
+        if (verified.error || !verified.data) { router.replace('/profiles'); return; }
+        currentProfile = verified.data;
+        localStorage.setItem('active_profile', JSON.stringify(currentProfile));
         setActiveProfile(currentProfile);
 
         let firstPageReady = false, accessReady = false;
@@ -261,7 +268,7 @@ export default function Home() {
           accessReady = true; reveal();
         });
         const catalogueTask = fetchCatalogueCards<MediaItem>(supabase, rows => {
-          setMediaList(rows); firstPageReady = true; reveal();
+          setMediaList(rows.filter(item => canWatch(item, currentProfile.profile_mode || 'standard'))); firstPageReady = true; reveal();
         }).finally(() => setCatalogueLoading(false));
         let watchedQuery = supabase.from('user_watched').select('media_id,ep_key,watched_at').eq('user_id', user.id);
         if (currentProfile?.id) watchedQuery = watchedQuery.eq('profile_id', currentProfile.id);
@@ -297,7 +304,7 @@ export default function Home() {
           return { ids, seasonsById: Object.fromEntries((seasonRows || []).map((row: { id: unknown; seasons: SeasonSummary[] }) => [String(row.id), row.seasons])) };
         }).then(setHero).catch(() => { /* The latest additions remain a valid carousel. */ });
         const historyTask = Promise.all([catalogueTask, watchedTask, progressTask]).then(([mediaData, watchedRes, progressRes]) => {
-          const byId = new Map(mediaData.map(item => [String(item.id), item]));
+          const byId = new Map(mediaData.filter(item => canWatch(item, currentProfile.profile_mode || 'standard')).map(item => [String(item.id), item]));
           // Un film regardé à 70 % ou plus ne reste pas dans « Reprendre ».
           const finishedMovies = new Set((progressRes.data || [])
             .filter(row => row.type === 'movie' && isMostlyWatched(Number(row.current_time), Number(row.duration)))
@@ -467,8 +474,9 @@ export default function Home() {
     const matches = createSearchMatcher(deferredQuery);
     return mediaList.filter(item => (selectedType === 'all' || item.type === selectedType)
       && (selectedGenre === 'all' || item.genres?.includes(selectedGenre))
+      && (selectedYear === 'all' || String(releaseYear(item)) === selectedYear)
       && matches(item.title, item.description, ...(item.genres || [])));
-  }, [mediaList, selectedType, selectedGenre, deferredQuery]);
+  }, [mediaList, selectedType, selectedGenre, selectedYear, deferredQuery]);
 
   const recentMovies: MediaItem[] = [];
   const recentSeries: MediaItem[] = [];
@@ -489,8 +497,8 @@ export default function Home() {
   }, [userEmail]);
   const userLimitReached = (!isVip && watchCount >= MAX_FREE_LIMIT) || quotaPreview;
   const isAdmin = userEmail === ADMIN_EMAIL;
-  const isFiltered = !!searchQuery || selectedGenre !== 'all' || selectedType !== 'all';
-  const showHero = !searchQuery && selectedType === 'all';
+  const isFiltered = selectedYear !== 'all' || !!searchQuery || selectedGenre !== 'all' || selectedType !== 'all';
+  const showHero = selectedYear === 'all' && !searchQuery && selectedType === 'all';
 
   if (loading) {
     return (
@@ -523,7 +531,6 @@ export default function Home() {
     <main className="yf-page yf-home min-h-screen max-w-[100vw] overflow-x-hidden bg-[#0a0a0b] pb-28 font-sans text-white antialiased selection:bg-red-600 selection:text-white sm:pb-16">
 
       {showVipModal && <QuotaUnlockModal onClose={() => setShowVipModal(false)} />}
-      {!showVipModal && <ReviewPrompt eligible={!!userEmail && (isVip || watchCount >= 2)} />}
 
       <header
         className={`fixed inset-x-0 top-0 z-50 transition-colors duration-300 ${
@@ -802,6 +809,7 @@ export default function Home() {
       {catalogueLoading && <p role="status" className="relative z-10 px-4 text-sm text-zinc-400 sm:px-10">Le reste du catalogue se charge… Les résultats se complètent automatiquement.</p>}
       <div id="catalogue-accueil" className={`relative z-10 scroll-mt-24 space-y-10 px-4 sm:px-10 ${showHero ? 'mt-2 sm:mt-4' : 'mt-6'}`}>
         {userLimitReached && <QuotaBanner />}
+        <div className="mx-auto max-w-[1800px] px-6 py-4"><label className="text-sm text-zinc-300">Année de sortie <select aria-label="Année de sortie" value={selectedYear} onChange={e => { setSelectedYear(e.target.value); setResultLimit(60); }} className="ml-3 rounded-xl border border-white/15 bg-zinc-900 p-3"><option value="all">Toutes les années</option>{[...new Set(mediaList.map(releaseYear).filter((year): year is number => year !== null))].sort((a, b) => b - a).map(year => <option key={year} value={year}>{year}</option>)}</select></label>{activeProfile?.profile_mode !== 'standard' && activeProfile?.profile_mode && <span className="ml-4 text-sm text-red-300">Univers {activeProfile.profile_mode === 'kids' ? 'Kids' : 'Junior'}</span>}</div>
         {userEmail && !searchQuery && <MarketingConsentBanner />}
         
         {continueWatchingList.length > 0 && !searchQuery && (
@@ -854,7 +862,7 @@ export default function Home() {
 
         {showHero && selectedGenre === 'all' && (
           <div className="-mx-4 sm:-mx-10">
-            <HomeCollections catalogue={mediaList} onOpen={item => void handleMediaClick(item)} admin={isAdmin} />
+            <HomeCollections child={!!activeProfile?.profile_mode && activeProfile.profile_mode !== 'standard'} catalogue={mediaList} onOpen={item => void handleMediaClick(item)} admin={isAdmin} />
           </div>
         )}
 
@@ -906,9 +914,9 @@ export default function Home() {
           <>
             <PromoBanner isVip={isVip} isAdmin={isAdmin} />
             <TvAppAnnouncement />
-            <DailyAdditions />
+            {(!activeProfile?.profile_mode || activeProfile.profile_mode === 'standard') && <DailyAdditions />}
 
-            {customBanners.map((banner: any) => {
+            {customBanners.filter(() => !activeProfile?.profile_mode || activeProfile.profile_mode === 'standard').map((banner: any) => {
               // Admin order is kept; a season entry shows the season poster and opens on it.
               const bannerMedia = (Array.isArray(banner.media_ids) ? banner.media_ids : []).flatMap((value: unknown) => {
                 const { mediaId, season } = parseBannerEntry(value);

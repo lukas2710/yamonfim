@@ -35,6 +35,7 @@ public final class ProfileEditScreen extends Screen {
     private final Profile editing;
     private EditText name;
     private String avatar;
+    private String mode = "standard";
     private final List<View> avatarViews = new ArrayList<>();
     private boolean saving;
     private LinearLayout grid;
@@ -44,6 +45,7 @@ public final class ProfileEditScreen extends Screen {
     public ProfileEditScreen(MainActivity main, Profile editing) {
         super(main);
         this.editing = editing;
+        if (editing != null) mode = editing.mode;
         avatar = editing != null && editing.avatar != null && !editing.avatar.isEmpty() ? editing.avatar : ProfilesScreen.AVATARS[0][1];
     }
 
@@ -61,6 +63,9 @@ public final class ProfileEditScreen extends Screen {
         name.setImeOptions(EditorInfo.IME_ACTION_DONE);
         if (editing != null) name.setText(editing.name);
         col.addView(name, Ui.lp(dp(460), Ui.WRAP, 0, dp(22), 0, 0));
+        TextView modeButton = Ui.button(main, "Profil : " + mode, 0, Ui.STYLE_NORMAL);
+        modeButton.setOnClickListener(v -> { mode = "standard".equals(mode) ? "kids" : "kids".equals(mode) ? "junior" : "standard"; modeButton.setText("Profil : " + mode); });
+        col.addView(modeButton, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(18), 0, 0));
         col.addView(Ui.label(main, "Choisis un avatar", 18, Ui.MUTED, true), Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(26), 0, dp(10)));
         grid = Ui.column(main);
         Ui.noClip(grid);
@@ -159,7 +164,7 @@ public final class ProfileEditScreen extends Screen {
         if (saving) return;
         saving = true;
         final String chosen = avatar;
-        io(() -> { App.repo().saveProfile(editing == null ? null : editing.id, value, chosen); return true; }, (ok, e) -> {
+        io(() -> { App.repo().saveProfile(editing == null ? null : editing.id, value, chosen, mode); return true; }, (ok, e) -> {
             saving = false;
             if (e != null) { fail(e); return; }
             main.toast(editing == null ? "Profil créé" : "Profil enregistré");

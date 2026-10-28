@@ -34,6 +34,7 @@ public final class SearchScreen extends Screen {
     private GridView grid;
     private Cards.MediaAdapter adapter;
     private int generation, columns;
+    private int selectedYear;
     private final Runnable runSearch = this::search;
 
     public SearchScreen(MainActivity main) { super(main); }
@@ -59,6 +60,15 @@ public final class SearchScreen extends Screen {
         left.addView(fieldBox, Ui.lp(dp(330), dp(58), 0, 0, 0, dp(18)));
         keyboard = new Keyboard(main, text -> render());
         left.addView(keyboard);
+        TextView yearButton = Ui.button(main, "Année : toutes", 0, Ui.STYLE_NORMAL);
+        yearButton.setOnClickListener(v -> {
+            java.util.TreeSet<Integer> years = new java.util.TreeSet<>(java.util.Collections.reverseOrder());
+            for (Media m : App.repo().catalogue()) if (m.releaseYear > 0) years.add(m.releaseYear);
+            java.util.List<Integer> options = new ArrayList<>(); options.add(0); options.addAll(years);
+            String[] labels = new String[options.size()]; for (int i=0; i<options.size(); i++) labels[i] = options.get(i) == 0 ? "Toutes les années" : String.valueOf(options.get(i));
+            new android.app.AlertDialog.Builder(main).setTitle("Année de sortie").setItems(labels, (dialog, index) -> { selectedYear = options.get(index); yearButton.setText("Année : " + labels[index]); search(); }).show();
+        });
+        left.addView(yearButton, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(12), 0, 0));
         TextView hint = Ui.label(main, "Les touches chiffres de la télécommande fonctionnent aussi.", 12, Ui.DIM, Ui.W_REGULAR);
         left.addView(hint, Ui.lp(dp(330), Ui.WRAP, 0, dp(14), 0, 0));
         row.addView(left, Ui.lp(dp(350), Ui.MATCH));
@@ -102,11 +112,12 @@ public final class SearchScreen extends Screen {
         final String q = keyboard.text();
         final int gen = ++generation;
         final List<Media> all = App.repo().catalogue();
+        final int year = selectedYear;
         App.io(this, () -> {
             List<Media> out = new ArrayList<>();
-            if (q.trim().isEmpty()) { for (int i = 0; i < all.size() && i < 40; i++) out.add(all.get(i)); return out; }
+            if (q.trim().isEmpty()) { for (int i = 0; i < all.size() && out.size() < 40; i++) if (year == 0 || all.get(i).releaseYear == year) out.add(all.get(i)); return out; }
             Logic.SearchMatcher matcher = new Logic.SearchMatcher(q);
-            for (Media m : all) if (matcher.matches(m.index())) out.add(m);
+            for (Media m : all) if ((year == 0 || m.releaseYear == year) && matcher.matches(m.index())) out.add(m);
             return out;
         }, (list, e) -> {
             if (gen != generation || list == null) return;

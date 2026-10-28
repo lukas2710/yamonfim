@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { readClientResource } from '@/lib/resource-cache';
 import { safeCollectionImage, type CollectionMedia, type MediaCollection } from '@/lib/collections';
 
-export default function HomeCollections<T extends CollectionMedia>({ catalogue, onOpen, admin }: { catalogue: T[]; onOpen: (item: T) => void; admin: boolean }) {
+export default function HomeCollections<T extends CollectionMedia>({ catalogue, onOpen, admin, child = false }: { catalogue: T[]; onOpen: (item: T) => void; admin: boolean; child?: boolean }) {
   const [collections, setCollections] = useState<MediaCollection[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState(false);
@@ -42,7 +42,7 @@ export default function HomeCollections<T extends CollectionMedia>({ catalogue, 
     {error && admin && <p role="status" className="yf-collection-empty">Les collections ne peuvent pas encore être chargées. Ouvre leur gestion pour vérifier la configuration.</p>}
     {!error && !visible.length && admin && <p className="yf-collection-empty">Crée ta première collection : Fast &amp; Furious, Star Wars, ou un univers de ton choix.</p>}
     <div className="yf-collection-grid">{visible.map(({ collection, items }) => {
-      const cover = safeCollectionImage(collection.cover_url) || items[0].backdrop || items[0].poster;
+      const cover = (!child && safeCollectionImage(collection.cover_url)) || items[0].backdrop || items[0].poster;
       return <button key={collection.id} ref={element => { if (element) cards.current.set(collection.id, element); else cards.current.delete(collection.id); }} className="yf-collection-card" aria-expanded={selected === collection.id} aria-controls="collection-titles" onClick={() => setSelected(selected === collection.id ? null : collection.id)}>
         {cover && <img src={cover} alt="" loading="lazy" />}<span className="yf-collection-shade" /><span className="yf-collection-count">{items.length} titre{items.length > 1 ? 's' : ''}</span><span className="yf-collection-card-copy"><span>COLLECTION</span><strong>{collection.title}</strong><span>Explorer l’univers <span aria-hidden="true">↗</span></span></span>
       </button>;

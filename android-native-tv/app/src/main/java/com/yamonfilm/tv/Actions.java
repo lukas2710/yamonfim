@@ -17,6 +17,7 @@ public final class Actions {
      */
     public static void openMedia(MainActivity main, Media media) {
         if (media == null) return;
+        if (!App.repo().allowed(media)) { main.toast("Ce contenu est indisponible pour ce profil."); return; }
         DetailScreen detail = new DetailScreen(main, media);
         main.push(detail);
         App.io(detail, () -> App.repo().quotaReached(), (reached, error) -> {
@@ -39,6 +40,7 @@ public final class Actions {
     /** Lance un épisode (ou le film) : réserve une vision, enregistre l'historique, ouvre le lecteur. */
     public static void play(MainActivity main, Media media, int s, int e, long resumeAt) {
         if (main.isLoading()) return;
+        if (!App.repo().allowed(media)) { main.toast("Ce contenu est indisponible pour ce profil."); return; }
         String url = media.playerUrl(s, e);
         if (url.isEmpty()) { main.toast("Aucun lecteur disponible pour cet épisode."); return; }
         Models.Episode ep = media.episode(s, e);
@@ -71,6 +73,7 @@ public final class Actions {
     }
 
     public static void playChannel(MainActivity main, List<Models.Channel> channels, int index) {
+        if (App.repo().childProfile()) { main.toast("La TV en direct est réservée aux profils Standard."); return; }
         PlayerSession ps = new PlayerSession();
         ps.live = true; ps.channels = channels; ps.channel = index; ps.url = channels.get(index).url;
         session = ps;
