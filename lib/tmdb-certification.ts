@@ -1,3 +1,5 @@
+import { isJapaneseAnimation } from './catalogue-categories';
+
 export const KIDS_MAX_AGE = 6;
 export const JUNIOR_MAX_AGE = 12;
 export type FamilyClassification = {
@@ -5,6 +7,8 @@ export type FamilyClassification = {
   tmdb_id: string; media_type: 'movie' | 'tv'; tmdb_title?: string;
   country: string | null; certification: string | null; min_age: number | null;
   adult: boolean; manual?: boolean;
+  // Japanese animation, shown in the Mangas section.
+  manga?: boolean;
 };
 type Rating = { country: string; rating: string };
 export function certificationAge(country: string, raw: string): number | null {
@@ -46,7 +50,7 @@ export function classificationFromTmdb(type: 'movie' | 'tv', id: string, data: R
   const selected = chooseCertification(ratings);
   return {source:'tmdb',checked_at:now,status:selected.min_age === null ? 'missing_rating' : 'rated',tmdb_id:id,media_type:type,
     tmdb_title: typeof data.title === 'string' ? data.title : typeof data.name === 'string' ? data.name : '',
-    ...selected,adult:data.adult === true};
+    ...selected,adult:data.adult === true,manga:isJapaneseAnimation(data)};
 }
 export function suggestedAudience(value: FamilyClassification): 'standard' | 'kids' | 'junior' | null {
   if (value.adult) return 'standard';

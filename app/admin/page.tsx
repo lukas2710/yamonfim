@@ -238,6 +238,26 @@ export default function AdminPage() {
     } catch { return ' Public Kids/Junior non déterminé : vérifie-le dans Admin → Kids & Junior.'; }
   };
 
+  // Tags titles without a French audio track as « Langue étrangère » from their stream.
+  const scanLanguage = async (id: unknown) => {
+    try {
+      const { data: { session } } = await getPersistentSession();
+      if (!session) return '';
+      const response = await fetch('/api/admin/language-scan', {
+        method: 'POST', signal: AbortSignal.timeout(55000),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ ids: [String(id)] }),
+      });
+      const result = (await response.json())?.results?.[0];
+      if (!response.ok || !result || result.french === null) return ' Langue audio non vérifiée.';
+      return result.french ? ' VF détectée.' : ' Pas de VF : placé dans Langue étrangère.';
+    } catch { return ' Langue audio non vérifiée.'; }
+  };
+  const afterSave = async (id: unknown) => {
+    const [family, language] = await Promise.all([classifyFamily(id), scanLanguage(id)]);
+    return family + language;
+  };
+
   const verifyExtraLink = async (link: string) => (await checkUrlAvailable(link)).available;
   const tmdbFallback = (kind: 'movie' | 'tv', season = 1, episode = 1) =>
     /^\d{1,10}$/.test(String(selectedTmdbId)) ? { id: String(selectedTmdbId), type: kind, season, episode } : undefined;
@@ -561,7 +581,7 @@ export default function AdminPage() {
       if (error) {
         setErrorMsg(duplicateErrorMessage(error, `Erreur modification : ${error.message}`));
       } else {
-        setMessage(`« ${title} » a été mis à jour.${await classifyFamily(editingId)}`);
+        setMessage(`« ${title} » a été mis à jour.${await afterSave(editingId)}`);
         handleCancel();
         fetchMedia();
       }
@@ -578,7 +598,7 @@ export default function AdminPage() {
             .eq('tmdb_id', selectedTmdbId).eq('type', type);
         }
 
-        setMessage(`« ${title} » a été ajouté au catalogue.${inserted ? await classifyFamily(inserted.id) : ''}`);
+        setMessage(`« ${title} » a été ajouté au catalogue.${inserted ? await afterSave(inserted.id) : ''}`);
         handleCancel();
         fetchMedia();
       }

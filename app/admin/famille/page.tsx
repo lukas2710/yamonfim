@@ -94,14 +94,39 @@ export default function FamilyAdmin() {
     } catch (e) { if (alive.current) setError(e instanceof Error?e.message:'Analyse interrompue. Les résultats déjà enregistrés sont conservés.'); }
     finally { scanningRef.current=false; if (alive.current) setScanning(false); }
   }
+  // Same batch loop, reading each title's stream to find titles without French audio.
+  async function scanLanguages(selection:Item[]) {
+    if (scanningRef.current||!selection.length) return;
+    scanningRef.current=true; stop.current=false; setScanning(true); setError(''); setStatus(''); setRowErrors({});
+    setProgress({done:0,total:selection.length,failed:0});
+    let done=0,failed=0,foreign=0;
+    try {
+      for (let offset=0;offset<selection.length&&!stop.current;offset+=4) {
+        const batch = selection.slice(offset,offset+4);
+        const {data:{session}} = await supabase.auth.getSession();
+        if (!session) throw new Error('Session expirée. Reconnecte-toi.');
+        const response = await fetch('/api/admin/language-scan',{method:'POST',signal:AbortSignal.timeout(58000),headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.access_token}`},body:JSON.stringify({ids:batch.map(item=>item.id)})});
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error||'Détection indisponible. Réessaie.');
+        if (!alive.current) return;
+        for (const row of payload.results as {id:string;foreign?:boolean;error?:string}[]) {
+          if (row.error) { failed++; setRowErrors(errors=>({...errors,[String(row.id)]:row.error!})); }
+          else if (row.foreign) foreign++;
+        }
+        done+=batch.length; setProgress({done,total:selection.length,failed});
+      }
+      if (alive.current) setStatus(stop.current?'Détection arrêtée. Les résultats déjà enregistrés sont conservés.':`Détection terminée : ${foreign} titre(s) sans VF placés dans Langue étrangère, ${failed} non vérifié(s).`);
+    } catch (e) { if (alive.current) setError(e instanceof Error?e.message:'Détection interrompue. Les résultats déjà enregistrés sont conservés.'); }
+    finally { scanningRef.current=false; if (alive.current) setScanning(false); }
+  }
   if (!ready) return <main className="p-10">Vérification…{error}</main>;
   return <main className="min-h-screen px-4 py-6 sm:px-8">
     <SectionNavigation admin />
     <div className="mx-auto max-w-6xl space-y-7 pb-16">
       <header className="pt-6"><p className="text-xs font-bold uppercase tracking-[.2em] text-red-400">LES BONS TITRES, AU BON ÂGE</p><h1 className="mt-3 text-3xl font-bold sm:text-4xl">Kids & Junior</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-400">TMDB fournit la classification d’âge : Kids jusqu’à 6 ans, Junior jusqu’à 12 ans. La France est prioritaire ; à défaut, le pays utilisé est indiqué. Sans âge fiable ou sans fiche TMDB, le titre reste à vérifier et n’entre pas automatiquement dans le catalogue enfants. Tes choix manuels sont conservés.</p></header>
       <section className="rounded-3xl border border-red-400/20 bg-gradient-to-br from-red-950/40 to-zinc-950 p-5 sm:p-7" aria-label="Analyse TMDB">
-        <div className="flex flex-wrap items-start justify-between gap-5"><div><h2 className="text-xl font-bold">Retrouve les titres qui demandent ton attention</h2><p className="mt-2 text-sm text-zinc-400">{counts.pending||0} à traiter · {counts.kids||0} Kids · {counts.junior||0} Junior</p><p className="mt-2 text-xs text-zinc-500">L’analyse enregistre les âges et classe les titres. Aucun film, série ou lien de lecture n’est supprimé.</p></div>
-          {scanning?<button onClick={()=>{stop.current=true;setStatus('Arrêt après le lot en cours…');}} className={inputClass}>Arrêter après ce lot</button>:<button disabled={!loaded||!!saving||!visible.length} onClick={()=>void analyse(visible)} className="rounded-full bg-red-600 px-6 py-3 text-sm font-bold disabled:opacity-40">Analyser et classer {visible.length} titre{visible.length>1?'s':''}</button>}</div>
+        <div className="flex flex-wrap items-start justify-between gap-5"><div><h2 className="text-xl font-bold">Retrouve les titres qui demandent ton attention</h2><p className="mt-2 text-sm text-zinc-400">{counts.pending||0} à traiter · {counts.kids||0} Kids · {counts.junior||0} Junior</p><p className="mt-2 text-xs text-zinc-500">L’analyse enregistre les âges, classe les titres et range l’animation japonaise dans Mangas. « Détecter les langues » lit le flux de chaque titre et range ceux sans VF dans Langue étrangère (plus long : quelques secondes par titre). Aucun film, série ou lien de lecture n’est supprimé.</p></div>
+          {scanning?<button onClick={()=>{stop.current=true;setStatus('Arrêt après le lot en cours…');}} className={inputClass}>Arrêter après ce lot</button>:<div className="flex flex-wrap gap-3"><button disabled={!loaded||!!saving||!visible.length} onClick={()=>void analyse(visible)} className="rounded-full bg-red-600 px-6 py-3 text-sm font-bold disabled:opacity-40">Analyser et classer {visible.length} titre{visible.length>1?'s':''}</button><button disabled={!loaded||!!saving||!visible.length} onClick={()=>void scanLanguages(visible)} title="Lit les pistes audio de chaque titre : sans VF, il passe dans Langue étrangère" className="rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm font-bold disabled:opacity-40">Détecter les langues ({visible.length})</button></div>}</div>
         {scanning&&<div className="mt-5" role="status"><p className="mb-2 text-sm">{progress.done} / {progress.total} traités{progress.failed?` · ${progress.failed} erreur(s)`:''} · garde cette page ouverte</p><progress aria-label="Progression de l’analyse TMDB" max={progress.total||1} value={progress.done} className="h-2 w-full accent-red-500" /></div>}
       </section>
       <div className="flex flex-wrap gap-2" aria-label="Filtrer le classement">{FILTERS.map(([key,label])=><button key={key} aria-pressed={filter===key} onClick={()=>{setFilter(key);setLimit(60);}} className={`rounded-full border px-4 py-2 text-sm ${filter===key?'border-white bg-white text-black':'border-white/10 bg-white/5 text-zinc-300'}`}>{label} <span className="ml-1 opacity-60">{counts[key]||0}</span></button>)}</div>

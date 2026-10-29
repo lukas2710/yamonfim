@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase';
 import { fetchSubscriptionProfile } from '@/lib/subscription';
 import { fetchPublicCatalogueCards } from '@/lib/client-catalogue';
 import { createSearchMatcher } from '@/lib/search';
+import { inCategory, isMainstream, MANGA_GENRE, FOREIGN_GENRE, type Category } from '@/lib/catalogue-categories';
 import { isMostlyWatched } from '@/lib/watch-progress';
 import QuotaUnlockModal, { LockedPosterOverlay, QuotaBanner, LockIcon } from '@/components/QuotaUnlockModal';
 import PromoBanner from '@/components/PromoBanner';
@@ -59,7 +60,7 @@ const MAX_FREE_LIMIT = 5;
 type IconName =
   | 'play' | 'info' | 'search' | 'close' | 'home' | 'film' | 'tv'
   | 'request' | 'history' | 'crown' | 'lock' | 'logout' | 'shield'
-  | 'chevronLeft' | 'chevronRight' | 'check' | 'user' | 'flame' | 'trash' | 'alert' | 'sparkles' | 'chart';
+  | 'chevronLeft' | 'chevronRight' | 'check' | 'user' | 'flame' | 'trash' | 'alert' | 'sparkles' | 'chart' | 'manga' | 'globe' | 'calendar';
 
 const ICONS: Record<IconName, React.ReactNode> = {
   play: <path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5Z" fill="currentColor" stroke="none" />,
@@ -84,7 +85,11 @@ const ICONS: Record<IconName, React.ReactNode> = {
   alert: <><circle cx="12" cy="12" r="9" /><path d="M12 8v4m0 4h.01" /></>,
   sparkles: <path d="m12 3 1.912 5.813a2 2 0 0 0 1.275 1.275L21 12l-5.813 1.912a2 2 0 0 0-1.275 1.275L12 21l-1.912-5.813a2 2 0 0 0-1.275-1.275L3 12l5.813-1.912a2 2 0 0 0 1.275-1.275L12 3Z" />,
   chart: <><path d="M3 3v18h18" /><path d="m7 14 4-4 4 4 5-6" /></>,
+  manga: <><path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z" /><path d="m8 8 3 3-3 3m5 0h3" /></>,
+  globe: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18" /></>,
+  calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4m8-4v4" /></>,
 };
+const CATEGORY_TITLES: Record<Category, string> = { all: 'Accueil', movie: 'Films', series: 'Séries', manga: 'Mangas', foreign: 'Langue étrangère' };
 
 function Icon({ name, className = 'w-4 h-4' }: { name: IconName; className?: string }) {
   return (
@@ -208,7 +213,7 @@ export default function Home() {
   const [loadError, setLoadError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [resultLimit, setResultLimit] = useState(60);
-  const [selectedType, setSelectedType] = useState<'all' | 'movie' | 'series'>('all');
+  const [selectedType, setSelectedType] = useState<Category>('all');
   const [selectedYear, setSelectedYear] = useState('all');
   const [selectedGenre, setSelectedGenre] = useState<string>('all');
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -405,10 +410,11 @@ export default function Home() {
     router.replace('/login');
   };
 
-  const selectType = (type: 'all' | 'movie' | 'series') => {
+  const selectType = (type: Category) => {
     setResultLimit(60);
     setSelectedType(type);
     setSelectedGenre('all');
+    setSelectedYear('all');
     setSearchQuery('');
     setSearchOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -436,9 +442,11 @@ export default function Home() {
 
   const dbGenres: string[] = [];
   for (const item of mediaList) {
-    if (selectedType === 'all' || item.type === selectedType) {
+    if (inCategory(item, selectedType)) {
       if (item.genres) {
         for (const g of item.genres) {
+          // The section's own tag is not a useful chip inside that section.
+          if ((selectedType === 'manga' && g === MANGA_GENRE) || (selectedType === 'foreign' && g === FOREIGN_GENRE)) continue;
           dbGenres.push(g);
         }
       }
@@ -472,7 +480,7 @@ export default function Home() {
   const deferredQuery = useDeferredValue(searchQuery);
   const filteredMedia = useMemo(() => {
     const matches = createSearchMatcher(deferredQuery);
-    return mediaList.filter(item => (selectedType === 'all' || item.type === selectedType)
+    return mediaList.filter(item => inCategory(item, selectedType)
       && (selectedGenre === 'all' || item.genres?.includes(selectedGenre))
       && (selectedYear === 'all' || String(releaseYear(item)) === selectedYear)
       && matches(item.title, item.description, ...(item.genres || [])));
@@ -481,6 +489,7 @@ export default function Home() {
   const recentMovies: MediaItem[] = [];
   const recentSeries: MediaItem[] = [];
   for (const item of filteredMedia) {
+    if (!isMainstream(item)) continue;
     if (item.type === 'movie') recentMovies.push(item);
     if (item.type === 'series') recentSeries.push(item);
   }
@@ -521,11 +530,8 @@ export default function Home() {
     );
   }
 
-  const navItems: { key: 'all' | 'movie' | 'series'; label: string }[] = [
-    { key: 'all', label: 'Accueil' },
-    { key: 'movie', label: 'Films' },
-    { key: 'series', label: 'Séries' },
-  ];
+  const navItems: { key: Category; label: string }[] = (['all', 'movie', 'series', 'manga', 'foreign'] as Category[]).map(key => ({ key, label: CATEGORY_TITLES[key] }));
+  const releaseYears = [...new Set(mediaList.filter(item => inCategory(item, selectedType)).map(releaseYear).filter((year): year is number => year !== null))].sort((a, b) => b - a);
 
   return (
     <main className="yf-page yf-home min-h-screen max-w-[100vw] overflow-x-hidden bg-[#0a0a0b] pb-28 font-sans text-white antialiased selection:bg-red-600 selection:text-white sm:pb-16">
@@ -781,9 +787,20 @@ export default function Home() {
 
       {selectedType !== 'all' && (
         <div className="px-4 pt-8 sm:px-10">
-          <h1 className="mb-4 text-3xl font-black tracking-tight sm:text-4xl">
-            {selectedType === 'movie' ? 'Films' : 'Séries'}
-          </h1>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h1 className="text-3xl font-black tracking-tight sm:text-4xl">{CATEGORY_TITLES[selectedType]}</h1>
+            {releaseYears.length > 0 && (
+              <label className={`group relative flex cursor-pointer items-center gap-2 rounded-full py-2 pl-3.5 pr-9 text-sm font-semibold ring-1 transition focus-within:ring-2 focus-within:ring-red-600 ${selectedYear === 'all' ? 'bg-white/5 text-zinc-300 ring-white/10 hover:bg-white/10 hover:text-white' : 'bg-red-600 text-white ring-red-500 shadow-[0_6px_24px_-8px_rgba(220,38,38,.8)]'}`}>
+                <Icon name="calendar" className="h-4 w-4 opacity-80" />
+                <span>{selectedYear === 'all' ? 'Toutes les années' : selectedYear}</span>
+                <Icon name="chevronRight" className="pointer-events-none absolute right-3 h-3.5 w-3.5 rotate-90 opacity-70 transition group-hover:translate-y-0.5" />
+                <select aria-label="Année de sortie" value={selectedYear} onChange={e => { setSelectedYear(e.target.value); setResultLimit(60); }} className="absolute inset-0 cursor-pointer opacity-0">
+                  <option value="all">Toutes les années</option>
+                  {releaseYears.map(year => <option key={year} value={year}>{year}</option>)}
+                </select>
+              </label>
+            )}
+          </div>
           <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-2 [-webkit-overflow-scrolling:touch] [scrollbar-width:none] sm:-mx-10 sm:px-10 [&::-webkit-scrollbar]:hidden">
             {['all', ...availableGenres].map((genre: string) => {
               const active = selectedGenre === genre;
@@ -809,7 +826,7 @@ export default function Home() {
       {catalogueLoading && <p role="status" className="relative z-10 px-4 text-sm text-zinc-400 sm:px-10">Le reste du catalogue se charge… Les résultats se complètent automatiquement.</p>}
       <div id="catalogue-accueil" className={`relative z-10 scroll-mt-24 space-y-10 px-4 sm:px-10 ${showHero ? 'mt-2 sm:mt-4' : 'mt-6'}`}>
         {userLimitReached && <QuotaBanner />}
-        <div className="mx-auto max-w-[1800px] px-6 py-4"><label className="text-sm text-zinc-300">Année de sortie <select aria-label="Année de sortie" value={selectedYear} onChange={e => { setSelectedYear(e.target.value); setResultLimit(60); }} className="ml-3 rounded-xl border border-white/15 bg-zinc-900 p-3"><option value="all">Toutes les années</option>{[...new Set(mediaList.map(releaseYear).filter((year): year is number => year !== null))].sort((a, b) => b - a).map(year => <option key={year} value={year}>{year}</option>)}</select></label>{activeProfile?.profile_mode !== 'standard' && activeProfile?.profile_mode && <span className="ml-4 text-sm text-red-300">Univers {activeProfile.profile_mode === 'kids' ? 'Kids' : 'Junior'}</span>}</div>
+        {activeProfile?.profile_mode !== 'standard' && activeProfile?.profile_mode && <p className="text-sm font-semibold text-red-300">Univers {activeProfile.profile_mode === 'kids' ? 'Kids' : 'Junior'}</p>}
         {userEmail && !searchQuery && <MarketingConsentBanner />}
         
         {continueWatchingList.length > 0 && !searchQuery && (
@@ -872,7 +889,7 @@ export default function Home() {
               <h2 className="text-lg font-bold tracking-tight sm:text-xl">
                 {searchQuery
                   ? <>Résultats pour « <span className="text-red-500">{searchQuery}</span> »</>
-                  : selectedGenre !== 'all' ? selectedGenre : 'Tout le catalogue'}
+                  : selectedGenre !== 'all' ? selectedGenre : selectedYear !== 'all' ? `${CATEGORY_TITLES[selectedType]} · ${selectedYear}` : 'Tout le catalogue'}
               </h2>
               <span className="text-sm text-zinc-500">
                 {filteredMedia.length} titre{filteredMedia.length > 1 ? 's' : ''}
@@ -1029,10 +1046,11 @@ export default function Home() {
             )}
 
             {availableGenres.map((genre: string) => {
-              const genreItems = mediaList.filter(m => m.genres && m.genres.includes(genre));
+              // Mangas and foreign-language titles appear only in their own rows.
+              const genreItems = mediaList.filter(m => m.genres && m.genres.includes(genre) && (genre === MANGA_GENRE || genre === FOREIGN_GENRE || isMainstream(m)));
               if (genreItems.length === 0) return null;
               return (
-                <Row key={genre} title={`Populaires en ${genre}`} onSeeAll={() => { setSelectedGenre(genre); setSelectedType('all'); setSearchQuery(''); }} icon={<Icon name="film" className="h-5 w-5 text-zinc-400" />}>
+                <Row key={genre} title={genre === MANGA_GENRE ? 'Mangas' : genre === FOREIGN_GENRE ? 'En langue étrangère' : `Populaires en ${genre}`} onSeeAll={() => { if (genre === MANGA_GENRE) selectType('manga'); else if (genre === FOREIGN_GENRE) selectType('foreign'); else { setSelectedGenre(genre); setSelectedType('all'); setSearchQuery(''); } }} icon={<Icon name="film" className="h-5 w-5 text-zinc-400" />}>
                   {genreItems.slice(0, 20).map((item: MediaItem) => (
                     <PosterCard
                       key={genre + '-' + item.id}
@@ -1090,8 +1108,9 @@ export default function Home() {
             { label: 'Accueil', icon: 'home', active: selectedType === 'all' && !searchQuery, onClick: () => selectType('all') },
             { label: 'Films', icon: 'film', active: selectedType === 'movie', onClick: () => selectType('movie') },
             { label: 'Séries', icon: 'tv', active: selectedType === 'series', onClick: () => selectType('series') },
+            { label: 'Mangas', icon: 'manga', active: selectedType === 'manga', onClick: () => selectType('manga') },
+            { label: 'VO', icon: 'globe', active: selectedType === 'foreign', onClick: () => selectType('foreign') },
             { label: 'Demandes', icon: 'request', active: false, onClick: () => router.push('/requests') },
-            { label: 'Signal', icon: 'alert', active: false, onClick: () => router.push('/report') },
           ] as { label: string; icon: IconName; active: boolean; onClick: () => void }[]).map(tab => (
             <button
               key={tab.label}
