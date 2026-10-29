@@ -87,3 +87,23 @@ export async function readRemoteText(response: Response, maximumBytes: number): 
     return text + decoder.decode();
   } finally { await reader.cancel(); reader.releaseLock(); }
 }
+
+export async function readRemoteBytes(response: Response, maximumBytes: number): Promise<Uint8Array> {
+  const reader = response.body?.getReader();
+  if (!reader) return new Uint8Array();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maximumBytes) throw new Error('Réponse distante trop volumineuse');
+      chunks.push(value);
+    }
+  } finally { await reader.cancel(); reader.releaseLock(); }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  return bytes;
+}

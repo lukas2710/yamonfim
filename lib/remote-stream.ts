@@ -52,3 +52,13 @@ export function selectHlsAudio(text: string, language: string): string {
     return /(?:[:,])DEFAULT=/.test(line) ? line.replace(/DEFAULT=(?:YES|NO)/, 'DEFAULT=YES') : line + ',DEFAULT=YES';
   }).join('\n');
 }
+
+// Some hosts store HLS segments on image CDNs: a small picture followed by the
+// unencrypted MPEG-TS data. Returns that data, or null when it is a real image.
+export function unwrapImageSegment(bytes: Uint8Array): Uint8Array | null {
+  const limit = Math.min(bytes.length - 376, 65536);
+  for (let i = 0; i < limit; i++) {
+    if (bytes[i] === 0x47 && bytes[i + 188] === 0x47 && bytes[i + 376] === 0x47) return bytes.subarray(i);
+  }
+  return null;
+}
