@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { fetchSubscriptionProfile } from '@/lib/subscription';
-import { fetchCatalogueCards } from '@/lib/client-catalogue';
+import { fetchPublicCatalogueCards } from '@/lib/client-catalogue';
 import { PLANS, RECOMMENDED_PLAN, formatEuro, perMonth, perWeek, savingPercent, checkoutUrl, expirationDate, nextSundayReset, type Plan } from './plans';
 import styles from './subscription.module.css';
 import sales from './sales.module.css';
@@ -101,7 +101,7 @@ export default function AbonnementPage() {
   }, [loadAccount]);
   useEffect(() => {
     let active = true;
-    fetchCatalogueCards<Poster>(supabase).then(rows => { if (active) setCatalogue(rows); }).catch(() => {});
+    fetchPublicCatalogueCards<Poster>(supabase).then(rows => { if (active) setCatalogue(rows); }).catch(() => {});
     return () => { active = false; };
   }, []);
   // Back from embedded Checkout: confirm the session with Stripe, then poll briefly

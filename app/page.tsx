@@ -10,7 +10,7 @@ import { prepareWatchMedia } from '@/lib/client-media';
 import { readClientResource } from '@/lib/resource-cache';
 import { supabase } from '@/lib/supabase';
 import { fetchSubscriptionProfile } from '@/lib/subscription';
-import { fetchCatalogueCards } from '@/lib/client-catalogue';
+import { fetchPublicCatalogueCards } from '@/lib/client-catalogue';
 import { createSearchMatcher } from '@/lib/search';
 import { isMostlyWatched } from '@/lib/watch-progress';
 import QuotaUnlockModal, { LockedPosterOverlay, QuotaBanner, LockIcon } from '@/components/QuotaUnlockModal';
@@ -267,7 +267,7 @@ export default function Home() {
           setWatchCount(profile?.watch_count || 0);
           accessReady = true; reveal();
         });
-        const catalogueTask = fetchCatalogueCards<MediaItem>(supabase, rows => {
+        const catalogueTask = fetchPublicCatalogueCards<MediaItem>(supabase, rows => {
           setMediaList(rows.filter(item => canWatch(item, currentProfile.profile_mode || 'standard'))); firstPageReady = true; reveal();
         }).finally(() => setCatalogueLoading(false));
         let watchedQuery = supabase.from('user_watched').select('media_id,ep_key,watched_at').eq('user_id', user.id);
