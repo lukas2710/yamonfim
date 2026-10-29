@@ -1,4 +1,4 @@
-import { mangaVerdict } from './catalogue-categories';
+import { mangaVerdict, isJapaneseAnimation } from './catalogue-categories';
 
 export const KIDS_MAX_AGE = 6;
 // Junior is for children under 12: a « -12 » (or 12+) rating never qualifies.
@@ -11,7 +11,14 @@ export type FamilyClassification = {
   // Japanese animation, shown in the Mangas section. manga_review: unsure, waiting
   // for the admin; manga_manual: the admin's answer, which every analysis keeps.
   manga?: boolean; manga_review?: boolean; manga_manual?: boolean;
+  // TMDB genre Family or Kids, or non-Japanese Animation: only these may reach Kids/Junior.
+  children?: boolean;
 };
+const CHILDREN_GENRE_IDS = [10751, 10762];
+function childrenGenre(data: Record<string, unknown>) {
+  const ids = Array.isArray(data.genres) ? (data.genres as {id?:unknown}[]).map(genre => genre?.id) : [];
+  return ids.some(id => CHILDREN_GENRE_IDS.includes(id as number)) || (ids.includes(16) && !isJapaneseAnimation(data));
+}
 type Rating = { country: string; rating: string };
 export function certificationAge(country: string, raw: string): number | null {
   const rating = raw.trim().toUpperCase();
@@ -52,11 +59,14 @@ export function classificationFromTmdb(type: 'movie' | 'tv', id: string, data: R
   const selected = chooseCertification(ratings);
   return {source:'tmdb',checked_at:now,status:selected.min_age === null ? 'missing_rating' : 'rated',tmdb_id:id,media_type:type,
     tmdb_title: typeof data.title === 'string' ? data.title : typeof data.name === 'string' ? data.name : '',
-    ...selected,adult:data.adult === true,manga:mangaVerdict(data) === true,manga_review:mangaVerdict(data) === null};
+    ...selected,adult:data.adult === true,
+    children:childrenGenre(data),
+    manga:mangaVerdict(data) === true,manga_review:mangaVerdict(data) === null};
 }
 export function suggestedAudience(value: FamilyClassification): 'standard' | 'kids' | 'junior' | null {
   if (value.adult) return 'standard';
   if (value.status !== 'rated' || value.min_age === null) return null;
+  if (value.children !== true) return 'standard';
   return value.min_age <= KIDS_MAX_AGE ? 'kids' : value.min_age <= JUNIOR_MAX_AGE ? 'junior' : 'standard';
 }
 export function needsFamilyReview(item: {audience: string; family_classification?: FamilyClassification | null}) {

@@ -29,7 +29,7 @@ export async function POST(request: Request) {
       try {
         const id = contentTmdbId(row), type = row.type === 'series' ? 'tv' : 'movie';
         const previous = row.family_classification;
-        const fresh = previous?.tmdb_id === id && previous.media_type === type && Date.now() - Date.parse(previous.checked_at) < 30 * 86400000 && typeof previous.manga_review === 'boolean';
+        const fresh = previous?.tmdb_id === id && previous.media_type === type && Date.now() - Date.parse(previous.checked_at) < 30 * 86400000 && typeof previous.manga_review === 'boolean' && typeof previous.children === 'boolean';
         let classification: FamilyClassification;
         if (fresh && body.refresh !== true) classification = {...previous};
         else if (!id) classification = {source:'tmdb',checked_at:new Date().toISOString(),status:'missing_id',tmdb_id:'',media_type:type,country:null,certification:null,min_age:null,adult:false,manga:false,manga_review:mangaVerdict(null,row.genres) === null};
