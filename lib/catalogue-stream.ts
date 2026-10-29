@@ -61,6 +61,17 @@ export function publishedEmbedLinks(html: string, base: string) {
   return [...new Set(values.flatMap(value => { try { const url = new URL(value, base); return url.protocol === 'https:' ? [url.href] : []; } catch { return []; } }))].slice(0, 12);
 }
 
+// EmbedOrigin publishes the exact length of the hosted release, which lets credits
+// providers return the timestamp matching that very file.
+export async function embedOriginDuration(embed: string, signal: AbortSignal) {
+  if (!isSupportedEmbed(embed)) return null;
+  const code = new URL(embed).pathname.split('/')[2];
+  const { response } = await fetchPublicRemote(`https://embedorigin.cc/app/v1/play/${code}?embed=1`, signal);
+  if (!response.ok) { await response.body?.cancel(); return null; }
+  const duration = Number(JSON.parse(await readRemoteText(response, 1_000_000)).duration);
+  return Number.isFinite(duration) && duration >= 300 && duration <= 28800 ? duration : null;
+}
+
 export async function resolveEmbed(embed: string, signal: AbortSignal, seen = new Set<string>(), depth = 0): Promise<{ url: string; audioTracks: ReturnType<typeof hlsAudioTracks>; quality?: StreamQuality }> {
   if (depth > 3 || seen.size >= 12 || seen.has(embed)) throw new Error('Embed non pris en charge');
   seen.add(embed);

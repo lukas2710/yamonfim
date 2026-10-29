@@ -1,9 +1,34 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseUrl, supabaseAnonKey } from '@/lib/supabase';
-import { catalogueSource, cataloguePlayer, isSupportedEmbed } from '@/lib/catalogue-source';
+import { catalogueSource, cataloguePlayer, isSupportedEmbed, type CatalogueSource } from '@/lib/catalogue-source';
 import * as cheerio from 'cheerio';
-import { resolveCatalogueStream, resolveEmbed, discoverCatalogueSource, EXTRA_PROVIDER } from '@/lib/catalogue-stream';
+import { resolveCatalogueStream, resolveEmbed, discoverCatalogueSource, embedOriginDuration, EXTRA_PROVIDER } from '@/lib/catalogue-stream';
+import { fetchEpisodeCredits } from '@/lib/episode-credits-providers';
+import { storedCredits, storeCredits } from '@/lib/episode-credits-store';
+
+// While a series is extracted, time its final credits for the exact lengths of the
+// collected releases, so the next episode starts at the right moment from the
+// first viewing. Returns the credits start times found; never fails the check.
+async function prefetchCredits(source: CatalogueSource, signal: AbortSignal) {
+  if (source.type !== 'tv') return [];
+  const deadline = AbortSignal.any([signal, AbortSignal.timeout(12000)]);
+  const embeds = [...(source.extras || []), ...(source.embeds || [])].filter(isSupportedEmbed).slice(0, 3);
+  const durations = (await Promise.all(embeds.map(embed => embedOriginDuration(embed, deadline).catch(() => null))))
+    .filter((value): value is number => value !== null)
+    .filter((value, index, all) => all.findIndex(other => Math.abs(other - value) <= 10) === index);
+  const key = `tmdb:${source.id}`;
+  const found = await Promise.all(durations.map(async duration => {
+    try {
+      const stored = await storedCredits([key], source.season, source.episode, duration);
+      if (stored.hit) return stored.marker?.start ?? null;
+      const { marker, incomplete } = await fetchEpisodeCredits(source.id, source.season, source.episode, { duration, signal: deadline });
+      await storeCredits(key, source.season, source.episode, duration, marker, incomplete);
+      return marker?.start ?? null;
+    } catch { return null; }
+  }));
+  return found.filter((value): value is number => value !== null);
+}
 
 export const runtime = 'nodejs';
 export async function POST(request: Request) {
@@ -33,7 +58,8 @@ export async function POST(request: Request) {
           }
           throw error;
         });
-        return NextResponse.json({ available: true, url: cataloguePlayer(collected), embed: stream.embed, embeds: collected.embeds, provider: stream.provider, streamVerified: true }, { headers });
+        const credits = await prefetchCredits(collected, signal);
+        return NextResponse.json({ available: true, url: cataloguePlayer(collected), embed: stream.embed, embeds: collected.embeds, provider: stream.provider, streamVerified: true, credits }, { headers });
       }
       if (!isSupportedEmbed(input)) return NextResponse.json({ available: false }, { headers });
       await resolveEmbed(input, signal);

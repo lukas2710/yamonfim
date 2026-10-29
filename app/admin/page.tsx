@@ -104,7 +104,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 const episodeCount = (seasons?: Season[] | null) =>
   (seasons || []).reduce((n, s) => n + (s.episodes?.length || 0), 0);
-interface SourceCheck { available: boolean; url?: string; provider?: string; streamVerified?: boolean; embeds?: string[] }
+interface SourceCheck { available: boolean; url?: string; provider?: string; streamVerified?: boolean; embeds?: string[]; credits?: number[] }
 
 export default function AdminPage() {
   const router = useRouter();
@@ -221,14 +221,31 @@ export default function AdminPage() {
     return checked;
   };
 
+  // Place every saved title in Kids / Junior from its TMDB age rating; manual choices are kept.
+  const classifyFamily = async (id: unknown) => {
+    try {
+      const { data: { session } } = await getPersistentSession();
+      if (!session) return '';
+      const response = await fetch('/api/admin/family-classification', {
+        method: 'POST', signal: AbortSignal.timeout(30000),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ ids: [String(id)] }),
+      });
+      const result = (await response.json())?.results?.[0];
+      if (!response.ok || !result || result.error) return ' Public Kids/Junior non déterminé : vérifie-le dans Admin → Kids & Junior.';
+      if (result.family_classification?.status !== 'rated' && !result.family_classification?.adult) return ' Pas d’âge sur TMDB : visible seulement pour les profils standard, à vérifier dans Kids & Junior.';
+      return result.audience === 'kids' ?' Classé Kids d’après TMDB.' : result.audience === 'junior' ? ' Classé Junior d’après TMDB.' : ' Réservé aux profils standard d’après TMDB.';
+    } catch { return ' Public Kids/Junior non déterminé : vérifie-le dans Admin → Kids & Junior.'; }
+  };
+
   const verifyExtraLink = async (link: string) => (await checkUrlAvailable(link)).available;
   const tmdbFallback = (kind: 'movie' | 'tv', season = 1, episode = 1) =>
-    /^d{1,10}$/.test(String(selectedTmdbId)) ? { id: String(selectedTmdbId), type: kind, season, episode } : undefined;
+    /^\d{1,10}$/.test(String(selectedTmdbId)) ? { id: String(selectedTmdbId), type: kind, season, episode } : undefined;
 
   const collectSeriesSources = async (input: Season[]) => {
     const collected = input.map(season => ({ ...season, episodes: season.episodes.map(episode => ({ ...episode })) }));
     const episodes = collected.flatMap(season => season.episodes).filter(episode => episode.embedUrl?.trim());
-    let cursor = 0, completed = 0, available = 0, links = 0;
+    let cursor = 0, completed = 0, available = 0, links = 0, credits = 0;
     setCollectionStatus(`Recherche automatique Moviez et Movix : 0/${episodes.length} épisodes…`);
     await Promise.all(Array.from({ length: Math.min(3, episodes.length) }, async () => {
       while (cursor < episodes.length) {
@@ -236,11 +253,12 @@ export default function AdminPage() {
         const checked = await checkUrlAvailable(episode.embedUrl);
         if (checked.available && checked.url) { available++; links += checked.embeds?.length || 1; episode.embedUrl = checked.url; }
         else episode.embedUrl = '';
+        if (checked.credits?.length) credits++;
         completed++;
-        setCollectionStatus(`Recherche automatique Moviez et Movix : ${completed}/${episodes.length} épisodes · ${links} liens trouvés`);
+        setCollectionStatus(`Recherche automatique Moviez et Movix : ${completed}/${episodes.length} épisodes · ${links} liens trouvés · ${credits} génériques minutés`);
       }
     }));
-    setCollectionStatus(`${links} liens collectés pour ${available}/${episodes.length} épisodes. Les épisodes sans source compatible restent indisponibles.`);
+    setCollectionStatus(`${links} liens collectés pour ${available}/${episodes.length} épisodes · ${credits} génériques minutés pour l’épisode suivant. Les épisodes sans source compatible restent indisponibles.`);
     return { seasons: collected, available };
   };
 
@@ -543,13 +561,13 @@ export default function AdminPage() {
       if (error) {
         setErrorMsg(duplicateErrorMessage(error, `Erreur modification : ${error.message}`));
       } else {
-        setMessage(`« ${title} » a été mis à jour.`);
+        setMessage(`« ${title} » a été mis à jour.${await classifyFamily(editingId)}`);
         handleCancel();
         fetchMedia();
       }
     } else {
       clearClientResources();
-      const { error } = await supabase.from('media').insert([payload]);
+      const { data: inserted, error } = await supabase.from('media').insert([payload]).select('id').single();
       if (error) {
         setErrorMsg(duplicateErrorMessage(error, `Erreur enregistrement Supabase : ${error.message}`));
       } else {
@@ -560,7 +578,7 @@ export default function AdminPage() {
             .eq('tmdb_id', selectedTmdbId).eq('type', type);
         }
 
-        setMessage(`« ${title} » a été ajouté au catalogue.`);
+        setMessage(`« ${title} » a été ajouté au catalogue.${inserted ? await classifyFamily(inserted.id) : ''}`);
         handleCancel();
         fetchMedia();
       }
