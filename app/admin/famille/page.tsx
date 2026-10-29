@@ -101,8 +101,10 @@ export default function FamilyAdmin() {
     setProgress({done:0,total:selection.length,failed:0});
     let done=0,failed=0,foreign=0;
     try {
-      for (let offset=0;offset<selection.length&&!stop.current;offset+=4) {
-        const batch = selection.slice(offset,offset+4);
+      for (let offset=0;offset<selection.length&&!stop.current;offset+=2) {
+        const batch = selection.slice(offset,offset+2);
+        // Two titles at a time with a pause: each check opens a real stream, and visitors must keep priority.
+        if (offset) await new Promise(resolve=>setTimeout(resolve,2000));
         const {data:{session}} = await supabase.auth.getSession();
         if (!session) throw new Error('Session expirée. Reconnecte-toi.');
         const response = await fetch('/api/admin/language-scan',{method:'POST',signal:AbortSignal.timeout(58000),headers:{'Content-Type':'application/json',Authorization:`Bearer ${session.access_token}`},body:JSON.stringify({ids:batch.map(item=>item.id)})});
