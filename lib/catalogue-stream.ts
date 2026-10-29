@@ -96,7 +96,7 @@ export async function resolveBestCatalogueStream(source: CatalogueSource, exclud
   if (!excluded.includes(primary)) {
     try {
       const stream = await dependencies.primary(primary, AbortSignal.any([signal, AbortSignal.timeout(12000)]));
-      return { ...stream, embed: primary, provider: 'Moviez', alternatives: [{ embed: primary, provider: 'Moviez', quality: stream.quality }] };
+      return { ...stream, embed: primary, provider: 'Moviez', alternatives: withExtras([{ embed: primary, provider: 'Moviez', quality: stream.quality }], source) };
     } catch {
       if (signal.aborted) throw signal.reason || new Error('Lecture annulée');
       excluded = [...excluded, primary];
@@ -118,7 +118,7 @@ export async function resolveBestCatalogueStream(source: CatalogueSource, exclud
       results.sort((a, b) => compareQuality(b.quality, a.quality) || a.index - b.index);
       if (signal.aborted) { reject(signal.reason || new Error('Lecture annulée')); return; }
       if (!results.length) { reject(new CatalogueStreamError(attempted, !discovered || queue.length > 0)); return; }
-      resolve({ ...results[0], alternatives: results.map(result => ({ embed: result.embed, provider: result.provider, quality: result.quality })) });
+      resolve({ ...results[0], alternatives: withExtras(results.map(result => ({ embed: result.embed, provider: result.provider, quality: result.quality })), source) });
     };
     const abort = () => finish();
     const add = (embeds: string[]) => {
@@ -133,7 +133,7 @@ export async function resolveBestCatalogueStream(source: CatalogueSource, exclud
         // Start Moviez immediately: secondary discovery must never gate it.
         void Promise.resolve().then(() => embed === primary ? dependencies.primary(embed, attemptSignal) : dependencies.resolve(embed, attemptSignal)).then(stream => {
           if (finished) return;
-          results.push({ ...stream, embed, provider: embed === primary ? 'Moviez' : 'Movix', index });
+          results.push({ ...stream, embed, provider: embed === primary ? 'Moviez' : source.extras?.includes(embed) ? EXTRA_PROVIDER : 'Movix', index });
           // Compare already responding providers briefly, never wait for a stalled one.
           if (!comparison) comparison = setTimeout(finish, 350);
         }).catch(() => { /* A failed provider must not cancel another valid source. */ }).finally(() => {
@@ -145,7 +145,7 @@ export async function resolveBestCatalogueStream(source: CatalogueSource, exclud
     };
     signal.addEventListener('abort', abort, { once: true });
     if (signal.aborted) { finish(); return; }
-    add([primary, ...(source.embeds || [])]);
+    add([primary, ...(source.extras || []), ...(source.embeds || [])]);
     pump();
     if (!discovered) void Promise.resolve().then(() => dependencies.embeds(source, workSignal, embeds => {
       if (!finished) { add(embeds); pump(); }
@@ -156,6 +156,12 @@ export async function resolveBestCatalogueStream(source: CatalogueSource, exclud
       if (!finished) pump();
     });
   });
+}
+
+export const EXTRA_PROVIDER = 'Lien ajouté';
+// Hand-added links stay selectable even when they were not tried or answered later.
+function withExtras(alternatives: { embed: string; provider: string; quality?: StreamQuality }[], source: CatalogueSource) {
+  return [...alternatives, ...(source.extras || []).filter(embed => !alternatives.some(option => option.embed === embed)).map(embed => ({ embed, provider: EXTRA_PROVIDER }))];
 }
 
 export class CatalogueStreamError extends Error {

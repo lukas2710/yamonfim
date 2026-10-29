@@ -563,7 +563,7 @@ export default function WatchPlayer({ src, title, resumeAt, controlRef, onProgre
           setSelectedSource(event.target.value); setError('');
           if (event.target.value) excludedEmbeds.current = excludedEmbeds.current.filter(embed => embed !== event.target.value);
           setRetry(value => value + 1); reveal();
-        }}><option value="">Automatique</option>{sourceOptions.map((option, index) => <option key={option.embed} value={option.embed}>Source {index + 1} · {option.quality?.height ? `${option.quality.height}p` : 'qualité inconnue'} · {new URL(option.embed).hostname}</option>)}</select></label>}
+        }}><option value="">Automatique</option>{sourceOptions.map((option, index) => <option key={option.embed} value={option.embed}>Source {index + 1} · {option.quality?.height ? `${option.quality.height}p` : 'qualité inconnue'} · {option.provider === 'Lien ajouté' ? option.provider : new URL(option.embed).hostname}</option>)}</select></label>}
         <label className={styles.audioLabel}>
           <span>Langue audio</span>
           <select className={styles.audioSelect} aria-label="Langue audio" title={audioTracks.length > 1 ? 'Changer la langue audio' : 'Cette vidéo ne propose pas plusieurs pistes audio'}

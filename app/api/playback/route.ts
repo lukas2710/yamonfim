@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseUrl, supabaseAnonKey } from '@/lib/supabase';
 import { catalogueSource, isSupportedEmbed, MAX_SOURCE_EMBEDS, primaryEmbed } from '@/lib/catalogue-source';
-import { resolveBestCatalogueStream, resolveEmbed, CatalogueStreamError, discoverCatalogueSource } from '@/lib/catalogue-stream';
+import { resolveBestCatalogueStream, resolveEmbed, CatalogueStreamError, discoverCatalogueSource, EXTRA_PROVIDER } from '@/lib/catalogue-stream';
 
 export const runtime = 'nodejs';
 
@@ -22,10 +22,10 @@ export async function POST(request: Request) {
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(55000)]);
     if (typeof body?.selected === 'string' && body.selected) {
       const collected = typeof source === 'string' ? null : source.embeds?.length ? source : await discoverCatalogueSource(source, signal);
-      const allowed = collected ? [primaryEmbed(collected), ...(collected.embeds || [])] : [source];
+      const allowed = collected ? [primaryEmbed(collected), ...(collected.extras || []), ...(collected.embeds || [])] : [source];
       if (!allowed.includes(body.selected) || !(isSupportedEmbed(body.selected) || (typeof source !== 'string' && body.selected === primaryEmbed(source)))) return NextResponse.json({ error: 'Source non disponible pour ce titre.' }, { status: 400, headers });
       const stream = await resolveEmbed(body.selected, signal);
-      return NextResponse.json({ url: `/api/proxy/stream.m3u8?url=${encodeURIComponent(stream.url)}`, audioTracks: stream.audioTracks, embed: body.selected, provider: new URL(body.selected).hostname, quality: stream.quality }, { headers });
+      return NextResponse.json({ url: `/api/proxy/stream.m3u8?url=${encodeURIComponent(stream.url)}`, audioTracks: stream.audioTracks, embed: body.selected, provider: typeof source !== 'string' && source.extras?.includes(body.selected) ? EXTRA_PROVIDER : new URL(body.selected).hostname, quality: stream.quality }, { headers });
     }
     const stream = typeof source === 'string'
       ? { ...await resolveEmbed(source, signal), embed: source, provider: 'EmbedOrigin' }

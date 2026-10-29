@@ -8,6 +8,7 @@ import { createSearchMatcher, searchQueryVariants } from '@/lib/search';
 import SectionNavigation from '@/components/SectionNavigation';
 import PageHero from '@/components/PageHero';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import ExtraLinks from './ExtraLinks';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
@@ -219,6 +220,10 @@ export default function AdminPage() {
     }
     return checked;
   };
+
+  const verifyExtraLink = async (link: string) => (await checkUrlAvailable(link)).available;
+  const tmdbFallback = (kind: 'movie' | 'tv', season = 1, episode = 1) =>
+    /^d{1,10}$/.test(String(selectedTmdbId)) ? { id: String(selectedTmdbId), type: kind, season, episode } : undefined;
 
   const collectSeriesSources = async (input: Season[]) => {
     const collected = input.map(season => ({ ...season, episodes: season.episodes.map(episode => ({ ...episode })) }));
@@ -876,6 +881,8 @@ export default function AdminPage() {
                       placeholder='<iframe src="…"></iframe>'
                       className={`${inputClass} resize-none font-mono text-xs`}
                     />
+                    <ExtraLinks value={url} fallback={tmdbFallback('movie')} verify={verifyExtraLink} onChange={setUrl} disabled={loading} />
+                    {isEditing && <p className="mt-1.5 text-[11px] text-zinc-500">Clique sur Enregistrer en bas pour appliquer les sources ajoutées ou retirées.</p>}
                   </Field>
                 )}
               </div>
@@ -913,7 +920,8 @@ export default function AdminPage() {
                           {open && (
                             <div className="max-h-96 space-y-2 overflow-y-auto border-t border-white/5 p-3">
                               {season.episodes.map((ep, eIndex) => (
-                                <div key={eIndex} className="flex flex-col gap-2 rounded-xl bg-white/[0.03] p-2.5 sm:flex-row sm:items-center">
+                                <div key={eIndex} className="space-y-2 rounded-xl bg-white/[0.03] p-2.5">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                                   <span className="w-10 shrink-0 text-xs font-bold text-zinc-500">É{ep.number}</span>
                                   <input
                                     type="text"
@@ -931,6 +939,11 @@ export default function AdminPage() {
                                     }`}
                                   />
                                   {editingId != null && <button type="button" disabled={loading || !ep.embedUrl?.trim()} onClick={() => void saveEpisodeLink(ep.sourcePosition?.s ?? sIndex, ep.sourcePosition?.e ?? eIndex)} aria-label={`Enregistrer le lien de la ${seasonUnit} ${season.seasonNumber}, épisode ${ep.number}`} className="shrink-0 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40">Enregistrer ce lien</button>}
+                                </div>
+                                <div className="sm:pl-12">
+                                  <ExtraLinks compact value={ep.embedUrl} fallback={tmdbFallback('tv', season.seasonNumber, ep.number)} verify={verifyExtraLink}
+                                    onChange={stored => updateEpisodeField(ep.sourcePosition?.s ?? sIndex, ep.sourcePosition?.e ?? eIndex, 'embedUrl', stored)} disabled={loading} />
+                                </div>
                                 </div>
                               ))}
                             </div>

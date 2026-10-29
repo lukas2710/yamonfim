@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabaseUrl, supabaseAnonKey } from '@/lib/supabase';
 import { catalogueSource, cataloguePlayer, isSupportedEmbed } from '@/lib/catalogue-source';
 import * as cheerio from 'cheerio';
-import { resolveCatalogueStream, resolveEmbed, discoverCatalogueSource } from '@/lib/catalogue-stream';
+import { resolveCatalogueStream, resolveEmbed, discoverCatalogueSource, EXTRA_PROVIDER } from '@/lib/catalogue-stream';
 
 export const runtime = 'nodejs';
 export async function POST(request: Request) {
@@ -26,7 +26,13 @@ export async function POST(request: Request) {
       // its signed temporary stream. Resolve a fresh stream at playback.
       if (source) {
         const collected = await discoverCatalogueSource(source, signal);
-        const stream = await resolveCatalogueStream(collected, [], signal);
+        const stream = await resolveCatalogueStream(collected, [], signal).catch(async error => {
+          // A hand-added link is enough when Moviez and Movix have nothing.
+          for (const extra of collected.extras || []) {
+            try { await resolveEmbed(extra, signal); return { embed: extra, provider: EXTRA_PROVIDER }; } catch { if (signal.aborted) break; }
+          }
+          throw error;
+        });
         return NextResponse.json({ available: true, url: cataloguePlayer(collected), embed: stream.embed, embeds: collected.embeds, provider: stream.provider, streamVerified: true }, { headers });
       }
       if (!isSupportedEmbed(input)) return NextResponse.json({ available: false }, { headers });
