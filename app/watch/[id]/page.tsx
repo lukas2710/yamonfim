@@ -8,7 +8,7 @@ import { loadWatchMedia } from '@/lib/client-media';
 import { withTimeout } from '@/lib/with-timeout';
 import WatchPlayer, { type WatchPlayerControl } from '@/components/WatchPlayer';
 import { playbackRequest } from '@/lib/playback-request';
-import { isNativePlayback as isDirectVideo, isCompleted, sameEpisode, playbackProgress, preparePlayerUrl, nextEpisodePosition as nextPositionOf } from '@/lib/watch-progress';
+import { isNativePlayback as isDirectVideo, isCompleted, sameEpisode, playbackProgress, preparePlayerUrl, nextEpisodePosition as nextPositionOf, episodeFinished, resumeStart } from '@/lib/watch-progress';
 import { episodeCreditsDecision, playbackCreditsMarker, type CreditsMarker } from '@/lib/episode-credits';
 import { creditsTmdb } from '@/lib/credits-identity';
 import useDelayedSeen from '@/components/useDelayedSeen';
@@ -377,14 +377,23 @@ export default function WatchPage() {
           if (!userHistory || lastPlaybackRef.current) return;
           const seasons = item.seasons || [];
           const historyPosition = storedToDisplay(item, userHistory.season_idx || 0, userHistory.episode_idx || 0);
-          const historySeason = clampIndex(historyPosition.s, seasons.length);
-          const historyEpisode = clampIndex(historyPosition.e, seasons[historySeason]?.episodes?.length || 0);
+          let historySeason = clampIndex(historyPosition.s, seasons.length);
+          let historyEpisode = clampIndex(historyPosition.e, seasons[historySeason]?.episodes?.length || 0);
+          let historyTime = userHistory.current_time || 0;
+          // Left during the credits (or finished): resume on the next episode from its start,
+          // and a finished movie starts over instead of replaying its last seconds.
+          const historyDuration = userHistory.duration || 0;
+          if (item.type === 'series' ? episodeFinished(historyTime, historyDuration) : isCompleted(historyTime, historyDuration)) {
+            const next = item.type === 'series' ? nextPositionOf(seasons, { s: historySeason, e: historyEpisode }) : null;
+            if (next) { historySeason = next.s; historyEpisode = next.e; }
+            historyTime = 0;
+          }
           if (sParam === null || eParam === null) {
             setSelectedSeasonIdx(historySeason); setSelectedEpisodeIdx(historyEpisode);
             posRef.current = { s: historySeason, e: historyEpisode };
           }
-          resumeProgressRef.current = { position: { s: historySeason, e: historyEpisode }, time: userHistory.current_time || 0, duration: userHistory.duration || 0 };
-          currentProgressRef.current = playbackProgress(userHistory.current_time || 0, userHistory.duration || 0);
+          resumeProgressRef.current = { position: { s: historySeason, e: historyEpisode }, time: historyTime, duration: historyTime ? historyDuration : 0 };
+          currentProgressRef.current = playbackProgress(historyTime, historyTime ? historyDuration : 0);
           lastPlaybackRef.current = resumeProgressRef.current.position;
           if (item.type === 'series') setResumePos({ s: historySeason, e: historyEpisode });
           else setHasMovieHistory(true);
@@ -585,7 +594,8 @@ export default function WatchPage() {
 
       setStableUrl(playerUrl);
       setNextCountdown(null);
-      setResumeAt(progress.currentTime);
+      // Replay a few seconds so the viewer finds the thread again.
+      setResumeAt(resumeStart(progress.currentTime));
       setShowAdPopup(!continuePlayback);
       setIsPlaying(true);
     } catch (error) {

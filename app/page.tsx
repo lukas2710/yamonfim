@@ -13,7 +13,7 @@ import { fetchSubscriptionProfile } from '@/lib/subscription';
 import { fetchPublicCatalogueCards } from '@/lib/client-catalogue';
 import { createSearchMatcher } from '@/lib/search';
 import { inCategory, isMainstream, MANGA_GENRE, FOREIGN_GENRE, type Category } from '@/lib/catalogue-categories';
-import { isMostlyWatched } from '@/lib/watch-progress';
+import { continueWatchingEntries } from '@/lib/watch-progress';
 import QuotaUnlockModal, { LockedPosterOverlay, QuotaBanner, LockIcon } from '@/components/QuotaUnlockModal';
 import PromoBanner from '@/components/PromoBanner';
 import HomeCollections from '@/components/HomeCollections';
@@ -45,6 +45,10 @@ interface MediaItem {
     episodeNumber: number;
     currentTime?: number;
     duration?: number;
+    // From the viewing history: the watch page itself picks the exact episode and time.
+    fromHistory?: boolean;
+    ratio?: number;
+    finished?: boolean;
   };
 }
 
@@ -278,7 +282,7 @@ export default function Home() {
         let watchedQuery = supabase.from('user_watched').select('media_id,ep_key,watched_at').eq('user_id', user.id);
         if (currentProfile?.id) watchedQuery = watchedQuery.eq('profile_id', currentProfile.id);
         const watchedTask = watchedQuery.order('watched_at', { ascending: false });
-        let progressQuery = supabase.from('watch_history').select('media_id,type,current_time,duration').eq('user_id', user.id);
+        let progressQuery = supabase.from('watch_history').select('media_id,type,current_time,duration,season_number,episode_number,updated_at').eq('user_id', user.id);
         if (currentProfile?.id) progressQuery = progressQuery.eq('profile_id', currentProfile.id);
         const progressTask = progressQuery.then(result => result, () => ({ data: null }));
         const bannerTask = readClientResource('home:banners', async () => {
@@ -310,14 +314,17 @@ export default function Home() {
         }).then(setHero).catch(() => { /* The latest additions remain a valid carousel. */ });
         const historyTask = Promise.all([catalogueTask, watchedTask, progressTask]).then(([mediaData, watchedRes, progressRes]) => {
           const byId = new Map(mediaData.filter(item => canWatch(item, currentProfile.profile_mode || 'standard')).map(item => [String(item.id), item]));
-          // Un film regardé à 70 % ou plus ne reste pas dans « Reprendre ».
-          const finishedMovies = new Set((progressRes.data || [])
-            .filter(row => row.type === 'movie' && isMostlyWatched(Number(row.current_time), Number(row.duration)))
-            .map(row => String(row.media_id)));
+          // « Reprendre » suit l'historique de lecture (dernier titre regardé en premier) :
+          // films en cours jusqu'à leur générique, séries sur l'épisode en cours ou le suivant.
           const resume = new Map<string, MediaItem>();
+          for (const entry of continueWatchingEntries(progressRes.data || [], id => byId.has(id))) {
+            resume.set(entry.id, { ...byId.get(entry.id)!, progress: { seasonIdx: 0, episodeIdx: 0, seasonNumber: entry.seasonNumber, episodeNumber: entry.episodeNumber, fromHistory: true, ratio: entry.ratio, finished: entry.finished } });
+          }
+          // Older series watched before the viewing history existed keep their last episode.
+          const historyIds = new Set((progressRes.data || []).map(row => String(row.media_id)));
           for (const watched of watchedRes.data || []) {
             const id = String(watched.media_id), item = byId.get(id);
-            if (!item || resume.has(id) || (item.type === 'movie' && finishedMovies.has(id))) continue;
+            if (!item || resume.has(id) || historyIds.has(id) || item.type === 'movie') continue;
             const match = /^s(\d+)_e(\d+)$/.exec(watched.ep_key || '');
             const seasonIdx = match ? Number(match[1]) : 0, episodeIdx = match ? Number(match[2]) : 0;
             resume.set(id, { ...item, progress: { seasonIdx, episodeIdx, seasonNumber: seasonIdx + 1, episodeNumber: episodeIdx + 1 } });
@@ -365,6 +372,8 @@ export default function Home() {
     }
     if (item.type === 'series' && startSeason !== null) {
       router.push(`/watch/${item.id}?s=${startSeason}&e=0`);
+    } else if (item.progress?.fromHistory) {
+      router.push(`/watch/${item.id}`);
     } else if (item.type === 'series' && item.progress) {
       router.push(`/watch/${item.id}?s=${item.progress.seasonIdx}&e=${item.progress.episodeIdx}`);
     } else {
@@ -382,12 +391,15 @@ export default function Home() {
         .delete()
         .eq('user_id', currentUserId)
         .eq('media_id', String(mediaId));
+      // « Reprendre » now reads the viewing history: remove that entry too.
+      let historyDelete = supabase.from('watch_history').delete().eq('user_id', currentUserId).eq('media_id', String(mediaId));
 
       if (activeProfile?.id) {
         deleteQuery = deleteQuery.eq('profile_id', activeProfile.id);
+        historyDelete = historyDelete.eq('profile_id', activeProfile.id);
       }
 
-      const { error } = await deleteQuery;
+      const [{ error }] = await Promise.all([deleteQuery, historyDelete]);
 
       if (!error) {
         const updatedList: MediaItem[] = [];
@@ -867,10 +879,17 @@ export default function Home() {
                 <div className="absolute inset-x-0 bottom-0 p-3.5">
                   <span className="mb-0.5 block text-[10px] font-bold uppercase tracking-wider text-red-500">
                     {item.type === 'series' && item.progress
-                      ? `Saison ${item.progress.seasonNumber} · Épisode ${item.progress.episodeNumber}`
+                      ? item.progress.finished
+                        ? `Épisode suivant · après S${item.progress.seasonNumber} É${item.progress.episodeNumber}`
+                        : `Saison ${item.progress.seasonNumber} · Épisode ${item.progress.episodeNumber}`
                       : 'Film'}
                   </span>
                   <h3 className="truncate text-sm font-bold text-white">{item.title}</h3>
+                  {!!item.progress?.ratio && !item.progress.finished && (
+                    <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/20" aria-label={`Vu à ${Math.round(item.progress.ratio * 100)} %`}>
+                      <div className="h-full rounded-full bg-red-600" style={{ width: `${Math.max(3, Math.round(item.progress.ratio * 100))}%` }} />
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

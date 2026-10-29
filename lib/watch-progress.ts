@@ -23,8 +23,32 @@ export function playbackProgress(currentTime: number, duration: number) {
   const total = Number.isFinite(duration) && duration > 0 ? duration : 0;
   return { currentTime: Number.isFinite(currentTime) ? Math.max(0, total ? Math.min(currentTime, total) : currentTime) : 0, duration: total };
 }
-/** Un film vu à 70 % ou plus quitte « Reprendre ». */
-export const RESUME_HIDE_RATIO = 0.7;
+/** Un film quitte « Reprendre » quand il atteint son générique de fin (92 %). */
+export const RESUME_HIDE_RATIO = 0.92;
+/** Secondes rejouées à la reprise, pour retrouver le fil. */
+export const RESUME_REWIND = 5;
+export function resumeStart(time: number) { return Number.isFinite(time) && time > 30 ? time - RESUME_REWIND : 0; }
+/** Un épisode quitté dans ses deux dernières minutes (ou à 95 %) est considéré comme vu. */
+export function episodeFinished(currentTime: number, duration: number) {
+  return Number.isFinite(currentTime) && Number.isFinite(duration) && duration > 0 && (currentTime / duration >= .95 || (duration >= 600 && duration - currentTime <= 120));
+}
+export interface ResumeRow { media_id: unknown; type?: string; current_time?: number | null; duration?: number | null; season_number?: number | null; episode_number?: number | null; updated_at?: string | null }
+/** Entrées de « Reprendre », de la plus récente à la plus ancienne, depuis l'historique de lecture. */
+export function continueWatchingEntries(rows: ResumeRow[], available: (id: string) => boolean) {
+  const entries: { id: string; ratio: number; finished: boolean; seasonNumber: number; episodeNumber: number; series: boolean }[] = [];
+  const seen = new Set<string>();
+  for (const row of [...rows].sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')))) {
+    const id = String(row.media_id), time = Number(row.current_time) || 0, duration = Number(row.duration) || 0;
+    if (seen.has(id) || !available(id)) continue;
+    const series = row.type === 'series';
+    // A movie barely started or already at its credits does not need resuming.
+    if (!series && (time < 60 || isMostlyWatched(time, duration))) continue;
+    seen.add(id);
+    entries.push({ id, series, ratio: duration > 0 ? Math.min(1, time / duration) : 0, finished: series && episodeFinished(time, duration),
+      seasonNumber: Number(row.season_number) || 1, episodeNumber: Number(row.episode_number) || 1 });
+  }
+  return entries;
+}
 export function isMostlyWatched(currentTime: number, duration: number) { return Number.isFinite(currentTime) && Number.isFinite(duration) && duration > 0 && currentTime / duration >= RESUME_HIDE_RATIO; }
 export function isCompleted(currentTime: number, duration: number) { return duration > 0 && currentTime / duration >= .95; }
 
