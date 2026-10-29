@@ -18,7 +18,8 @@ export async function loadWatchMedia<T>(id: string): Promise<T | null> {
   const { data: { user } } = await supabase.auth.getUser();
   let profileId: string | undefined;
   try { profileId = JSON.parse(localStorage.getItem('active_profile') || '{}').id; } catch { /* Invalid profile is rejected below. */ }
-  if (!user || !profileId) throw new Error('Choisis un profil avant de regarder ce contenu.');
+  if (!user) throw new Error('Connecte-toi pour regarder ce contenu.');
+  if (!profileId) throw new Error('Choisis un profil avant de regarder ce contenu.');
   const { data: profile, error } = await supabase.from('user_profiles').select('profile_mode').eq('id', profileId).eq('user_id', user.id).single();
   if (error || !profile || (item && !canWatch(item as Audience, profile.profile_mode))) throw new Error('Ce contenu est indisponible pour ce profil. Choisis un titre dans ton catalogue.');
   return item;

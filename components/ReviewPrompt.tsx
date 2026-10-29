@@ -69,7 +69,7 @@ export default function ReviewPrompt(_props: { eligible?: boolean } = {}) {
     finally { setBusy(false); }
   }
   if (!visible || pathname !== '/') return null;
-  return <div className="fixed inset-0 z-[250] grid place-items-center bg-black/75 p-4"><form ref={form} onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="feedback-title" className="relative max-h-[90dvh] w-full max-w-md space-y-4 overflow-y-auto rounded-3xl border border-white/15 bg-zinc-950 p-6">
+  return <div className="yf-backdrop fixed inset-0 z-[250] grid place-items-center bg-black/75 p-4"><form ref={form} onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="feedback-title" className="yf-pop relative max-h-[90dvh] w-full max-w-md space-y-4 overflow-y-auto rounded-3xl border border-white/15 bg-zinc-950 p-6">
     <button type="button" disabled={busy} onClick={close} className={styles.close} aria-label="Fermer">×</button>
     <h2 id="feedback-title" className="text-2xl font-bold">Ton avis compte</h2><p className="text-sm text-zinc-400">Comment se passe ton expérience sur YAMONFILM ?</p>
     <label className="block">Ta note<select value={rating} onChange={e => setRating(e.target.value)} className="mt-2 block w-full rounded-xl bg-zinc-800 p-3">{[5,4,3,2,1].map(n => <option key={n} value={n}>{n} / 5</option>)}</select></label>

@@ -206,7 +206,7 @@ export default function LoginPage() {
       {/* ================= Pop-up d'installation ================= */}
       {showInstallModal && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 p-4 backdrop-blur-md sm:items-center"
+          className="yf-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black/80 p-4 backdrop-blur-md sm:items-center"
           onClick={closeInstallModal}
         >
           <div

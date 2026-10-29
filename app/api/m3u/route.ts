@@ -16,8 +16,9 @@ export async function GET() {
 
     const text = await res.text();
     const lines = text.split('\n');
-    const channels = [];
-    let currentChannel: { id?: string; name?: string; logo?: string; category?: string; streamUrl?: string } = {};
+    type Channel = { id?: string; name?: string; logo?: string; category?: string; streamUrl?: string };
+    const channels: Channel[] = [];
+    let currentChannel: Channel = {};
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
@@ -38,14 +39,15 @@ export async function GET() {
         };
       } else if (line.startsWith('http://') || line.startsWith('https://')) {
         currentChannel.streamUrl = line;
-        if (currentChannel.name && currentChannel.streamUrl) {
+        // The playlist lists some channels twice; keep the first stream of each name.
+        if (currentChannel.name && currentChannel.streamUrl && !channels.some(channel => channel.name?.toLocaleLowerCase('fr') === currentChannel.name!.toLocaleLowerCase('fr'))) {
           channels.push(currentChannel);
         }
         currentChannel = {};
       }
     }
 
-    return NextResponse.json({ success: true, count: channels.length, channels });
+    return NextResponse.json({ success: true, count: channels.length, channels }, { headers: { 'Cache-Control': 'public, max-age=300', 'CDN-Cache-Control': 'public, s-maxage=600', 'Netlify-CDN-Cache-Control': 'public, s-maxage=600' } });
   } catch {
     return NextResponse.json({ success: false, error: 'La liste des chaînes est temporairement indisponible.' }, { status: 502 });
   }

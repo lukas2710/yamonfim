@@ -24,3 +24,20 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans, Arial), Arial, Helvetica, sans-serif;
 }
+
+/* Small shared motions. Each one is disabled for people who reduce motion. */
+@keyframes yf-fade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes yf-pop { from { opacity: 0; transform: translateY(12px) scale(.96) } to { opacity: 1; transform: none } }
+@keyframes yf-rise { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
+@keyframes yf-ping { 0% { box-shadow: 0 0 0 0 rgb(220 38 38 / .65) } 70%, 100% { box-shadow: 0 0 0 8px rgb(220 38 38 / 0) } }
+@keyframes yf-nudge { 0%, 100% { transform: translateX(0) } 30% { transform: translateX(-6px) } 60% { transform: translateX(-2px) } }
+@keyframes yf-sparkle { 0%, 100% { transform: rotate(0) scale(1) } 50% { transform: rotate(-12deg) scale(1.18) } }
+.yf-backdrop { animation: yf-fade .2s ease-out both }
+.yf-pop { animation: yf-pop .32s cubic-bezier(.2, .9, .3, 1.15) both }
+.yf-rise { animation: yf-rise .35s ease-out both; animation-delay: calc(var(--i, 0) * 45ms + 120ms) }
+.yf-ping { animation: yf-ping 2.2s ease-out infinite }
+.yf-nudge { animation: yf-nudge .7s ease-in-out 1.2s 2 }
+.yf-sparkle { display: inline-block; animation: yf-sparkle 2.4s ease-in-out infinite }
+@media (prefers-reduced-motion: reduce) {
+  .yf-backdrop, .yf-pop, .yf-rise, .yf-ping, .yf-nudge, .yf-sparkle { animation: none }
+}

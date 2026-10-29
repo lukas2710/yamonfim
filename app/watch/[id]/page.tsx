@@ -793,7 +793,11 @@ export default function WatchPage() {
           <h1 className="text-lg font-bold">Impossible d’afficher ce contenu</h1>
           <p role="alert" className="max-w-md text-sm text-zinc-400">{loadError || 'Ce contenu n’existe pas ou n’est plus disponible.'}</p>
         </div>
-        <button onClick={() => setRetryLoad(value => value + 1)} className="min-h-11 rounded-full bg-red-600 px-6 py-3 text-sm font-semibold text-white hover:bg-red-500">Réessayer</button>
+        {loadError?.startsWith('Connecte-toi')
+          ? <button onClick={() => router.push('/login')} className="min-h-11 rounded-full bg-red-600 px-6 py-3 text-sm font-semibold text-white hover:bg-red-500">Se connecter</button>
+          : loadError?.startsWith('Choisis un profil')
+            ? <button onClick={() => router.push('/profiles')} className="min-h-11 rounded-full bg-red-600 px-6 py-3 text-sm font-semibold text-white hover:bg-red-500">Choisir un profil</button>
+            : <button onClick={() => setRetryLoad(value => value + 1)} className="min-h-11 rounded-full bg-red-600 px-6 py-3 text-sm font-semibold text-white hover:bg-red-500">Réessayer</button>}
         <button
           onClick={() => router.push('/')}
           className="inline-flex items-center gap-2 bg-white text-black hover:bg-zinc-200 px-5 py-2.5 rounded-full text-sm font-semibold transition cursor-pointer"

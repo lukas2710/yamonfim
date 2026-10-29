@@ -247,8 +247,8 @@ export default function ProfilesPage() {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div role="dialog" aria-modal="true" aria-label={editingProfile ? 'Modifier le profil' : 'Créer un profil'} className="yf-surface bg-[#141416] border border-white/10 rounded-3xl w-full max-w-4xl p-4 sm:p-8 shadow-2xl space-y-6 max-h-[92dvh] overflow-y-auto overscroll-contain">
+        <div className="yf-backdrop fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div role="dialog" aria-modal="true" aria-label={editingProfile ? 'Modifier le profil' : 'Créer un profil'} className="yf-pop yf-surface bg-[#141416] border border-white/10 rounded-3xl w-full max-w-4xl p-4 sm:p-8 shadow-2xl space-y-6 max-h-[92dvh] overflow-y-auto overscroll-contain">
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-bold">
                 {editingProfile ? 'Modifier le profil' : 'Créer un profil'}
