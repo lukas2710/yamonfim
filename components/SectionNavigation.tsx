@@ -16,6 +16,7 @@ const ADMIN_LINKS = [
   { href: '/admin/accueil', label: 'Carrousel' },
   { href: '/admin/banners', label: 'Bannières' },
   { href: '/admin/famille', label: 'Kids & Junior' },
+  { href: '/admin/mangas', label: 'Mangas à vérifier' },
   { href: '/admin/avis', label: 'Avis visiteurs' },
   { href: '/admin/avatars', label: 'Avatars' },
   { href: '/admin/collections', label: 'Collections' },

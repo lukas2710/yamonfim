@@ -1,4 +1,4 @@
-import { isJapaneseAnimation } from './catalogue-categories';
+import { mangaVerdict } from './catalogue-categories';
 
 export const KIDS_MAX_AGE = 6;
 // Junior is for children under 12: a « -12 » (or 12+) rating never qualifies.
@@ -8,8 +8,9 @@ export type FamilyClassification = {
   tmdb_id: string; media_type: 'movie' | 'tv'; tmdb_title?: string;
   country: string | null; certification: string | null; min_age: number | null;
   adult: boolean; manual?: boolean;
-  // Japanese animation, shown in the Mangas section.
-  manga?: boolean;
+  // Japanese animation, shown in the Mangas section. manga_review: unsure, waiting
+  // for the admin; manga_manual: the admin's answer, which every analysis keeps.
+  manga?: boolean; manga_review?: boolean; manga_manual?: boolean;
 };
 type Rating = { country: string; rating: string };
 export function certificationAge(country: string, raw: string): number | null {
@@ -51,7 +52,7 @@ export function classificationFromTmdb(type: 'movie' | 'tv', id: string, data: R
   const selected = chooseCertification(ratings);
   return {source:'tmdb',checked_at:now,status:selected.min_age === null ? 'missing_rating' : 'rated',tmdb_id:id,media_type:type,
     tmdb_title: typeof data.title === 'string' ? data.title : typeof data.name === 'string' ? data.name : '',
-    ...selected,adult:data.adult === true,manga:isJapaneseAnimation(data)};
+    ...selected,adult:data.adult === true,manga:mangaVerdict(data) === true,manga_review:mangaVerdict(data) === null};
 }
 export function suggestedAudience(value: FamilyClassification): 'standard' | 'kids' | 'junior' | null {
   if (value.adult) return 'standard';

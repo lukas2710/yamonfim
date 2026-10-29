@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabaseUrl, supabaseAnonKey } from '@/lib/supabase';
 import { contentTmdbId } from '@/lib/content-identity';
 import { classificationFromTmdb, suggestedAudience, type FamilyClassification } from '@/lib/tmdb-certification';
-import { withMangaGenre } from '@/lib/catalogue-categories';
+import { withMangaGenre, withoutMangaGenre, withLanguageGenre, hasForeignScript, mangaVerdict } from '@/lib/catalogue-categories';
 
 export const runtime = 'nodejs';
 const headers = {'Cache-Control':'no-store'};
@@ -29,15 +29,15 @@ export async function POST(request: Request) {
       try {
         const id = contentTmdbId(row), type = row.type === 'series' ? 'tv' : 'movie';
         const previous = row.family_classification;
-        const fresh = previous?.tmdb_id === id && previous.media_type === type && Date.now() - Date.parse(previous.checked_at) < 30 * 86400000 && typeof previous.manga === 'boolean';
+        const fresh = previous?.tmdb_id === id && previous.media_type === type && Date.now() - Date.parse(previous.checked_at) < 30 * 86400000 && typeof previous.manga_review === 'boolean';
         let classification: FamilyClassification;
         if (fresh && body.refresh !== true) classification = {...previous};
-        else if (!id) classification = {source:'tmdb',checked_at:new Date().toISOString(),status:'missing_id',tmdb_id:'',media_type:type,country:null,certification:null,min_age:null,adult:false,manga:false};
+        else if (!id) classification = {source:'tmdb',checked_at:new Date().toISOString(),status:'missing_id',tmdb_id:'',media_type:type,country:null,certification:null,min_age:null,adult:false,manga:false,manga_review:mangaVerdict(null,row.genres) === null};
         else {
           const url = new URL(`https://api.themoviedb.org/3/${type}/${id}`);
           url.searchParams.set('api_key',key!); url.searchParams.set('language','fr-FR'); url.searchParams.set('append_to_response',type === 'movie' ? 'release_dates' : 'content_ratings');
           const response = await fetch(url,{signal:AbortSignal.any([request.signal,AbortSignal.timeout(12000)]),cache:'no-store'});
-          if (response.status === 404) classification = {source:'tmdb',checked_at:new Date().toISOString(),status:'not_found',tmdb_id:id,media_type:type,country:null,certification:null,min_age:null,adult:false,manga:false};
+          if (response.status === 404) classification = {source:'tmdb',checked_at:new Date().toISOString(),status:'not_found',tmdb_id:id,media_type:type,country:null,certification:null,min_age:null,adult:false,manga:false,manga_review:mangaVerdict(null,row.genres) === null};
           else {
             if (!response.ok) throw new Error(response.status === 429 ? 'TMDB reçoit trop de demandes. Réessaie dans une minute.' : 'TMDB est indisponible. Réessaie.');
             const details = await response.json();
@@ -49,7 +49,11 @@ export async function POST(request: Request) {
         const manual = previous?.manual === true || (!previous && row.audience !== 'standard');
         classification.manual = manual;
         const audience = manual ? row.audience : suggestedAudience(classification) || 'standard';
-        let update = client.from('media').update({family_classification:classification,audience,genres:withMangaGenre(row.genres,classification.manga === true)}).eq('id',row.id).eq('audience',row.audience);
+        // The admin's manga answer always wins over TMDB.
+        if (typeof previous?.manga_manual === 'boolean') Object.assign(classification, {manga:previous.manga_manual,manga_review:false,manga_manual:previous.manga_manual});
+        let genres = classification.manga_manual === false ? withoutMangaGenre(row.genres) : withMangaGenre(row.genres,classification.manga === true);
+        if (hasForeignScript(row.title)) genres = withLanguageGenre(genres,false);
+        let update = client.from('media').update({family_classification:classification,audience,genres}).eq('id',row.id).eq('audience',row.audience);
         update = previous ? update.eq('family_classification',JSON.stringify(previous)) : update.is('family_classification',null);
         const saved = await update.select('id,audience,genres,family_classification').maybeSingle();
         if (saved.error) throw new Error('Enregistrement impossible. Réessaie.');
