@@ -1,7 +1,8 @@
 import { isJapaneseAnimation } from './catalogue-categories';
 
 export const KIDS_MAX_AGE = 6;
-export const JUNIOR_MAX_AGE = 12;
+// Junior is for children under 12: a « -12 » (or 12+) rating never qualifies.
+export const JUNIOR_MAX_AGE = 10;
 export type FamilyClassification = {
   source: 'tmdb'; checked_at: string; status: 'rated' | 'missing_rating' | 'missing_id' | 'not_found';
   tmdb_id: string; media_type: 'movie' | 'tv'; tmdb_title?: string;
