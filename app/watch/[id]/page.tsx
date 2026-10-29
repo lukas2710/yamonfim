@@ -17,7 +17,7 @@ import { episodeDurationSeconds } from '@/lib/episode-clock';
 import EpisodeQueue from '@/components/EpisodeQueue';
 import WatchDetails from '@/components/WatchDetails';
 import VipQuotaModal from '@/components/VipQuotaModal';
-import { incrementWatchCount } from '@/lib/subscription';
+import { incrementWatchCount, reserveAccountViewing } from '@/lib/subscription';
 import './watch.css';
 import { normalizeSeriesParts, displayToStored, storedToDisplay, remapWatchedKey, isLupin } from '@/lib/series-parts';
 
@@ -195,6 +195,8 @@ export default function WatchPage() {
   const playerControlRef = useRef<WatchPlayerControl>(null);
   const lastPlaybackRef = useRef<Position | null>(null);
   const resumeProgressRef = useRef<{ position: Position; time: number; duration: number } | null>(null);
+  // A free viewing is charged only once the video really plays (see handleProgress).
+  const pendingChargeRef = useRef<{ userId: string; src: string; firstTime: number | null } | null>(null);
   const lastProgressSaveRef = useRef(0);
   const endedRef = useRef(false);
   const historyQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -569,8 +571,12 @@ export default function WatchPage() {
           setShowVipModal(true);
           return;
         }
-        await incrementWatchCount(user.id, profile?.watch_count || 0).catch(() => false);
-      }
+        // Native players report their progress: charge when the picture really moves.
+        // Other embedded players cannot tell us, so they are charged at launch as before.
+        if (profile?.is_vip) pendingChargeRef.current = null;
+        else if (isDirectVideo(playerUrl)) pendingChargeRef.current = { userId: user.id, src: playerUrl, firstTime: null };
+        else { pendingChargeRef.current = null; await incrementWatchCount(user.id, profile?.watch_count || 0).catch(() => false); }
+      } else pendingChargeRef.current = null;
 
       const next = { s: sIdx, e: eIdx };
       const previous = lastPlaybackRef.current;
@@ -662,6 +668,17 @@ export default function WatchPage() {
       setNextCountdown(null);
     }
     currentProgressRef.current = playbackProgress(time, duration);
+    const charge = pendingChargeRef.current;
+    if (charge && charge.src === stableUrl && !paused && Number.isFinite(time)) {
+      if (charge.firstTime === null) charge.firstTime = time;
+      else if (time - charge.firstTime >= 1) {
+        pendingChargeRef.current = null;
+        void reserveAccountViewing(charge.userId).then(access => {
+          // Another tab used the last free viewing meanwhile: stop and offer VIP.
+          if (!access.allowed) { closePlayer(); setShowVipModal(true); }
+        }).catch(() => { /* A recording failure never interrupts a video already playing. */ });
+      }
+    }
     const position = lastPlaybackRef.current;
     if (!position) return;
     const hasNext = mediaRef.current?.type === 'series' && !!nextPositionOf(mediaRef.current.seasons, position);
