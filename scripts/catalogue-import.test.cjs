@@ -99,3 +99,22 @@ test('catalogue queues clicks in its hidden worker, without opening any window',
   assert.equal(messages.length, 2);
   assert.equal(messages[1].message.id, '456');
 });
+
+test('bulk import skips existing and queued titles, and stopping preserves the active job', () => {
+  const node = () => ({ append() {}, setAttribute() {} });
+  const context = { location: { origin: 'null', protocol: 'file:' }, crypto: require('node:crypto').webcrypto,
+    document: { createElement: node, querySelector: node }, window: { addEventListener() {} },
+    dbDone: new Set(['1']), render() {} };
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync('scripts/catalogue-direct-import.js', 'utf8') + `
+    catalogueStatusReady = true;
+    const items = [1,2,2,3].map(source_id => ({source_id,kind:'movie'}));
+    queueImportItems(items);
+    if (importQueue.length !== 2) throw Error('Duplicates queued');
+    importPending = importQueue.shift();
+    stopImportsButton.onclick();
+    if (importQueue.length || !importStates.get('2').busy || importStates.has('3')) throw Error('Stop failed');
+    queueImportItems(items);
+    if (importQueue.length !== 1 || importQueue[0].id !== '3') throw Error('Resume failed');
+  `, context);
+});

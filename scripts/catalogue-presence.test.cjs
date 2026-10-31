@@ -7,7 +7,7 @@ function fixture(data) {
   const identity = {};
   vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/content-identity.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText, { exports: identity, URL });
   const node = () => ({ append() {}, setAttribute() {}, replaceChildren() {} });
-  const context = { data, catalogueIdentity: identity, valid: new Set(data.map(item => String(item.source_id))), Map, Set, URL, location: { origin: 'https://test.local' }, document: { createElement: node, querySelector: node }, window: { addEventListener() {} }, dbDone: new Set(), render() {} };
+  const context = { data, catalogueIdentity: identity, valid: new Set(data.map(item => String(item.source_id))), Map, Set, URL, location: { origin: 'null', protocol: 'file:' }, document: { createElement: node, querySelector: node }, window: { addEventListener() {} }, dbDone: new Set(), render() {} };
   vm.createContext(context);
   vm.runInContext(fs.readFileSync('scripts/catalogue-direct-import.js', 'utf8') + '\n' + fs.readFileSync('scripts/catalogue-presence.js', 'utf8') + '\ncatalogueStatusReady=true; globalThis.reconcile=reconcileCatalogueRows; globalThis.button=importButton;', context);
   return context;

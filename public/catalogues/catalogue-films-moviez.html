@@ -20,8 +20,7 @@ function importButton(item) {
   button.title = state?.error || 'Ajouter directement sur ton site';
   button.onclick = () => {
     if (!catalogueStatusReady || dbDone.has(id) || importStates.get(id)?.busy || importStates.get(id)?.ok) return;
-    importQueue.push({ id, type: item.kind === 'movie' ? 'movie' : 'series', job: crypto.randomUUID() });
-    importStates.set(id, { busy: true }); sendImport(); render();
+    queueImportItems([item]);
   };
   return button;
 }
@@ -39,12 +38,12 @@ window.addEventListener('message', event => {
     importStates.set(message.id, message.ok === true ? { ok: true, confirmedAt: Date.now() } : { error: String(message.error || 'Ajout impossible') });
     if (message.ok === true) { dbDone.add(message.id); rebuildDone(); }
     directStatus.textContent = message.ok === true ? (message.already ? 'Déjà présent sur ton site ✓' : 'Ajouté sur ton site ✓') : String(message.error || 'Ajout impossible. Réessaie.');
-    importPending = null; render(); sendImport();
+    importPending = null; updateBulkStatus(); render(); sendImport();
   }
 });
 const directStatus = document.createElement('p');
 directStatus.id = 'directImportStatus'; directStatus.className = 'note'; directStatus.setAttribute('role', 'status');
-directStatus.textContent = 'Clique sur « Ajouter au site ». Les ajouts se font ici, en arrière-plan. Tu peux sélectionner plusieurs titres.';
+directStatus.textContent = 'Ajoute les films affichés sur cette page en un clic. Garde cet onglet ouvert pendant les ajouts et connecte-toi avec ton compte administrateur.';
 document.querySelector('.toolbar').append(directStatus);
 if (location.origin === importSite) {
   importChannel = crypto.randomUUID(); importFrame = document.createElement('iframe');
@@ -54,7 +53,52 @@ if (location.origin === importSite) {
   setInterval(() => { if (!importReady) importFrame.contentWindow?.postMessage({ action: 'catalogue:hello', channel: importChannel }, importSite); }, 1500);
 }
 
-function render(){const term=normalize($('#q').value.trim());let list=data.filter(x=>x.search.includes(term)&&(!$('#year').value||String(x.year)===$('#year').value)&&(!$('#decade').value||Math.floor(x.year/10)*10===Number($('#decade').value))&&(!$('#genre').value||($('#genre').value==='__pending'?!x.genres.length&&!genreCache.has(String(x.source_id)):$('#genre').value==='__unknown'?!x.genres.length&&genreCache.has(String(x.source_id)):x.genres.includes($('#genre').value)))&&(filter==='all'||(filter==='done'?done.has(String(x.source_id)):!done.has(String(x.source_id)))));const sort=$('#sort').value;list.sort(sort==='title'?(a,b)=>a.title.localeCompare(b.title,'fr'):sort==='recent'?(a,b)=>(b.year||0)-(a.year||0):(a,b)=>(a.year||9999)-(b.year||9999));genrePriority=list.slice(p*40,p*40+40).map(x=>String(x.source_id));const pages=Math.max(1,Math.ceil(list.length/40));p=Math.max(0,Math.min(p,pages-1));$('#total').textContent=data.length.toLocaleString('fr');$('#added').textContent=done.size.toLocaleString('fr');$('#remaining').textContent=(data.length-done.size).toLocaleString('fr');$('#count').textContent=list.length.toLocaleString('fr')+' film'+(list.length===1?'':'s')+(filter==='todo'?' à ajouter':filter==='done'?' déjà ajouté'+(list.length===1?'':'s'):'')+(term?' correspondant à ta recherche':'');$('#cards').replaceChildren();for(const x of list.slice(p*40,p*40+40)){const id=String(x.source_id),isDone=done.has(id);const card=document.createElement('article');card.className='card'+(isDone?' done':'');const img=document.createElement('img');img.className='poster';img.loading='lazy';img.alt='';if(x.poster)img.src=x.poster;img.onerror=()=>{img.style.visibility='hidden'};const info=document.createElement('div');info.className='info';const h=document.createElement('h2');h.textContent=x.title;const year=document.createElement('p');year.className='year';year.textContent=x.year||'Année inconnue';const tags=document.createElement('p');tags.className='genreTags';tags.textContent=x.genres.length?x.genres.join(' · '):(genreCache.has(id)?'Sans genre renseigné sur TMDB':'Genres en cours de récupération…');const actions=document.createElement('div');actions.className='actions';actions.append(importButton(x));actions.append(link('Ouvrir le film ↗','https://api.moviez.ac/'+id,true),link('Fiche TMDB ↗','https://www.themoviedb.org/movie/'+id));const label=document.createElement('label');label.className='check';const check=document.createElement('input');check.type='checkbox';check.checked=isDone;check.disabled=true;check.setAttribute('aria-label','Film ajouté : '+x.title);const text=document.createElement('span');text.textContent=dbDone.has(id)?'Ajouté sur ton site ✓':'Pas encore ajouté au site';check.onchange=()=>{if(check.checked)manualDone.add(id);else manualDone.delete(id);rebuildDone();save();render()};label.append(check,text);info.append(h,year,tags,actions,label);card.append(img,info);$('#cards').append(card)}if(!list.length){const empty=document.createElement('div');empty.className='empty';empty.textContent=filter==='done'&&!term?'Aucun film ajouté pour le moment. Coche un film pour le retrouver ici.':'Aucun film ne correspond à ces filtres.';$('#cards').append(empty)}$('#page').textContent='Page '+(p+1)+' sur '+pages;$('#prev').disabled=p===0;$('#next').disabled=p===pages-1;document.querySelectorAll('[data-filter]').forEach(b=>{b.classList.toggle('active',b.dataset.filter===filter);b.setAttribute('aria-pressed',String(b.dataset.filter===filter))})}for(const id of ['#year','#decade','#genre'])$(id).onchange=()=>{p=0;render()};$('#resetFilters').onclick=()=>{for(const id of ['#q','#year','#decade','#genre'])$(id).value='';$('#sort').value='title';filter='all';p=0;render()};$('#q').oninput=()=>{p=0;render()};$('#sort').onchange=()=>{p=0;render()};document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{filter=b.dataset.filter;p=0;render()});$('#prev').onclick=()=>{p--;render();$('.toolbar').scrollIntoView({block:'start'})};$('#next').onclick=()=>{p++;render();$('.toolbar').scrollIntoView({block:'start'})};$('#export').onclick=()=>{const blob=new Blob([JSON.stringify({version:1,exportedAt:new Date().toISOString(),added:[...manualDone]},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='mes-films-ajoutes.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);$('#message').textContent='Sauvegarde téléchargée.'};$('#import').onclick=()=>$('#file').click();$('#file').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;const j=JSON.parse(await file.text());const ids=Array.isArray(j)?j:j.added;if(!Array.isArray(ids))throw Error();let count=0;for(const raw of ids){const id=String(raw);if(valid.has(id)&&!manualDone.has(id)){manualDone.add(id);count++}}rebuildDone();save();render();$('#message').textContent=count+' coche(s) récupérée(s).'}catch(e){$('#message').textContent='Ce fichier ne contient pas une sauvegarde valide.'}e.target.value=''};render();
+let cataloguePageItems = [];
+const bulkControls = document.createElement('div');
+bulkControls.className = 'filters';
+const addPageButton = document.createElement('button');
+addPageButton.textContent = 'Ajouter toute cette page au site';
+const stopImportsButton = document.createElement('button');
+stopImportsButton.textContent = 'Arrêter les ajouts en attente';
+const bulkStatus = document.createElement('p');
+bulkStatus.className = 'note'; bulkStatus.setAttribute('role', 'status');
+let bulkTotal = 0, bulkFinished = 0, bulkErrors = 0;
+function canQueueImport(item) {
+  const id = String(item.source_id), state = importStates.get(id);
+  return !dbDone.has(id) && !state?.busy && !state?.ok;
+}
+function queueImportItems(items) {
+  if (!catalogueStatusReady) return;
+  if (!importPending && !importQueue.length) { bulkTotal = 0; bulkFinished = 0; bulkErrors = 0; }
+  for (const item of items) {
+    if (!canQueueImport(item)) continue;
+    const id = String(item.source_id);
+    importQueue.push({ id, type: item.kind === 'movie' ? 'movie' : 'series', job: crypto.randomUUID() });
+    importStates.set(id, { busy: true }); bulkTotal++;
+  }
+  updateBulkStatus(); sendImport(); render();
+}
+function updateBulkStatus() {
+  bulkFinished = bulkTotal - importQueue.length - (importPending ? 1 : 0);
+  bulkErrors = [...importStates.values()].filter(state => state.error).length;
+  bulkStatus.textContent = bulkTotal ? bulkFinished + ' / ' + bulkTotal + ' titres traités · ' + importQueue.length + ' en attente' + (bulkErrors ? ' · ' + bulkErrors + ' échec(s), tu peux relancer les ajouts pour réessayer.' : '') + '. Garde cet onglet ouvert jusqu’à la fin.' : '';
+}
+function updateBulkControls() {
+  addPageButton.disabled = !catalogueStatusReady || !cataloguePageItems.some(canQueueImport);
+  stopImportsButton.disabled = !importQueue.length;
+}
+addPageButton.onclick = () => queueImportItems(cataloguePageItems);
+stopImportsButton.onclick = () => {
+  for (const item of importQueue) importStates.delete(item.id);
+  bulkTotal -= importQueue.length; importQueue.length = 0;
+  updateBulkStatus(); render();
+};
+bulkControls.append(addPageButton, stopImportsButton);
+document.querySelector('.toolbar').append(bulkControls, bulkStatus);
+
+
+function render() { renderCatalogue(); updateBulkControls(); }
+function renderCatalogue(){const term=normalize($('#q').value.trim());let list=data.filter(x=>x.search.includes(term)&&(!$('#year').value||String(x.year)===$('#year').value)&&(!$('#decade').value||Math.floor(x.year/10)*10===Number($('#decade').value))&&(!$('#genre').value||($('#genre').value==='__pending'?!x.genres.length&&!genreCache.has(String(x.source_id)):$('#genre').value==='__unknown'?!x.genres.length&&genreCache.has(String(x.source_id)):x.genres.includes($('#genre').value)))&&(filter==='all'||(filter==='done'?done.has(String(x.source_id)):!done.has(String(x.source_id)))));const sort=$('#sort').value;list.sort(sort==='title'?(a,b)=>a.title.localeCompare(b.title,'fr'):sort==='recent'?(a,b)=>(b.year||0)-(a.year||0):(a,b)=>(a.year||9999)-(b.year||9999));genrePriority=list.slice(p*40,p*40+40).map(x=>String(x.source_id));const pages=Math.max(1,Math.ceil(list.length/40));p=Math.max(0,Math.min(p,pages-1));$('#total').textContent=data.length.toLocaleString('fr');$('#added').textContent=done.size.toLocaleString('fr');$('#remaining').textContent=(data.length-done.size).toLocaleString('fr');$('#count').textContent=list.length.toLocaleString('fr')+' film'+(list.length===1?'':'s')+(filter==='todo'?' à ajouter':filter==='done'?' déjà ajouté'+(list.length===1?'':'s'):'')+(term?' correspondant à ta recherche':'');cataloguePageItems=list.slice(p*40,p*40+40);$('#cards').replaceChildren();for(const x of cataloguePageItems){const id=String(x.source_id),isDone=done.has(id);const card=document.createElement('article');card.className='card'+(isDone?' done':'');const img=document.createElement('img');img.className='poster';img.loading='lazy';img.alt='';if(x.poster)img.src=x.poster;img.onerror=()=>{img.style.visibility='hidden'};const info=document.createElement('div');info.className='info';const h=document.createElement('h2');h.textContent=x.title;const year=document.createElement('p');year.className='year';year.textContent=x.year||'Année inconnue';const tags=document.createElement('p');tags.className='genreTags';tags.textContent=x.genres.length?x.genres.join(' · '):(genreCache.has(id)?'Sans genre renseigné sur TMDB':'Genres en cours de récupération…');const actions=document.createElement('div');actions.className='actions';actions.append(importButton(x));actions.append(link('Ouvrir le film ↗','https://api.moviez.ac/'+id,true),link('Fiche TMDB ↗','https://www.themoviedb.org/movie/'+id));const label=document.createElement('label');label.className='check';const check=document.createElement('input');check.type='checkbox';check.checked=isDone;check.disabled=true;check.setAttribute('aria-label','Film ajouté : '+x.title);const text=document.createElement('span');text.textContent=dbDone.has(id)?'Ajouté sur ton site ✓':'Pas encore ajouté au site';check.onchange=()=>{if(check.checked)manualDone.add(id);else manualDone.delete(id);rebuildDone();save();render()};label.append(check,text);info.append(h,year,tags,actions,label);card.append(img,info);$('#cards').append(card)}if(!list.length){const empty=document.createElement('div');empty.className='empty';empty.textContent=filter==='done'&&!term?'Aucun film ajouté pour le moment. Coche un film pour le retrouver ici.':'Aucun film ne correspond à ces filtres.';$('#cards').append(empty)}$('#page').textContent='Page '+(p+1)+' sur '+pages;$('#prev').disabled=p===0;$('#next').disabled=p===pages-1;document.querySelectorAll('[data-filter]').forEach(b=>{b.classList.toggle('active',b.dataset.filter===filter);b.setAttribute('aria-pressed',String(b.dataset.filter===filter))})}for(const id of ['#year','#decade','#genre'])$(id).onchange=()=>{p=0;render()};$('#resetFilters').onclick=()=>{for(const id of ['#q','#year','#decade','#genre'])$(id).value='';$('#sort').value='title';filter='all';p=0;render()};$('#q').oninput=()=>{p=0;render()};$('#sort').onchange=()=>{p=0;render()};document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{filter=b.dataset.filter;p=0;render()});$('#prev').onclick=()=>{p--;render();$('.toolbar').scrollIntoView({block:'start'})};$('#next').onclick=()=>{p++;render();$('.toolbar').scrollIntoView({block:'start'})};$('#export').onclick=()=>{const blob=new Blob([JSON.stringify({version:1,exportedAt:new Date().toISOString(),added:[...manualDone]},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='mes-films-ajoutes.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);$('#message').textContent='Sauvegarde téléchargée.'};$('#import').onclick=()=>$('#file').click();$('#file').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;const j=JSON.parse(await file.text());const ids=Array.isArray(j)?j:j.added;if(!Array.isArray(ids))throw Error();let count=0;for(const raw of ids){const id=String(raw);if(valid.has(id)&&!manualDone.has(id)){manualDone.add(id);count++}}rebuildDone();save();render();$('#message').textContent=count+' coche(s) récupérée(s).'}catch(e){$('#message').textContent='Ce fichier ne contient pas une sauvegarde valide.'}e.target.value=''};render();
 
 const databaseUrl="https://nftiussedwyjheqrmlbw.supabase.co",publicKey="sb_publishable_a07rZpPFzuy0BgrmCsr_Kw_Mq-TQ8x5";let syncing=false,lastSync=null;
 const catalogueIdentity = (() => { const exports = {};
