@@ -1,6 +1,17 @@
 // The catalogue and background worker share the site's authenticated origin.
 const importSite = location.protocol === 'file:' ? 'https://yamonfi.netlify.app' : location.origin;
 const importStates = new Map(), importQueue = [];
+const unavailableKey = 'moviez-unavailable-films-v1';
+let unavailableImports = new Map();
+try {
+  const saved = JSON.parse(localStorage.getItem(unavailableKey) || '[]');
+  if (Array.isArray(saved)) unavailableImports = new Map(saved.filter(row => Array.isArray(row) && /^\d+$/.test(row[0]) && typeof row[1] === 'string'));
+} catch { /* Storage may be unavailable. */ }
+function saveUnavailableImports() {
+  try { localStorage.setItem(unavailableKey, JSON.stringify([...unavailableImports])); }
+  catch { directStatus.textContent = 'Les films non disponibles sont ignorés pour cette session. Leur mémorisation est impossible dans ce navigateur.'; }
+}
+
 let importFrame = null, importChannel = '', importPending = null, importReady = false, catalogueStatusReady = false;
 function sendImport() {
   if (!importReady || !importFrame?.contentWindow || importPending) return;
@@ -12,9 +23,9 @@ function importButton(item) {
   const id = String(item.source_id), state = importStates.get(id);
   const button = document.createElement('button');
   button.className = 'link primary';
-  button.disabled = !catalogueStatusReady || !!(dbDone.has(id) || state?.busy || state?.ok);
-  button.textContent = dbDone.has(id) || state?.ok ? 'Ajouté sur le site ✓' : !catalogueStatusReady ? 'Vérification…' : state?.busy ? 'Ajout en cours…' : state?.error ? 'Réessayer l’ajout' : 'Ajouter au site ＋';
-  button.title = state?.error || 'Ajouter directement sur ton site';
+  button.disabled = !catalogueStatusReady || !!(dbDone.has(id) || state?.busy || state?.ok || unavailableImports.has(id));
+  button.textContent = dbDone.has(id) || state?.ok ? 'Ajouté sur le site ✓' : unavailableImports.has(id) ? 'Non disponible' : !catalogueStatusReady ? 'Vérification…' : state?.busy ? 'Ajout en cours…' : state?.error ? 'Réessayer l’ajout' : 'Ajouter au site ＋';
+  button.title = unavailableImports.get(id) || state?.error || 'Ajouter directement sur ton site';
   button.onclick = () => {
     if (!catalogueStatusReady || dbDone.has(id) || importStates.get(id)?.busy || importStates.get(id)?.ok) return;
     queueImportItems([item]);
@@ -33,8 +44,10 @@ window.addEventListener('message', event => {
   if (!importPending || message.job !== importPending.job || message.id !== importPending.id || message.type !== importPending.type) return;
   if (message.action === 'catalogue:result') {
     importStates.set(message.id, message.ok === true ? { ok: true, confirmedAt: Date.now() } : { error: String(message.error || 'Ajout impossible') });
-    if (message.ok === true) { dbDone.add(message.id); rebuildDone(); }
-    directStatus.textContent = message.ok === true ? (message.already ? 'Déjà présent sur ton site ✓' : 'Ajouté sur ton site ✓') : String(message.error || 'Ajout impossible. Réessaie.');
+    if (message.ok === true) { dbDone.add(message.id); unavailableImports.delete(message.id); rebuildDone(); }
+    else { unavailableImports.set(message.id, String(message.error || 'Ajout impossible')); }
+    saveUnavailableImports();
+    directStatus.textContent = message.ok === true ? (message.already ? 'Déjà présent sur ton site ✓' : 'Ajouté sur ton site ✓') : 'Non disponible : ' + String(message.error || 'Ajout impossible');
     importPending = null; updateBulkStatus(); render(); sendImport();
   }
 });
@@ -57,12 +70,15 @@ const addPageButton = document.createElement('button');
 addPageButton.textContent = 'Ajouter toute cette page au site';
 const stopImportsButton = document.createElement('button');
 stopImportsButton.textContent = 'Arrêter les ajouts en attente';
+const resetUnavailableButton = document.createElement('button');
+resetUnavailableButton.textContent = 'Réinitialiser les films non disponibles';
+resetUnavailableButton.onclick = () => { unavailableImports.clear(); saveUnavailableImports(); render(); };
 const bulkStatus = document.createElement('p');
 bulkStatus.className = 'note'; bulkStatus.setAttribute('role', 'status');
 let bulkTotal = 0, bulkFinished = 0, bulkErrors = 0;
 function canQueueImport(item) {
   const id = String(item.source_id), state = importStates.get(id);
-  return !dbDone.has(id) && !state?.busy && !state?.ok;
+  return !dbDone.has(id) && !state?.busy && !state?.ok && !unavailableImports.has(id);
 }
 function queueImportItems(items) {
   if (!catalogueStatusReady) return;
@@ -78,11 +94,12 @@ function queueImportItems(items) {
 function updateBulkStatus() {
   bulkFinished = bulkTotal - importQueue.length - (importPending ? 1 : 0);
   bulkErrors = [...importStates.values()].filter(state => state.error).length;
-  bulkStatus.textContent = bulkTotal ? bulkFinished + ' / ' + bulkTotal + ' titres traités · ' + importQueue.length + ' en attente' + (bulkErrors ? ' · ' + bulkErrors + ' échec(s), tu peux relancer les ajouts pour réessayer.' : '') + '. Garde cet onglet ouvert jusqu’à la fin.' : '';
+  bulkStatus.textContent = bulkTotal ? bulkFinished + ' / ' + bulkTotal + ' titres traités · ' + importQueue.length + ' en attente' + (bulkErrors ? ' · ' + bulkErrors + ' film(s) non disponible(s), ignoré(s) lors des prochains ajouts.' : '') + '. Garde cet onglet ouvert jusqu’à la fin.' : '';
 }
 function updateBulkControls() {
   addPageButton.disabled = !catalogueStatusReady || !cataloguePageItems.some(canQueueImport);
   stopImportsButton.disabled = !importQueue.length;
+  resetUnavailableButton.disabled = !unavailableImports.size;
 }
 addPageButton.onclick = () => queueImportItems(cataloguePageItems);
 stopImportsButton.onclick = () => {
@@ -90,5 +107,5 @@ stopImportsButton.onclick = () => {
   bulkTotal -= importQueue.length; importQueue.length = 0;
   updateBulkStatus(); render();
 };
-bulkControls.append(addPageButton, stopImportsButton);
+bulkControls.append(addPageButton, stopImportsButton, resetUnavailableButton);
 document.querySelector('.toolbar').append(bulkControls, bulkStatus);

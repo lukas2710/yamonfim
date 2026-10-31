@@ -118,3 +118,28 @@ test('bulk import skips existing and queued titles, and stopping preserves the a
     if (importQueue.length !== 1 || importQueue[0].id !== '3') throw Error('Resume failed');
   `, context);
 });
+
+test('unavailable films remain disabled after reload and are excluded from bulk imports', () => {
+  const storage = new Map();
+  const node = () => ({ append() {}, setAttribute() {} });
+  function load() {
+    const context = { location: { origin: 'null', protocol: 'file:' }, crypto: require('node:crypto').webcrypto,
+      localStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) },
+      document: { createElement: node, querySelector: node }, window: { addEventListener() {} }, dbDone: new Set(), render() {} };
+    vm.createContext(context);
+    vm.runInContext(fs.readFileSync('scripts/catalogue-direct-import.js', 'utf8') + '\ncatalogueStatusReady = true;', context);
+    return context;
+  }
+  const first = load();
+  vm.runInContext("unavailableImports.set('123','Fiche introuvable');saveUnavailableImports()", first);
+  const second = load();
+  vm.runInContext(`
+    const item = {source_id:123,kind:'movie'};
+    const button = importButton(item);
+    if (!button.disabled || button.textContent !== 'Non disponible') throw Error('Unavailable status lost');
+    queueImportItems([item]);
+    if (importQueue.length) throw Error('Unavailable film queued');
+    resetUnavailableButton.onclick();
+    if (!canQueueImport(item)) throw Error('Reset failed');
+  `, second);
+});
