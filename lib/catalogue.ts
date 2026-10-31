@@ -2,15 +2,22 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 // The home page needs cards, not the large JSON season/episode player payloads.
 export const CATALOGUE_CARD_COLUMNS = 'id,title,type,poster,backdrop,description,genres,tmdb_id,audience,release_year';
-const PAGE = 250, PARALLEL = 6;
+const PAGE = 250, PARALLEL = 6, MIN_PAGE = 25;
 export async function fetchCatalogueRows<T extends { id: string | number }>(client: SupabaseClient, columns: string, onPage?: (rows: T[]) => void): Promise<T[]> {
-  const page = (from: number, size: number, counted = false) => client.from('media')
-    .select(columns, counted ? { count: 'exact' } : undefined)
-    .order('created_at', { ascending: false }).order('id', { ascending: false }).range(from, from + size - 1)
-    .then(({ data, error, count }) => {
-      if (error) throw new Error('Le catalogue ne peut pas être chargé. Réessaie dans un instant.');
-      return { data: (data || []) as unknown as T[], count };
-    });
+  const page = async (from: number, size: number, counted = false): Promise<{ data: T[]; count: number | null }> => {
+    const { data, error, count } = await client.from('media')
+      .select(columns, counted ? { count: 'exact' } : undefined)
+      .order('created_at', { ascending: false }).order('id', { ascending: false }).range(from, from + size - 1);
+    if (!error) return { data: (data || []) as unknown as T[], count };
+    // Large season payloads can hit the database statement timeout: retry the
+    // same range in two smaller halves before giving up.
+    if (size <= MIN_PAGE) throw new Error('Le catalogue ne peut pas être chargé. Réessaie dans un instant.');
+    const half = Math.ceil(size / 2);
+    const head = await page(from, half, counted);
+    if (head.data.length < half) return head;
+    const tail = await page(from + half, size - half);
+    return { data: [...head.data, ...tail.data], count: head.count };
+  };
   const first = await page(0, PAGE, true);
   const rows: T[] = [];
   const seen = new Set<string>();
