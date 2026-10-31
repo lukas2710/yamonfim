@@ -15,13 +15,17 @@ export function playbackCreditsMarker(marker: CreditsMarker | null, duration: nu
   // Keep its reference duration for provenance, without rejecting a saved time.
   return { ...marker, referenceDuration: marker.referenceDuration ?? marker.duration, duration };
 }
-export function introDbCredits(payload: unknown, season: number, episode: number, duration: number): CreditsMarker | null {
+// A single community submission is accepted only this close to the end, so a
+// wrong value can at most shorten the last moments of the credits.
+export const TENTATIVE_CREDITS_WINDOW = 180;
+export function introDbCredits(payload: unknown, season: number, episode: number, duration: number, tentative = false): CreditsMarker | null {
   const data = payload as { type?: string; season?: number; episode?: number; group_duration_ms?: number; credits?: { start_ms?: number; end_ms?: number | null; confidence?: number }[] } | null;
   if (data?.type !== 'tv' || data.season !== season || data.episode !== episode || !Array.isArray(data.credits)) return null;
   const reference = typeof data.group_duration_ms === 'number' ? data.group_duration_ms / 1000 : NaN;
   // Only the final, open-ended credits segment: never skip an intervening scene.
-  const segment = [...data.credits].filter(item => item && item.end_ms === null && typeof item.start_ms === 'number' && typeof item.confidence === 'number' && item.confidence >= .8).sort((a, b) => b.start_ms! - a.start_ms!)[0];
+  const segment = [...data.credits].filter(item => item && item.end_ms === null && typeof item.start_ms === 'number' && typeof item.confidence === 'number' && item.confidence >= (tentative ? 0 : .8)).sort((a, b) => b.start_ms! - a.start_ms!)[0];
   const start = segment?.start_ms === undefined ? NaN : segment.start_ms / 1000;
+  if (tentative && !(reference - start <= TENTATIVE_CREDITS_WINDOW)) return null;
   return compatibleCredits(start, reference, duration) ? { start, duration: reference, source: 'TheIntroDB' } : null;
 }
 export function communityCredits(payload: unknown, imdb: string, season: number, episode: number, duration: number): CreditsMarker | null {

@@ -32,5 +32,7 @@ export async function fetchEpisodeCredits(tmdb: string, season: number, episode:
       }
     } else if (!identities) incomplete = true;
   } else if (!marker && !apiKey) incomplete = true;
+  // Confident data from any service first; a lone TheIntroDB submission last.
+  marker ??= introDbCredits(data, season, episode, options.duration ?? Number(data?.group_duration_ms) / 1000, true);
   return { marker, incomplete };
 }
