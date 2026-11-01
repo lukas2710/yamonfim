@@ -1,12 +1,13 @@
 import type { Metadata } from 'next';
+import InstallAppButton from '@/components/InstallAppButton';
 
 export const metadata: Metadata = {
-  title: 'Application TV — YAMONFILM',
-  description: 'Installe YAMONFILM sur ta télévision Android TV, Google TV, Fire TV ou décodeur Bbox.',
+  title: 'Applications — YAMONFILM',
+  description: 'Installe YAMONFILM sur ta télévision Android TV, Google TV, Fire TV ou décodeur Bbox, et sur ton iPhone ou Android.',
 };
 
 const APK = '/yamonfilm-tv.apk';
-const VERSION = '2.5.0';
+const VERSION = '2.6.0';
 
 const GUIDES = [
   {
@@ -63,6 +64,19 @@ export default function TvAppPage() {
         <p className="mt-6 text-sm text-zinc-500">
           Sur la télé, tape simplement : <span className="font-mono text-zinc-200">yamonfi.netlify.app/app</span>
         </p>
+      </section>
+
+      <section className="mx-auto max-w-5xl px-6 pb-10 sm:px-10">
+        <div className="flex flex-col gap-6 rounded-3xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
+          <div className="max-w-xl">
+            <p className="text-xs font-semibold tracking-[0.25em] text-red-500">IPHONE · ANDROID</p>
+            <h2 className="mt-2 text-2xl font-black tracking-tight">Sur ton téléphone</h2>
+            <p className="mt-2 text-sm leading-6 text-zinc-400">
+              Ajoute YAMONFILM à ton écran d’accueil : il s’ouvre en plein écran comme une vraie application, sans passer par un store.
+            </p>
+          </div>
+          <InstallAppButton />
+        </div>
       </section>
 
       <section className="mx-auto grid max-w-5xl gap-5 px-6 pb-16 sm:px-10 md:grid-cols-3">
