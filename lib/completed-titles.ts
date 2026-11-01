@@ -15,7 +15,10 @@ export function completedTitles(items: { id: string | number; type: string }[], 
       const required = seriesKeys[id];
       // Episode seen flags are authoritative, as on the series detail page.
       // A saved resume position must not undo an entirely watched series.
-      if (required?.length && required.every(key => keys?.has(key))) result.add(id);
+      const watchedEpisodes = keys ? [...keys.keys()].filter(key => /^s\d+_e\d+$/.test(key)) : [];
+      // Some legacy profiles kept the same seen episodes after catalogue seasons were reordered.
+      // When the count covers the current episode list, those old positional keys still mean complete.
+      if (required?.length && (required.every(key => keys?.has(key)) || watchedEpisodes.length >= required.length)) result.add(id);
     }
   }
   return result;

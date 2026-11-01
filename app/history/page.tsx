@@ -7,6 +7,7 @@ import { createSearchMatcher } from '@/lib/search';
 import SectionNavigation from '@/components/SectionNavigation';
 import PageHero from '@/components/PageHero';
 import HistoryEpisodesDialog from '@/components/HistoryEpisodesDialog';
+import WatchStatusBadge from '@/components/WatchStatusBadge';
 import { fetchProfileWatched } from '@/lib/profile-watched';
 import { continueWatchingEntries } from '@/lib/watch-progress';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -550,6 +551,7 @@ export default function HistoryPage() {
                           className="group relative h-24 w-16 shrink-0 overflow-hidden rounded-xl bg-zinc-900"
                         >
                           {e.media.poster && <img decoding="async" src={e.media.poster} alt="" loading="lazy" className="h-full w-full object-cover" />}
+                          <WatchStatusBadge completed={done} inProgress={!done && e.seen > 0} compact className="right-0.5 top-0.5 px-1 py-1 text-[7px]" />
                         </button>
                         <div className="min-w-0 flex-1">
                           <p className="mt-1 truncate text-sm font-bold">{e.media.title}</p>

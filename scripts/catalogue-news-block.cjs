@@ -49,6 +49,8 @@ function injectNews(html, kind) {
       .replace('let done=new Set(),', 'const yfNews=new Map();let done=new Set(),');
     if (!html.includes('const yfNews=new Map();')) throw Error('Données du catalogue introuvables');
   }
+  if (!html.includes('data.filter(x=>!hideCatalogueItem(x,filter)')) html = html.replace('data.filter(x=>x.search.includes(term)', 'data.filter(x=>!hideCatalogueItem(x,filter)&&x.search.includes(term)');
+  if (!html.includes('window.yfNews=yfNews')) html = html.replace('const yfNews=new Map();let done=', 'const yfNews=new Map();window.yfNews=yfNews;let done=');
   html = html.replace('</div></section><div class="results">', `</div>${START}<p id="yfNewsStatus" class="note" role="status">Chargement des nouveautés…</p>${END}</section><div class="results">`);
   const body = html.lastIndexOf('</body>');
   if (body < 0 || !html.includes('yfNewsStatus')) throw Error('Emplacement des nouveautés introuvable');

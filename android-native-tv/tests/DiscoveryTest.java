@@ -67,6 +67,8 @@ public final class DiscoveryTest {
         episodes.put("s0_e1", NOW);
         check(Completion.titles(rated, seen, Collections.emptyList(), required).contains("tv"), "all episodes give green series badge");
         check(Completion.titles(rated, seen, Arrays.asList(new Discovery.Viewing("tv", 5, 100, NOW + 1000)), required).contains("tv"), "saved resume cannot hide a series with every episode seen");
+        Map<String, Map<String, Long>> legacy = new HashMap<>(); Map<String, Long> oldKeys = new HashMap<>(); oldKeys.put("s1_e4", NOW); oldKeys.put("s1_e5", NOW); legacy.put("tv", oldKeys);
+        check(Completion.titles(rated, legacy, Collections.emptyList(), required).contains("tv"), "renumbered catalogue retains all-seen legacy badge");
         check(Completion.titles(rated, Collections.emptyMap(), Collections.emptyList(), required).isEmpty(), "complete badges stay profile scoped");
         System.out.println(passed + " vérifications découverte TV réussies.");
     }

@@ -34,6 +34,9 @@ for (const name of ['catalogue-films-moviez.html', 'catalogue-series-moviez.html
   html = html.slice(0, presenceStart) + presence + '\n' + html.slice(presenceEnd);
   if (!html.includes('id="downloadCatalogues"')) html = html.replace('</nav><div class="eyebrow">', '<a id="downloadCatalogues" class="link primary" href="catalogues-yamonfim.zip" download>Télécharger les catalogues ↓</a></nav><p class="note">Même catalogue sur tous tes PC · ajouts synchronisés depuis le site toutes les 15 secondes. Connecte-toi avec ton compte administrateur pour ajouter des titres.</p><div class="eyebrow">');
   html = html.replace('function rebuildDone(){done=new Set([...manualDone,...dbDone])}', 'function rebuildDone(){done=new Set(dbDone)}');
+  if (!html.includes('data.filter(x=>!hideCatalogueItem(x,filter)')) html = html.replace('data.filter(x=>x.search.includes(term)', 'data.filter(x=>!hideCatalogueItem(x,filter)&&x.search.includes(term)');
+  html = html.replace("$('#total').textContent=data.length.toLocaleString('fr')", "$('#total').textContent=(data.length-data.filter(x=>unavailableImports.has(String(x.source_id))).length).toLocaleString('fr')");
+  html = html.replace("$('#remaining').textContent=(data.length-done.size).toLocaleString('fr')", "$('#remaining').textContent=(data.length-done.size-data.filter(x=>unavailableImports.has(String(x.source_id))).length).toLocaleString('fr')");
   html = html.replace('check.disabled=dbDone.has(id);', 'check.disabled=true;');
   html = html.replace("text.textContent=dbDone.has(id)?'Ajouté sur ton site ✓':isDone?'Ajouté manuellement ✓':'Marquer comme ajouté'", "text.textContent=dbDone.has(id)?'Ajouté sur ton site ✓':'Pas encore ajouté au site'");
   html = html.replace("text.textContent=dbDone.has(id)?'Ajoutée sur ton site ✓':isDone?'Ajoutée manuellement ✓':'Marquer comme ajoutée'", "text.textContent=dbDone.has(id)?'Ajoutée sur ton site ✓':'Pas encore ajoutée au site'");

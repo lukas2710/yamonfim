@@ -5,8 +5,9 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { readClientResource } from '@/lib/resource-cache';
 import { safeCollectionImage, type CollectionMedia, type MediaCollection } from '@/lib/collections';
+import WatchStatusBadge from '@/components/WatchStatusBadge';
 
-export default function HomeCollections<T extends CollectionMedia>({ catalogue, onOpen, admin, child = false }: { catalogue: T[]; onOpen: (item: T) => void; admin: boolean; child?: boolean }) {
+export default function HomeCollections<T extends CollectionMedia>({ catalogue, onOpen, admin, child = false, completedIds = new Set<string>(), inProgressIds = new Set<string>() }: { catalogue: T[]; onOpen: (item: T) => void; admin: boolean; child?: boolean; completedIds?: ReadonlySet<string>; inProgressIds?: ReadonlySet<string> }) {
   const [collections, setCollections] = useState<MediaCollection[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState(false);
@@ -49,7 +50,7 @@ export default function HomeCollections<T extends CollectionMedia>({ catalogue, 
     })}</div>
     {current && <div ref={panel} tabIndex={-1} id="collection-titles" className="yf-collection-panel" aria-label={`Titres de ${current.collection.title}`}>
       <div className="yf-collections-heading"><div><p className="yf-eyebrow">DANS CETTE COLLECTION</p><h3>{current.collection.title}</h3>{current.collection.description && <p>{current.collection.description}</p>}</div><button className="yf-collection-manage" onClick={() => { setSelected(null); cards.current.get(current.collection.id)?.focus(); }}>Fermer ×</button></div>
-      <div className="yf-collection-titles">{current.items.map(item => <button key={item.id} className="yf-collection-title" onClick={() => onOpen(item)}>{item.poster ? <img decoding="async" src={item.poster} alt="" loading="lazy" /> : <span className="yf-collection-no-poster" aria-hidden="true">▶</span>}<span>{item.type === 'series' ? 'SÉRIE' : 'FILM'}</span><strong>{item.title}</strong><span className="yf-collection-open">Voir la fiche ↗</span></button>)}</div>
+      <div className="yf-collection-titles">{current.items.map(item => { const completed = completedIds.has(String(item.id)); return <button key={item.id} className="yf-collection-title" onClick={() => onOpen(item)}><span className="yf-collection-poster">{item.poster ? <img decoding="async" src={item.poster} alt="" loading="lazy" /> : <span className="yf-collection-no-poster" aria-hidden="true">▶</span>}<WatchStatusBadge completed={completed} inProgress={!completed && inProgressIds.has(String(item.id))} /></span><span className="yf-collection-kind">{item.type === 'series' ? 'SÉRIE' : 'FILM'}</span><strong>{item.title}</strong><span className="yf-collection-open">Voir la fiche ↗</span></button>; })}</div>
     </div>}
   </section>;
 }

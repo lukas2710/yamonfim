@@ -22,6 +22,12 @@ function reconcileCatalogueRows(rows) {
   }
   return found;
 }
+function hideCatalogueItem(item, selectedFilter) {
+  const id = String(item.source_id);
+  if (unavailableImports.has(id)) return true;
+  if (selectedFilter !== 'news' || !dbDone.has(id)) return false;
+  return window.yfNews?.get(id)?.update !== true;
+}
 async function syncDatabase() {
   if (syncing) return;
   syncing = true;
@@ -49,7 +55,11 @@ async function syncDatabase() {
     const fresh = new Set(matched.keys());
     // An import completed after this read began must not be erased by its snapshot.
     for (const [id, state] of importStates) if (state.ok && state.confirmedAt >= started) fresh.add(id);
-    dbDone = fresh; catalogueStatusReady = true;
+    dbDone = fresh;
+    let availabilityChanged = false;
+    for (const id of fresh) if (unavailableImports.delete(id)) availabilityChanged = true;
+    if (availabilityChanged) saveUnavailableImports();
+    catalogueStatusReady = true;
     for (const item of data) {
       const row = matched.get(String(item.source_id));
       if (row && !genreCache.has(String(item.source_id))) item.genres = Array.isArray(row.genres) ? row.genres.filter(genre => typeof genre === 'string' && genre.trim()) : [];

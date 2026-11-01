@@ -987,7 +987,7 @@ export default function Home() {
 
         {showHero && selectedGenre === 'all' && (
           <div className="-mx-4 sm:-mx-10">
-            <HomeCollections child={!!activeProfile?.profile_mode && activeProfile.profile_mode !== 'standard'} catalogue={homeCatalogue} onOpen={item => void handleMediaClick(item)} admin={isAdmin} />
+            <HomeCollections child={!!activeProfile?.profile_mode && activeProfile.profile_mode !== 'standard'} catalogue={homeCatalogue} onOpen={item => void handleMediaClick(item)} admin={isAdmin} completedIds={completedIds} inProgressIds={inProgressIds} />
           </div>
         )}
 
@@ -1042,7 +1042,7 @@ export default function Home() {
           <>
             <PromoBanner isVip={isVip} isAdmin={isAdmin} />
             <TvAppAnnouncement />
-            {(!activeProfile?.profile_mode || activeProfile.profile_mode === 'standard') && <DailyAdditions />}
+            {(!activeProfile?.profile_mode || activeProfile.profile_mode === 'standard') && <DailyAdditions completedIds={completedIds} inProgressIds={inProgressIds} />}
 
             {([
               { title: 'Films en tendance cette semaine', subtitle: 'Tendances TMDB de la semaine · disponibles sur Yamonfilm', items: trendingMovies },

@@ -7,9 +7,9 @@ function fixture(data) {
   const identity = {};
   vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/content-identity.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText, { exports: identity, URL });
   const node = () => ({ append() {}, setAttribute() {}, replaceChildren() {} });
-  const context = { data, catalogueIdentity: identity, valid: new Set(data.map(item => String(item.source_id))), Map, Set, URL, location: { origin: 'null', protocol: 'file:' }, document: { createElement: node, querySelector: node }, window: { addEventListener() {} }, dbDone: new Set(), render() {} };
+  const context = { data, catalogueIdentity: identity, valid: new Set(data.map(item => String(item.source_id))), Map, Set, URL, location: { origin: 'null', protocol: 'file:' }, document: { createElement: node, querySelector: node }, window: { addEventListener() {}, yfNews: new Map() }, dbDone: new Set(), unavailableImports: new Map(), render() {} };
   vm.createContext(context);
-  vm.runInContext(fs.readFileSync('scripts/catalogue-direct-import.js', 'utf8') + '\n' + fs.readFileSync('scripts/catalogue-presence.js', 'utf8') + '\ncatalogueStatusReady=true; globalThis.reconcile=reconcileCatalogueRows; globalThis.button=importButton;', context);
+  vm.runInContext(fs.readFileSync('scripts/catalogue-direct-import.js', 'utf8') + '\n' + fs.readFileSync('scripts/catalogue-presence.js', 'utf8') + '\ncatalogueStatusReady=true; globalThis.reconcile=reconcileCatalogueRows; globalThis.button=importButton; globalThis.hidden=hideCatalogueItem; globalThis.setUnavailable=rows=>{unavailableImports=new Map(rows)};', context);
   return context;
 }
 test('real catalogue cards recognize both reported films and disable addition after reload', () => {
@@ -65,5 +65,20 @@ test('downloadable pages use server-backed checks and a 15 second refresh', () =
     assert.ok(html.includes('function rebuildDone(){done=new Set(dbDone)}'));
     assert.ok(html.includes('setInterval(()=>{if(!document.hidden)syncDatabase()},15000)'));
     assert.ok(html.includes('check.disabled=true;'));
+    assert.ok(html.includes('data.filter(x=>!hideCatalogueItem(x,filter)'));
+    assert.ok(html.includes('window.yfNews=yfNews'));
   }
+});
+test('unavailable titles disappear and already-added movie news stays hidden', () => {
+  const data = [{ kind: 'movie', source_id: 1, title: 'Indisponible', year: 2020 }, { kind: 'movie', source_id: 2, title: 'Déjà ajouté', year: 2021 }, { kind: 'movie', source_id: 3, title: 'À compléter', year: 2022 }];
+  const api = fixture(data);
+  api.setUnavailable([['1', 'Non disponible']]);
+  api.dbDone.add('2');
+  api.window.yfNews.set('2', { label: 'Déjà sorti' });
+  api.window.yfNews.set('3', { label: 'Nouvelle sortie' });
+  assert.equal(api.hidden(data[0], 'all'), true);
+  assert.equal(api.hidden(data[1], 'news'), true);
+  assert.equal(api.hidden(data[2], 'news'), false);
+  api.window.yfNews.set('2', { update: true, label: 'Nouvelle saison' });
+  assert.equal(api.hidden(data[1], 'news'), false);
 });

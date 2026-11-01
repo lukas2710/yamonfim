@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState, type CSSProperties } from 'react';
 import { supabase } from '@/lib/supabase';
 import { fetchDailyAdditions } from '@/lib/daily-additions';
+import WatchStatusBadge from '@/components/WatchStatusBadge';
 
 // Counts up from zero when the panel opens; shows the value at once when motion is reduced.
 function CountUp({ value }: { value: number }) {
@@ -26,7 +27,7 @@ function CountUp({ value }: { value: number }) {
 interface Added { id: string | number; title: string; type: 'movie' | 'series'; poster?: string; created_at: string }
 
 // Side tab, like the TV one, that opens only when clicked.
-export default function DailyAdditions() {
+export default function DailyAdditions({ completedIds = new Set<string>(), inProgressIds = new Set<string>() }: { completedIds?: ReadonlySet<string>; inProgressIds?: ReadonlySet<string> }) {
   const [items, setItems] = useState<Added[] | null>(null);
   const [counts, setCounts] = useState({ total: 0, movies: 0, series: 0, yesterday: 0 });
   const [open, setOpen] = useState(false);
@@ -72,11 +73,11 @@ export default function DailyAdditions() {
           <div className="rounded-2xl bg-gradient-to-br from-sky-500/15 to-white/[0.03] p-4 ring-1 ring-white/5"><p className="text-3xl font-black tabular-nums"><CountUp value={series} /></p><p className="text-xs text-zinc-400">série{series > 1 ? 's' : ''} ajoutée{series > 1 ? 's' : ''}</p></div>
         </div>
         {total > today.length && <p className="mt-4 text-xs text-zinc-400">Les {today.length} derniers ajouts sur {total} aujourd’hui.</p>}
-        {total > 0 ? <ul className="mt-5 space-y-2">{today.map((item, index) => <li key={item.id} className="yf-rise" style={{ '--i': index } as CSSProperties}><Link href={`/watch/${item.id}`} onClick={() => setOpen(false)} className="group flex items-center gap-3 rounded-xl p-2 transition hover:bg-white/5">
-          <span className="h-14 w-10 shrink-0 overflow-hidden rounded-md bg-white/5">{item.poster && <img decoding="async" src={item.poster} alt="" loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-110" />}</span>
+        {total > 0 ? <ul className="mt-5 space-y-2">{today.map((item, index) => { const completed = completedIds.has(String(item.id)); return <li key={item.id} className="yf-rise" style={{ '--i': index } as CSSProperties}><Link href={`/watch/${item.id}`} onClick={() => setOpen(false)} className="group flex items-center gap-3 rounded-xl p-2 transition hover:bg-white/5">
+          <span className="relative h-14 w-10 shrink-0 overflow-hidden rounded-md bg-white/5">{item.poster && <img decoding="async" src={item.poster} alt="" loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-110" />}<WatchStatusBadge completed={completed} inProgress={!completed && inProgressIds.has(String(item.id))} compact className="right-0 top-0 px-0.5 py-1 text-[6px]" /></span>
           <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{item.title}</span><span className="text-[11px] text-zinc-500">{item.type === 'movie' ? 'Film' : 'Série'} · ajouté à {new Date(item.created_at).toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit' })}</span></span>
           <span aria-hidden="true" className="text-zinc-500 transition group-hover:translate-x-1 group-hover:text-white">›</span>
-        </Link></li>)}</ul> : <p className="mt-5 text-sm text-zinc-400">Reviens plus tard dans la journée{yesterday ? ` : ${yesterday} titre${yesterday > 1 ? 's ont' : ' a'} été ajouté${yesterday > 1 ? 's' : ''} hier.` : '.'}</p>}
+        </Link></li>; })}</ul> : <p className="mt-5 text-sm text-zinc-400">Reviens plus tard dans la journée{yesterday ? ` : ${yesterday} titre${yesterday > 1 ? 's ont' : ' a'} été ajouté${yesterday > 1 ? 's' : ''} hier.` : '.'}</p>}
       </section>
     </div>}
   </>;

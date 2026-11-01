@@ -921,7 +921,7 @@ export default function WatchPage() {
 
       <WatchDetails title={media.title} description={media.description || ''} poster={media.poster} backdrop={media.backdrop}
         series={isSeries} runtime={media.runtime} seasonCount={media.seasons?.length || 0} seen={seenEpisodes} total={totalEpisodes}
-        watched={isSeries ? seriesDone : movieSeen} playLabel={playLabel}
+        watched={isSeries ? seriesDone : movieSeen} inProgress={isSeries ? seenEpisodes > 0 : hasMovieHistory} playLabel={playLabel}
         episodeLabel={`${seasonLabel} ${currentSeason?.seasonNumber || 1} · Épisode ${currentEpisode?.number || 1}${currentEpisode?.title ? ' — ' + currentEpisode.title : ''}`}
         disabled={isStarting} showRestart={showRestart} onPlay={() => void startPlaying(selectedSeasonIdx, selectedEpisodeIdx)}
         onRestart={restartFromBeginning} onToggleWatched={() => void toggleMovieWatched()} />
