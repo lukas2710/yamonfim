@@ -3,10 +3,17 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 
-const STORAGE_KEY = 'yf_tv_app_announced_v2';
+// « J'ai déjà l'application » : plus jamais d'annonce sur cet appareil.
+const STORAGE_KEY = 'yf_apps_owned_v3';
+// « Plus tard » ou fermeture : l'annonce revient à la prochaine connexion (nouvelle session du navigateur).
+const SESSION_KEY = 'yf_apps_later_v3';
 // Les applications YAMONFILM qui affichent le site dans une vue web Android (« ; wv ») ne montrent pas l'annonce.
 // PC, mobiles et navigateurs des télévisions la voient.
 const IN_APP = /; wv\)/i;
+
+function remember(key: string, store: 'local' | 'session') {
+  try { (store === 'local' ? localStorage : sessionStorage).setItem(key, '1'); } catch { /* stockage indisponible */ }
+}
 
 export default function TvAppAnnouncement() {
   const [open, setOpen] = useState(false);
@@ -15,11 +22,13 @@ export default function TvAppAnnouncement() {
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (IN_APP.test(navigator.userAgent)) return;
+    // Déjà lancé depuis l'icône de l'écran d'accueil : l'application est installée.
+    const installed = window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    if (IN_APP.test(navigator.userAgent) || installed) return;
     // La petite télé sur le côté reste disponible pour rouvrir l'annonce à tout moment.
     const show = window.setTimeout(() => setLauncher(true), 0);
     let seen = false;
-    try { seen = !!localStorage.getItem(STORAGE_KEY); } catch { /* stockage indisponible : on affiche quand même */ }
+    try { seen = !!localStorage.getItem(STORAGE_KEY) || !!sessionStorage.getItem(SESSION_KEY); } catch { /* stockage indisponible : on affiche quand même */ }
     if (seen) return () => window.clearTimeout(show);
     const timer = window.setTimeout(() => setOpen(true), 1200);
     return () => { window.clearTimeout(show); window.clearTimeout(timer); };
@@ -38,8 +47,8 @@ export default function TvAppAnnouncement() {
     };
   }, [open]);
 
-  function dismiss() {
-    try { localStorage.setItem(STORAGE_KEY, '1'); } catch { /* ignoré */ }
+  function dismiss(owned = false) {
+    remember(owned ? STORAGE_KEY : SESSION_KEY, owned ? 'local' : 'session');
     setClosing(true);
     window.setTimeout(() => { setOpen(false); setClosing(false); }, 380);
   }
@@ -47,21 +56,21 @@ export default function TvAppAnnouncement() {
   if (!open) {
     if (!launcher) return null;
     return (
-      <button type="button" className="yf-tvl" onClick={() => setOpen(true)} aria-label="Découvrir l’application TV YAMONFILM">
+      <button type="button" className="yf-tvl" onClick={() => setOpen(true)} aria-label="Découvrir les applications YAMONFILM">
         <style>{CSS}</style>
         <span className="yf-tvl-tv" aria-hidden="true">
           <span className="yf-tvl-ant yf-tvl-ant-l" /><span className="yf-tvl-ant yf-tvl-ant-r" />
           <span className="yf-tvl-screen"><span className="yf-tvl-scan" /><span className="yf-tvl-play" /></span>
           <span className="yf-tvl-foot" />
         </span>
-        <span className="yf-tvl-label">App TV</span>
+        <span className="yf-tvl-label">Apps</span>
         <span className="yf-tvl-dot" aria-hidden="true" />
       </button>
     );
   }
 
   return (
-    <div className={`yf-tva-backdrop${closing ? ' yf-tva-out' : ''}`} onClick={dismiss}>
+    <div className={`yf-tva-backdrop${closing ? ' yf-tva-out' : ''}`} onClick={() => dismiss()}>
       <style>{CSS}</style>
       <section
         role="dialog"
@@ -71,7 +80,7 @@ export default function TvAppAnnouncement() {
         className="yf-tva-card"
         onClick={event => event.stopPropagation()}
       >
-        <button ref={closeRef} onClick={dismiss} className="yf-tva-close" aria-label="Fermer l’annonce">×</button>
+        <button ref={closeRef} onClick={() => dismiss()} className="yf-tva-close" aria-label="Fermer l’annonce">×</button>
 
         <div className="yf-tva-stage" aria-hidden="true">
           <span className="yf-tva-wave yf-tva-w1" />
@@ -92,23 +101,33 @@ export default function TvAppAnnouncement() {
             <div className="yf-tva-led" />
           </div>
           <div className="yf-tva-foot" />
+          <div className="yf-tva-phone">
+            <div className="yf-tva-phone-screen">
+              <div className="yf-tva-phone-on">
+                <div className="yf-tva-phone-logo"><span>Y</span>F</div>
+                <i /><i /><i />
+              </div>
+            </div>
+            <span className="yf-tva-notch" />
+          </div>
         </div>
 
         <p className="yf-tva-kicker yf-tva-up" style={{ animationDelay: '1.35s' }}>NOUVEAU</p>
         <h2 id="yf-tva-title" className="yf-tva-title yf-tva-up" style={{ animationDelay: '1.5s' }}>
-          YAMONFILM arrive sur ta télé
+          Découvre les applications YAMONFILM
         </h2>
         <p id="yf-tva-text" className="yf-tva-text yf-tva-up" style={{ animationDelay: '1.65s' }}>
-          L’application TV est disponible : tes films et séries sur grand écran, à la télécommande, avec ton compte, tes profils et ton historique.
+          Sur ta télé à la télécommande, avec la recherche vocale, et sur ton téléphone en un clic depuis l’écran d’accueil. Même compte, mêmes profils, même historique.
         </p>
         <div className="yf-tva-chips yf-tva-up" style={{ animationDelay: '1.8s' }}>
-          <span>Android TV</span><span>Google TV</span><span>Fire TV Stick</span><span>Bbox 4K</span>
+          <span>📺 Android TV</span><span>Google TV</span><span>Fire TV Stick</span><span>Bbox 4K</span><span>📱 iPhone</span><span>Android</span>
         </div>
         <div className="yf-tva-actions yf-tva-up" style={{ animationDelay: '1.95s' }}>
-          <Link href="/app" onClick={() => { try { localStorage.setItem(STORAGE_KEY, '1'); } catch { /* ignoré */ } }} className="yf-tva-cta">
-            Découvrir l’application TV
+          <Link href="/app" onClick={() => remember(SESSION_KEY, 'session')} className="yf-tva-cta">
+            Découvrir les applications
           </Link>
-          <button onClick={dismiss} className="yf-tva-later">Plus tard</button>
+          <button onClick={() => dismiss(true)} className="yf-tva-owned">J’ai déjà l’application</button>
+          <button onClick={() => dismiss()} className="yf-tva-later">Plus tard</button>
         </div>
       </section>
     </div>
@@ -153,6 +172,17 @@ const CSS = `
 .yf-tva-cta:hover{transform:translateY(-2px)}
 .yf-tva-cta:focus-visible{outline:3px solid #fff;outline-offset:3px}
 .yf-tva-cta::after{content:"";position:absolute;top:0;bottom:0;left:-60%;width:40%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.45),transparent);transform:skewX(-20deg);animation:yfTvaShine 2.8s ease-in-out 2.2s infinite}
+.yf-tva-owned{min-height:46px;border-radius:999px;font-size:14px;font-weight:700;color:#fff;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);cursor:pointer;transition:background .2s,border-color .2s}
+.yf-tva-owned:hover,.yf-tva-owned:focus-visible{background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.3);outline:none}
+.yf-tva-phone{position:absolute;z-index:4;left:50%;top:50%;width:62px;height:118px;margin:-38px 0 0 78px;border-radius:14px;padding:5px;background:linear-gradient(160deg,#34343d,#16161c);box-shadow:-10px 16px 30px -10px rgba(0,0,0,.9),inset 0 1px 0 rgba(255,255,255,.1);animation:yfTvaPhone .85s cubic-bezier(.2,.9,.3,1.3) 1.2s both}
+.yf-tva-phone-screen{position:relative;width:100%;height:100%;border-radius:10px;overflow:hidden;background:#050507}
+.yf-tva-phone-on{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;gap:5px;padding:20px 6px 0;background:linear-gradient(170deg,#3a0d12,#0a1222);animation:yfTvaPower .5s cubic-bezier(.3,1.4,.4,1) 1.9s both}
+.yf-tva-phone-logo{font-weight:900;font-size:15px;color:#fff;margin-bottom:4px}
+.yf-tva-phone-logo span{color:#e50914}
+.yf-tva-phone-on i{display:block;width:100%;height:13px;border-radius:3px;background:linear-gradient(160deg,rgba(255,255,255,.22),rgba(255,255,255,.06));animation:yfTvaRow .4s ease both}
+.yf-tva-phone-on i:nth-of-type(1){animation-delay:2.1s}.yf-tva-phone-on i:nth-of-type(2){animation-delay:2.18s}.yf-tva-phone-on i:nth-of-type(3){animation-delay:2.26s}
+.yf-tva-notch{position:absolute;top:8px;left:50%;width:18px;height:4px;margin-left:-9px;border-radius:4px;background:#000}
+@keyframes yfTvaPhone{from{opacity:0;transform:translate(70px,30px) rotate(18deg)}to{opacity:1;transform:rotate(-6deg)}}
 .yf-tva-later{min-height:44px;border-radius:999px;font-size:14px;color:#a1a1aa;cursor:pointer;transition:color .2s,background .2s}
 .yf-tva-later:hover,.yf-tva-later:focus-visible{color:#fff;background:rgba(255,255,255,.06);outline:none}
 @keyframes yfTvaFade{from{opacity:0}to{opacity:1}}
@@ -171,8 +201,8 @@ const CSS = `
 @keyframes yfTvaUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
 @keyframes yfTvaShine{0%{left:-60%}60%,100%{left:130%}}
 @keyframes yfTvaGlowBtn{0%,100%{box-shadow:0 12px 30px -10px rgba(229,9,20,.8)}50%{box-shadow:0 12px 40px -6px rgba(255,59,71,1)}}
-@media (max-width:420px){.yf-tva-card{padding:24px 18px 18px}.yf-tva-title{font-size:22px}.yf-tva-tv{width:220px;height:132px}.yf-tva-wave{width:220px;height:132px;margin:-73px 0 0 -110px}.yf-tva-logo{font-size:21px;top:32px}}
-@media (prefers-reduced-motion:reduce){.yf-tva-backdrop *,.yf-tva-backdrop{animation-duration:.01ms!important;animation-delay:0s!important;animation-iteration-count:1!important}.yf-tva-wave,.yf-tva-spark{display:none}}
+@media (max-width:420px){.yf-tva-card{padding:24px 18px 18px}.yf-tva-title{font-size:22px}.yf-tva-tv{width:220px;height:132px}.yf-tva-phone{width:54px;height:102px;margin:-30px 0 0 64px}.yf-tva-wave{width:220px;height:132px;margin:-73px 0 0 -110px}.yf-tva-logo{font-size:21px;top:32px}}
+@media (prefers-reduced-motion:reduce){.yf-tva-backdrop *,.yf-tva-backdrop{animation-duration:.01ms!important;animation-delay:0s!important;animation-iteration-count:1!important}.yf-tva-wave,.yf-tva-spark{display:none}.yf-tva-phone{transform:rotate(-6deg)}}
 .yf-tvl{position:fixed;right:0;top:58%;z-index:60;display:flex;align-items:center;gap:8px;padding:9px 12px 9px 10px;border-radius:16px 0 0 16px;background:linear-gradient(135deg,#1c1c24,#121218);border:1px solid rgba(255,255,255,.1);border-right:0;box-shadow:0 10px 30px -10px rgba(0,0,0,.8),0 0 0 1px rgba(229,9,20,.12);transform:translateX(calc(100% - 52px));transition:transform .45s cubic-bezier(.2,.9,.25,1.15),box-shadow .3s;cursor:pointer;animation:yfTvlIn .8s cubic-bezier(.2,.9,.3,1.3) .6s both,yfTvlNudge 6s ease-in-out 3s infinite}
 .yf-tvl:hover,.yf-tvl:focus-visible{transform:translateX(0);box-shadow:0 14px 34px -10px rgba(229,9,20,.6),0 0 0 1px rgba(229,9,20,.35);outline:none;animation-play-state:paused}
 .yf-tvl-tv{position:relative;display:block;width:32px;height:26px;flex:none}
