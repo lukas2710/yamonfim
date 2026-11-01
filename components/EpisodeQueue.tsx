@@ -20,7 +20,7 @@ export default function EpisodeQueue({ seasons, active, watched, poster, disable
       const seen = !!watched[`s${browseSeason}_e${index}`];
       const image = episode.still_path || poster;
       return <li key={index}><button type="button" disabled={disabled || selected} aria-current={selected ? 'true' : undefined} onClick={() => onSelect(browseSeason, index)} className="watch-queue-episode">
-        <div className="watch-queue-image">{image ? <img src={image} alt="" loading="lazy" /> : <span aria-hidden="true">▶</span>}<span className="watch-queue-number">{episode.number || index + 1}</span></div>
+        <div className="watch-queue-image">{image ? <img decoding="async" src={image} alt="" loading="lazy" /> : <span aria-hidden="true">▶</span>}<span className="watch-queue-number">{episode.number || index + 1}</span></div>
         <div className="watch-queue-copy"><span className="watch-queue-label">{selected ? 'EN COURS' : `ÉPISODE ${episode.number || index + 1}`}</span><strong>{episode.title || `Épisode ${index + 1}`}</strong><span className="watch-queue-meta">{episode.runtime ? `${episode.runtime} min` : 'Série'}{seen && <span>✓ Déjà vu</span>}</span></div>
         <span className="watch-queue-play" aria-hidden="true">{selected ? '▥' : '▶'}</span>
       </button></li>;

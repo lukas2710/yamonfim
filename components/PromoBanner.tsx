@@ -83,7 +83,7 @@ export function PromoCard({
   return (
     <div className={`relative overflow-hidden rounded-2xl bg-[#111113] ring-1 ${theme.ring}`}>
       {promo.image_url && (
-        <img src={promo.image_url} alt="" className="absolute inset-0 h-full w-full object-cover opacity-50" />
+        <img decoding="async" src={promo.image_url} alt="" className="absolute inset-0 h-full w-full object-cover opacity-50" />
       )}
       <div className={`absolute inset-0 bg-gradient-to-br ${theme.glow} via-transparent to-transparent`} />
       <div className="absolute inset-0 bg-gradient-to-r from-[#0a0a0b] via-[#0a0a0b]/75 to-[#0a0a0b]/10" />

@@ -201,7 +201,7 @@ export default function ProfilesPage() {
             >
               <div className="relative w-28 h-28 sm:w-36 sm:h-36 rounded-2xl overflow-hidden bg-zinc-800 ring-2 ring-transparent group-hover:ring-white transition shadow-2xl">
                 {profile.avatar_url && profile.avatar_url.startsWith('http') ? (
-                  <img src={profile.avatar_url} alt={profile.name} className="w-full h-full object-cover" />
+                  <img decoding="async" src={profile.avatar_url} alt={profile.name} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-4xl bg-gradient-to-br from-zinc-800 to-zinc-900">
                     {profile.avatar_url || profile.name[0]}

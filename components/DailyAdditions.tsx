@@ -73,7 +73,7 @@ export default function DailyAdditions() {
         </div>
         {total > today.length && <p className="mt-4 text-xs text-zinc-400">Les {today.length} derniers ajouts sur {total} aujourd’hui.</p>}
         {total > 0 ? <ul className="mt-5 space-y-2">{today.map((item, index) => <li key={item.id} className="yf-rise" style={{ '--i': index } as CSSProperties}><Link href={`/watch/${item.id}`} onClick={() => setOpen(false)} className="group flex items-center gap-3 rounded-xl p-2 transition hover:bg-white/5">
-          <span className="h-14 w-10 shrink-0 overflow-hidden rounded-md bg-white/5">{item.poster && <img src={item.poster} alt="" loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-110" />}</span>
+          <span className="h-14 w-10 shrink-0 overflow-hidden rounded-md bg-white/5">{item.poster && <img decoding="async" src={item.poster} alt="" loading="lazy" className="h-full w-full object-cover transition duration-300 group-hover:scale-110" />}</span>
           <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{item.title}</span><span className="text-[11px] text-zinc-500">{item.type === 'movie' ? 'Film' : 'Série'} · ajouté à {new Date(item.created_at).toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit' })}</span></span>
           <span aria-hidden="true" className="text-zinc-500 transition group-hover:translate-x-1 group-hover:text-white">›</span>
         </Link></li>)}</ul> : <p className="mt-5 text-sm text-zinc-400">Reviens plus tard dans la journée{yesterday ? ` : ${yesterday} titre${yesterday > 1 ? 's ont' : ' a'} été ajouté${yesterday > 1 ? 's' : ''} hier.` : '.'}</p>}

@@ -4,7 +4,7 @@ import { createSearchMatcher } from '@/lib/search';
 
 import SectionNavigation from '@/components/SectionNavigation';
 import PageHero from '@/components/PageHero';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import type Hls from 'hls.js';
 
@@ -101,13 +101,16 @@ export default function TvPage() {
     };
   }, [activeChannel]);
 
-  const categories = ['Toutes', ...Array.from(new Set(channels.map(c => c.category).filter(Boolean)))];
+  const categories = useMemo(() => ['Toutes', ...Array.from(new Set(channels.map(c => c.category).filter(Boolean)))], [channels]);
 
-  const filteredChannels = channels.filter(c => {
-    const matchesSearch = createSearchMatcher(searchQuery)(c.name);
+  const filteredChannels = useMemo(() => {
+  const matcher = createSearchMatcher(searchQuery);
+  return channels.filter(c => {
+    const matchesSearch = matcher(c.name);
     const matchesCategory = selectedCategory === 'Toutes' || c.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
+  }, [channels, searchQuery, selectedCategory]);
 
   return (
     <main className="yf-page yf-tv min-h-screen bg-[#121212] text-white font-sans pb-24">
@@ -204,7 +207,7 @@ export default function TvPage() {
               >
                 <div className="w-full aspect-video flex items-center justify-center p-2 bg-zinc-950 rounded-lg border border-zinc-800/50">
                   {channel.logo ? (
-                    <img 
+                    <img decoding="async" 
                       src={channel.logo} 
                       alt={channel.name} 
                       className="max-h-10 max-w-full object-contain"

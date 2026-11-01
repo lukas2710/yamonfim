@@ -7,7 +7,7 @@ import { clearClientResources } from '@/lib/resource-cache';
 import { fetchCatalogueRows } from '@/lib/catalogue';
 import { createSearchMatcher } from '@/lib/search';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import SectionNavigation from '@/components/SectionNavigation';
@@ -105,7 +105,10 @@ export default function AdminCollectionsPage() {
     finally { setBusy(false); }
   }
   const selected = collectionItems(draft, catalogue);
-  const filtered = catalogue.filter(item => createSearchMatcher(search)(item.title));
+  const filtered = useMemo(() => {
+    const matches = createSearchMatcher(search);
+    return catalogue.filter(item => matches(item.title));
+  }, [catalogue, search]);
   const cover = safeCollectionImage(draft.cover_url) || selected[0]?.backdrop || selected[0]?.poster;
   if (!authorized) return <main className="yf-page min-h-screen bg-[#0a0a0b] p-10 text-zinc-400" role="status">Vérification de l’accès administrateur…</main>;
 
@@ -125,11 +128,11 @@ export default function AdminCollectionsPage() {
             <div className="yf-collection-options"><label>Ordre sur l’accueil<input type="number" min={0} max={9999} required value={draft.position} onChange={event => setDraft({ ...draft, position: Number(event.target.value) })} /></label><label className="yf-collection-check"><input type="checkbox" checked={draft.active} onChange={event => setDraft({ ...draft, active: event.target.checked })} /> Visible sur l’accueil</label></div>
             <div className="yf-collection-selection"><h3>Titres sélectionnés <span>{selected.length}/200</span></h3><p>Utilise les flèches pour choisir leur ordre dans la collection.</p>{!selected.length && <p className="yf-collection-empty">Choisis tes premiers titres dans le catalogue ci-dessous.</p>}<ol>{selected.map((item, index) => <li key={item.id}><span className="yf-collection-order">{index + 1}</span><strong>{item.title}</strong><button type="button" aria-label={`Monter ${item.title}`} disabled={index === 0} onClick={() => move(index, -1)}>↑</button><button type="button" aria-label={`Descendre ${item.title}`} disabled={index === selected.length - 1} onClick={() => move(index, 1)}>↓</button><button type="button" aria-label={`Retirer ${item.title} de la collection`} onClick={() => toggle(String(item.id))}>×</button></li>)}</ol></div>
             <label>Rechercher dans le catalogue<input type="search" placeholder="Fast, Star Wars, Harry Potter…" value={search} onChange={event => setSearch(event.target.value)} /></label>
-            <div className="yf-collection-picker" aria-label="Titres disponibles">{filtered.map(item => <label key={item.id} className="yf-collection-pick"><input type="checkbox" checked={draft.media_ids.includes(String(item.id))} disabled={!draft.media_ids.includes(String(item.id)) && selected.length >= 200} onChange={() => toggle(String(item.id))} />{item.poster && <img src={item.poster} alt="" loading="lazy" />}<span><strong>{item.title}</strong><small>{item.type === 'series' ? 'Série' : 'Film'}</small></span></label>)}{!filtered.length && <p className="yf-collection-empty">Aucun titre trouvé. Ajoute d’abord le contenu dans le catalogue admin.</p>}</div>
+            <div className="yf-collection-picker" aria-label="Titres disponibles">{filtered.map(item => <label key={item.id} className="yf-collection-pick"><input type="checkbox" checked={draft.media_ids.includes(String(item.id))} disabled={!draft.media_ids.includes(String(item.id)) && selected.length >= 200} onChange={() => toggle(String(item.id))} />{item.poster && <img decoding="async" src={item.poster} alt="" loading="lazy" />}<span><strong>{item.title}</strong><small>{item.type === 'series' ? 'Série' : 'Film'}</small></span></label>)}{!filtered.length && <p className="yf-collection-empty">Aucun titre trouvé. Ajoute d’abord le contenu dans le catalogue admin.</p>}</div>
             <button className="yf-collection-submit" type="submit">{busy ? 'Enregistrement…' : editing ? 'Enregistrer les modifications' : draft.active ? 'Publier la collection' : 'Enregistrer le brouillon'}</button>
           </fieldset>
         </form>
-        <aside className="yf-collection-preview"><p className="yf-eyebrow">APERÇU SUR L’ACCUEIL</p><div className="yf-collection-card" aria-label="Aperçu de la collection">{cover && <img src={cover} alt="" />}<span className="yf-collection-shade" /><span className="yf-collection-count">{selected.length} titres</span><span className="yf-collection-card-copy"><span>COLLECTION</span><strong>{draft.title || 'Ta prochaine saga'}</strong><span>Explorer l’univers ↗</span></span></div><p className="yf-collection-preview-note">Sans couverture personnalisée, l’image du premier titre est utilisée.</p>
+        <aside className="yf-collection-preview"><p className="yf-eyebrow">APERÇU SUR L’ACCUEIL</p><div className="yf-collection-card" aria-label="Aperçu de la collection">{cover && <img decoding="async" src={cover} alt="" />}<span className="yf-collection-shade" /><span className="yf-collection-count">{selected.length} titres</span><span className="yf-collection-card-copy"><span>COLLECTION</span><strong>{draft.title || 'Ta prochaine saga'}</strong><span>Explorer l’univers ↗</span></span></div><p className="yf-collection-preview-note">Sans couverture personnalisée, l’image du premier titre est utilisée.</p>
           <h2>Tes collections <span>{collections.length}</span></h2><div className="yf-collection-saved">{collections.map(collection => <article key={collection.id}><div><span className={collection.active ? 'yf-collection-live' : ''}>{collection.active ? 'PUBLIÉE' : 'MASQUÉE'} · ORDRE {collection.position}</span><h3>{collection.title}</h3><p>{collectionItems(collection, catalogue).length} titres disponibles</p></div><div><button type="button" disabled={busy} onClick={() => { setEditing(collection.id); setDraft({ title: collection.title, description: collection.description, cover_url: collection.cover_url, media_ids: collectionItems(collection, catalogue).map(item => String(item.id)), active: collection.active, position: collection.position }); setMessage(''); setError(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Modifier</button><button type="button" disabled={busy} onClick={() => void setVisibility(collection)}>{collection.active ? 'Masquer' : 'Publier'}</button></div></article>)}{!collections.length && <p className="yf-collection-empty">Tes collections apparaîtront ici.</p>}</div>
         </aside>
       </>}

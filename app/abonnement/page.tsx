@@ -2,7 +2,8 @@
 
 import { getPersistentSession } from '@/lib/auth-session';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -14,7 +15,8 @@ import sales from './sales.module.css';
 import MemberReviews from './MemberReviews';
 import ReviewHighlights from './ReviewHighlights';
 import { MarketingConsentToggle } from '@/components/MarketingConsent';
-import EmbeddedPayment, { embeddedPaymentEnabled } from './EmbeddedPayment';
+const EmbeddedPayment = dynamic(() => import('./EmbeddedPayment'));
+const embeddedPaymentEnabled = !!process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
 
 const ADMIN_EMAIL = 'lukas.leclerc312@gmail.com';
 const FREE_LIMIT = 5;
@@ -174,9 +176,11 @@ export default function AbonnementPage() {
   };
   const seconds = end !== null && now !== null ? Math.max(0, Math.floor((end - now) / 1000)) : null;
   const countdown = seconds === null ? [] : [Math.floor(seconds / 86400), Math.floor(seconds / 3600) % 24, Math.floor(seconds / 60) % 60, seconds % 60];
-  const posters = catalogue.filter(m => m.poster).slice(0, 32);
-  const movies = catalogue.filter(m => m.type === 'movie').length;
-  const series = catalogue.filter(m => m.type === 'series').length;
+  const { posters, movies, series } = useMemo(() => ({
+    posters: catalogue.filter(m => m.poster).slice(0, 32),
+    movies: catalogue.filter(m => m.type === 'movie').length,
+    series: catalogue.filter(m => m.type === 'series').length,
+  }), [catalogue]);
   const cheapestWeek = Math.min(...PLANS.map(perWeek));
   const quotaReached = !!account && !account.vip && remaining === 0;
   const showSales = !account?.vip || account.admin;
@@ -212,7 +216,7 @@ export default function AbonnementPage() {
         {showSales && <>
           {account?.admin && <p className={sales.preview}>Aperçu admin : voici la page de vente telle que la voient les membres gratuits. Le paiement est désactivé pour ton compte.</p>}
           <section className={sales.hero}>
-            {posters.length > 0 && <div className={sales.wall} aria-hidden="true">{posters.map(m => <img key={m.id} src={m.poster} alt="" loading="lazy" />)}</div>}
+            {posters.length > 0 && <div className={sales.wall} aria-hidden="true">{posters.map(m => <img decoding="async" key={m.id} src={m.poster} alt="" loading="lazy" />)}</div>}
             <div className={sales.heroInner}>
               {quotaReached ? <p className={`${sales.status} ${sales.urgent}`}><Icon name="play" />Tes {FREE_LIMIT} visions gratuites sont utilisées. Continue tout de suite avec le VIP.</p>
                 : account && !account.vip ? <p className={sales.status}><Icon name="play" />Il te reste {remaining} vision{remaining > 1 ? 's' : ''} gratuite{remaining > 1 ? 's' : ''} cette semaine</p> : null}

@@ -47,7 +47,7 @@ export default function ReviewPrompt(_props: { eligible?: boolean } = {}) {
     // Start the deadline on any page, including the player; display only at home.
     try { if (!Number(localStorage.getItem(KEY))) localStorage.setItem(KEY, String(Date.now() + INTERVAL)); } catch {}
     void check();
-    const timer = setInterval(check, 1000);
+    const timer = pathname === '/' ? setInterval(check, 1000) : undefined;
     return () => { cancelled = true; clearInterval(timer); };
   }, [pathname, visible]);
   useEffect(() => {

@@ -229,8 +229,19 @@ export default function Home() {
   const childProfile = !!activeProfile?.profile_mode && activeProfile.profile_mode !== 'standard';
   const homeCatalogue = useMemo(() => homeDiscoveryTitles(discoveryCatalogue, tastes, childProfile), [discoveryCatalogue, tastes, childProfile]);
   const homeIds = useMemo(() => new Set(homeCatalogue.map(item => String(item.id))), [homeCatalogue]);
+  const homeById = useMemo(() => new Map(homeCatalogue.map(item => [String(item.id), item])), [homeCatalogue]);
   const recommendedForYou = useMemo(() => personalizedRecommendations(discoveryCatalogue, recommendationHistory), [discoveryCatalogue, recommendationHistory]);
-  const ratedCatalogue = useMemo(() => bestRated(homeCatalogue.filter(isMainstream), rankings), [homeCatalogue, rankings]);
+  const ratedHome = useMemo(() => bestRated(homeCatalogue, rankings), [homeCatalogue, rankings]);
+  const ratedCatalogue = useMemo(() => ratedHome.filter(isMainstream), [ratedHome]);
+  const genreSections = useMemo(() => {
+    const sections = new Map<string, MediaItem[]>();
+    for (const item of ratedHome) for (const genre of new Set(item.genres || [])) {
+      if (genre !== MANGA_GENRE && genre !== FOREIGN_GENRE && !isMainstream(item)) continue;
+      const rows = sections.get(genre);
+      if (rows) rows.push(item); else sections.set(genre, [item]);
+    }
+    return sections;
+  }, [ratedHome]);
   const trendingMovies = useMemo(() => weeklyTrending(homeCatalogue.filter(isMainstream), rankings, 'movie'), [homeCatalogue, rankings]);
   const trendingSeries = useMemo(() => weeklyTrending(homeCatalogue.filter(isMainstream), rankings, 'series'), [homeCatalogue, rankings]);
   const [customBanners, setCustomBanners] = useState<any[]>([]);
@@ -478,6 +489,7 @@ export default function Home() {
     return () => document.removeEventListener('mousedown', onClick);
   }, [menuOpen]);
 
+  const availableGenres = useMemo(() => {
   const dbGenres: string[] = [];
   for (const item of mediaList) {
     if (inCategory(item, selectedType)) {
@@ -491,7 +503,8 @@ export default function Home() {
     }
   }
 
-  const availableGenres = Array.from(new Set(dbGenres.length > 0 ? dbGenres : DEFAULT_GENRES)).sort();
+  return Array.from(new Set(dbGenres.length > 0 ? dbGenres : DEFAULT_GENRES)).sort();
+  }, [mediaList, selectedType]);
   const carouselItems = useMemo(() => pickHeroItems(homeCatalogue, hero.ids.length ? hero.ids : [...recommendedForYou, ...trendingMovies, ...trendingSeries].map(item => String(item.id))).map(({ item, season }) => {
     const found = season === null ? null : findSeason(hero.seasonsById[String(item.id)], season);
     return found ? { ...item, heroSeason: season!, heroStart: found.index } : item;
@@ -528,13 +541,15 @@ export default function Home() {
     return browseSort === 'rating' && !deferredQuery ? bestRated(matches.filter(item => selectedType === 'manga' || homeIds.has(String(item.id))), rankings) : matches;
   }, [mediaList, searchIndex, selectedType, selectedGenre, selectedYear, deferredQuery, browseSort, rankings, homeIds]);
 
-  const recentMovies: MediaItem[] = [];
-  const recentSeries: MediaItem[] = [];
+  const { recentMovies, recentSeries } = useMemo(() => {
+  const recentMovies: MediaItem[] = [], recentSeries: MediaItem[] = [];
   for (const item of homeCatalogue) {
     if (!isMainstream(item)) continue;
     if (item.type === 'movie') recentMovies.push(item);
     if (item.type === 'series') recentSeries.push(item);
   }
+  return { recentMovies, recentSeries };
+  }, [homeCatalogue]);
 
   const hasText = (v?: string) => !!v && v.trim() !== '';
   const getHeroImage = (m: MediaItem) => cardImage(hasText(m.backdrop) ? m.backdrop! : m.poster, 'w1280');
@@ -692,7 +707,7 @@ export default function Home() {
                 className={`flex max-w-[180px] cursor-pointer items-center gap-2 rounded-full border px-2 py-1.5 text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 ${menuOpen ? 'border-red-400/60 bg-red-500/15' : 'border-white/15 bg-white/5 hover:border-red-400/40 hover:bg-white/10'}`}
               >
                 {activeProfile?.avatar_url?.startsWith('http') ? (
-                  <img src={activeProfile.avatar_url} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" />
+                  <img decoding="async" src={activeProfile.avatar_url} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" />
                 ) : (
                   <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-600 text-xs font-bold uppercase">
                     {activeProfile?.name?.[0] || userEmail?.[0] || <Icon name="user" />}
@@ -780,7 +795,7 @@ export default function Home() {
             return (
               <picture key={`${item.id ?? 'default'}-${index}`} className={`absolute inset-0 -z-20 transition-opacity duration-1000 motion-reduce:transition-none ${active ? 'opacity-100' : 'opacity-0'}`}>
                 {mobileImage && <source media="(max-width: 639px)" srcSet={mobileImage} />}
-                {(desktopImage || mobileImage) && <img src={desktopImage || mobileImage} alt="" loading={index === 0 ? 'eager' : 'lazy'} className="h-full w-full object-cover object-[center_20%] sm:object-center" />}
+                {(desktopImage || mobileImage) && <img decoding="async" src={desktopImage || mobileImage} alt="" loading={index === 0 ? 'eager' : 'lazy'} className="h-full w-full object-cover object-[center_20%] sm:object-center" />}
               </picture>
             );
           })}
@@ -822,7 +837,7 @@ export default function Home() {
                     const image = getHeroImage(item);
                     return (
                       <button type="button" key={`${item.id}-${index}`} onClick={() => setCurrentIndex(index)} aria-label={`Afficher ${item.title}`} aria-pressed={active} className={`flex w-56 shrink-0 cursor-pointer items-center gap-3 rounded-xl border p-2 text-left transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400 ${active ? 'border-red-400/60 bg-red-500/10' : 'border-white/10 bg-white/[0.03] hover:border-white/30 hover:bg-white/[0.07]'}`}>
-                        <div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-zinc-800">{image && <img src={image} alt="" loading="lazy" className="h-full w-full object-cover" />}</div>
+                        <div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-zinc-800">{image && <img decoding="async" src={image} alt="" loading="lazy" className="h-full w-full object-cover" />}</div>
                         <div className="min-w-0"><p className="truncate text-xs font-semibold text-white">{item.title}</p><p className="mt-1.5 text-[10px] text-zinc-400">{active ? 'À la une' : item.type === 'movie' ? 'Film' : 'Série'}</p></div>
                       </button>
                     );
@@ -890,7 +905,7 @@ export default function Home() {
                 className="group relative aspect-video w-[240px] shrink-0 cursor-pointer overflow-hidden rounded-xl bg-zinc-900 ring-1 ring-white/5 transition duration-300 hover:-translate-y-1 hover:ring-white/20 hover:shadow-2xl hover:shadow-black/60 focus:outline-none focus-visible:-translate-y-1 focus-visible:ring-2 focus-visible:ring-red-600 active:scale-[0.97] sm:w-[300px]"
               >
                 {(item.backdrop || item.poster) && (
-                  <img
+                  <img decoding="async"
                     src={item.backdrop ? cardImage(item.backdrop, 'w780') : item.poster}
                     alt={item.title}
                     loading="lazy"
@@ -1022,7 +1037,7 @@ export default function Home() {
               // Admin order is kept; a season entry shows the season poster and opens on it.
               const bannerMedia = (Array.isArray(banner.media_ids) ? banner.media_ids : []).flatMap((value: unknown) => {
                 const { mediaId, season } = parseBannerEntry(value);
-                const item = homeCatalogue.find(m => String(m.id) === mediaId);
+                const item = homeById.get(mediaId);
                 if (!item) return [];
                 const found = season === null ? null : findSeason(banner.seasonsById?.[mediaId], season);
                 if (season !== null && found) return [{ key: `${mediaId}:s${season}`, item: { ...item, poster: found.season.poster_path || item.poster }, badge: `Saison ${season} · Nouveau`, start: found.index }];
@@ -1037,7 +1052,7 @@ export default function Home() {
                 >
                   <div className="absolute inset-0">
                     {banner.backdrop && (
-                      <img
+                      <img decoding="async"
                         src={cardImage(banner.backdrop, 'w1280')}
                         alt=""
                         loading="lazy"
@@ -1084,7 +1099,7 @@ export default function Home() {
 
             {availableGenres.filter(genre => genre !== MANGA_GENRE || tastes.manga).map((genre: string) => {
               // Mangas and foreign-language titles appear only in their own rows.
-              const genreItems = bestRated(homeCatalogue.filter(m => m.genres && m.genres.includes(genre) && (genre === MANGA_GENRE || genre === FOREIGN_GENRE || isMainstream(m))), rankings);
+              const genreItems = genreSections.get(genre) || [];
               if (genreItems.length === 0) return null;
               return (
                 <Row key={genre} title={genre === MANGA_GENRE ? 'Mangas populaires' : genre === FOREIGN_GENRE ? 'Populaires en langue étrangère' : `Populaires en ${genre}`} subtitle="Notes TMDB · au moins 300 votes pour les films, 150 pour les séries" onSeeAll={() => { if (genre === MANGA_GENRE) selectType('manga'); else if (genre === FOREIGN_GENRE) selectType('foreign'); else { setSelectedGenre(genre); setSelectedType('all'); setSearchQuery(''); setBrowseSort('rating'); } }} icon={<Icon name="film" className="h-5 w-5 text-zinc-400" />}>

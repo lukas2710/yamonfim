@@ -79,7 +79,11 @@ export default function AdminHeroPage() {
   const previewIds = setting.mode === 'custom' ? setting.media_ids : setting.mode === 'top' ? (top ?? []).map(t => String(t.media_id)) : [];
   const preview = pickHeroItems(catalogue, previewIds);
   const viewers = new Map((top ?? []).map(t => [String(t.media_id), t.viewers]));
-  const results = search.trim() ? catalogue.filter(c => createSearchMatcher(search)(c.title)).slice(0, 30) : [];
+  const results = useMemo(() => {
+    if (!search.trim()) return [];
+    const matches = createSearchMatcher(search);
+    return catalogue.filter(c => matches(c.title)).slice(0, 30);
+  }, [catalogue, search]);
 
   const update = (patch: Partial<HeroSetting>) => { setSetting(previous => ({ ...previous, ...patch })); setMessage(''); };
   const add = (id: string) => { if (!setting.media_ids.some(e => mediaIdOf(e) === id) && setting.media_ids.length < HERO_SIZE) update({ media_ids: [...setting.media_ids, id] }); };
@@ -122,7 +126,7 @@ export default function AdminHeroPage() {
         <div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Ma sélection</h2><span className="text-xs text-zinc-500">{setting.media_ids.length} / {HERO_SIZE}</span></div>
         <ol className="mt-4 space-y-2">{setting.media_ids.map((entry, i) => { const { mediaId, season } = parseBannerEntry(entry); const c = byId.get(mediaId); const seasons = c?.type === 'series' ? seasonsById[mediaId] : undefined; return <li key={mediaId} className="flex flex-wrap items-center gap-2 rounded-xl bg-white/[0.03] p-2 sm:gap-3">
           <span className="w-5 text-center text-xs font-bold text-red-400">{i + 1}</span>
-          <div className="h-12 w-8 shrink-0 overflow-hidden rounded bg-white/5">{c?.poster && <img src={c.poster} alt="" className="h-full w-full object-cover" />}</div>
+          <div className="h-12 w-8 shrink-0 overflow-hidden rounded bg-white/5">{c?.poster && <img decoding="async" src={c.poster} alt="" className="h-full w-full object-cover" />}</div>
           <span className="min-w-0 flex-1"><span className="line-clamp-2 text-sm leading-5">{c?.title ?? 'Titre introuvable'}</span>{season !== null && <span className="mt-1 inline-block rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold">Saison {season}</span>}</span>
           <button type="button" aria-label="Monter" disabled={i === 0} onClick={() => move(i, -1)} className="rounded-lg bg-white/5 px-2 py-1 text-xs disabled:opacity-30">↑</button>
           <button type="button" aria-label="Descendre" disabled={i === setting.media_ids.length - 1} onClick={() => move(i, 1)} className="rounded-lg bg-white/5 px-2 py-1 text-xs disabled:opacity-30">↓</button>
@@ -135,7 +139,7 @@ export default function AdminHeroPage() {
         {setting.media_ids.length < HERO_SIZE && <>
           <input type="search" aria-label="Rechercher un titre" value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un film, une série à ajouter…" className="mt-4 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2.5 text-sm outline-none focus:border-red-400" />
           {results.length > 0 && <div className="mt-2 grid max-h-72 gap-2 overflow-y-auto sm:grid-cols-2">{results.map(c => { const id = String(c.id); const taken = setting.media_ids.some(e => mediaIdOf(e) === id); return <button key={id} type="button" disabled={taken} onClick={() => { add(id); setSearch(''); }} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-2 text-left hover:border-white/25 disabled:opacity-40">
-            <div className="h-12 w-8 shrink-0 overflow-hidden rounded bg-white/5">{c.poster && <img src={c.poster} alt="" className="h-full w-full object-cover" />}</div>
+            <div className="h-12 w-8 shrink-0 overflow-hidden rounded bg-white/5">{c.poster && <img decoding="async" src={c.poster} alt="" className="h-full w-full object-cover" />}</div>
             <span className="min-w-0 flex-1"><span className="block truncate text-sm">{c.title}</span><span className="text-[10px] uppercase text-zinc-500">{c.type === 'movie' ? 'Film' : 'Série'}</span></span><span className="text-red-300">{taken ? '✓' : '+'}</span>
           </button>; })}</div>}
         </>}
@@ -145,7 +149,7 @@ export default function AdminHeroPage() {
       <section className={panel} aria-label="Aperçu">
         <h2 className="text-sm font-semibold">Ce qui s’affichera, dans l’ordre</h2>
         {setting.mode === 'top' && top === null ? <p className="mt-4 text-sm text-zinc-500">Calcul du classement…</p> : <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">{preview.map(({ item: c, season }, i) => <figure key={String(c.id)} className="overflow-hidden rounded-xl border border-white/10 bg-black/20">
-          <div className="relative aspect-video bg-white/5">{(c.backdrop || c.poster) && <img src={c.backdrop || c.poster} alt="" className="h-full w-full object-cover" />}<span className="absolute left-2 top-2 rounded-md bg-black/70 px-2 py-0.5 text-[10px] font-bold">{i + 1}</span></div>
+          <div className="relative aspect-video bg-white/5">{(c.backdrop || c.poster) && <img decoding="async" src={c.backdrop || c.poster} alt="" className="h-full w-full object-cover" />}<span className="absolute left-2 top-2 rounded-md bg-black/70 px-2 py-0.5 text-[10px] font-bold">{i + 1}</span></div>
           <figcaption className="p-2"><p className="truncate text-xs font-semibold">{c.title}{season !== null && <span className="ml-1 text-red-300">· Saison {season}</span>}</p>{setting.mode === 'top' && <p className="text-[10px] text-zinc-500">{viewers.has(String(c.id)) ? `${viewers.get(String(c.id))} spectateur(s)` : 'Complément : dernier ajout'}</p>}</figcaption>
         </figure>)}</div>}
       </section>

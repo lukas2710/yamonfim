@@ -310,13 +310,15 @@ export default function HistoryPage() {
   /* ---------------- Données dérivées ---------------- */
 
   const entries = useMemo(() => {
+    const historyById = new Map<string, HistoryRow>();
+    for (const row of history) if (!historyById.has(row.media_id)) historyById.set(row.media_id, row);
     const ids = Array.from(new Set([...Object.keys(watched), ...history.map(r => r.media_id)]));
     return ids
       .map(id => {
         const media = mediaById[id];
         if (!media) return null;
         const w = watched[id] || {};
-        const h = history.find(r => r.media_id === id);
+        const h = historyById.get(id);
         const total = media.type === 'series'
           ? (media.seasons || []).reduce((n, s) => n + (s.episodes?.length || 0), 0)
           : 1;
@@ -354,15 +356,17 @@ export default function HistoryPage() {
     return { minutes, movies, episodes };
   }, [watched, mediaById]);
 
-  const continueList = entries
+  const continueList = useMemo(() => entries
     .filter(e => e.history && (e.media.type === 'movie' || e.seen < e.total))
-    .slice(0, 10);
+    .slice(0, 10), [entries]);
 
+  const visible = useMemo(() => {
   const matchesQuery = createSearchMatcher(query);
-  const visible = entries.filter(e =>
+  return entries.filter(e =>
     (tab === 'all' || e.media.type === tab) &&
     matchesQuery(e.media.title)
   );
+  }, [entries, tab, query]);
 
   const selected = selectedSeriesId ? mediaById[selectedSeriesId] : null;
   const duration = formatDuration(stats.minutes);
@@ -407,7 +411,7 @@ export default function HistoryPage() {
           </span>
           {activeProfile ? (
             <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-2.5 py-1.5 rounded-full">
-              {activeProfile.avatar_url?.startsWith('http') ? <img
+              {activeProfile.avatar_url?.startsWith('http') ? <img decoding="async"
                 src={activeProfile.avatar_url} 
                 alt={activeProfile.name} 
                 className="w-6 h-6 rounded-full object-cover" 
@@ -503,7 +507,7 @@ export default function HistoryPage() {
                         className="group relative aspect-video w-[260px] shrink-0 snap-start overflow-hidden rounded-2xl bg-zinc-900 text-left ring-1 ring-white/10 transition hover:-translate-y-1 hover:ring-white/25 sm:w-[300px]"
                       >
                         {(e.media.backdrop || e.media.poster) && (
-                          <img
+                          <img decoding="async"
                             src={e.media.backdrop || e.media.poster}
                             alt=""
                             loading="lazy"
@@ -575,7 +579,7 @@ export default function HistoryPage() {
                           onClick={() => openWatch(e)}
                           className="group relative h-24 w-16 shrink-0 overflow-hidden rounded-xl bg-zinc-900"
                         >
-                          {e.media.poster && <img src={e.media.poster} alt="" loading="lazy" className="h-full w-full object-cover" />}
+                          {e.media.poster && <img decoding="async" src={e.media.poster} alt="" loading="lazy" className="h-full w-full object-cover" />}
                         </button>
                         <div className="min-w-0 flex-1">
                           <p className="mt-1 truncate text-sm font-bold">{e.media.title}</p>

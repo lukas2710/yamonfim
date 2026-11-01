@@ -137,7 +137,7 @@ export default function FamilyAdmin() {
       {!loaded&&!error&&<p role="status" className="text-zinc-400">Chargement du catalogue…</p>}
       {loaded&&!visible.length&&<div className="rounded-2xl border border-white/10 p-8 text-center text-zinc-400">Aucun titre dans ce filtre.{filter==='pending'?' Les titres classés sont disponibles dans Kids, Junior ou Standard.':''}</div>}
       <div className="space-y-4">{visible.slice(0,limit).map(item=>{const metadata=item.family_classification,suggestion=metadata?suggestedAudience(metadata):null;return <article key={item.id} className="flex gap-4 rounded-2xl border border-white/10 bg-white/[.02] p-4 sm:p-5">
-        {item.poster&&<img alt="" loading="lazy" src={item.poster} className="hidden h-32 w-20 shrink-0 rounded-xl object-cover sm:block" />}
+        {item.poster&&<img decoding="async" alt="" loading="lazy" src={item.poster} className="hidden h-32 w-20 shrink-0 rounded-xl object-cover sm:block" />}
         <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold">{item.title}</h2><span className={`rounded-full px-3 py-1 text-xs font-bold ${item.audience==='kids'?'bg-emerald-400/10 text-emerald-300':item.audience==='junior'?'bg-sky-400/10 text-sky-300':'bg-zinc-800 text-zinc-300'}`}>{audienceNames[item.audience]||'Standard'}</span></div>
           <p className="mt-1 text-xs text-zinc-500">{item.type==='series'?'Série':'Film'}{metadata?.manual?' · Choix manuel':''}</p>
           <p className={`mt-3 text-sm ${needsFamilyReview(item)?'text-amber-200':'text-zinc-300'}`}>{classificationLabel(metadata)}{suggestion&&!metadata?.manual?` → ${audienceNames[suggestion]}`:''}</p>

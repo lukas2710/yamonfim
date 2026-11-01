@@ -6,9 +6,9 @@ interface Props {
 export default function WatchDetails(props: Props) {
   const { title, description, poster, backdrop, series, runtime, seasonCount, seen, total, watched, playLabel, episodeLabel, disabled, showRestart, onPlay, onRestart, onToggleWatched } = props;
   return <section className="watch-detail-hero" aria-label="Présentation du contenu">
-    {backdrop && <img className="watch-detail-backdrop" src={backdrop} alt="" />}
+    {backdrop && <img decoding="async" className="watch-detail-backdrop" src={backdrop} alt="" />}
     <div className="watch-detail-grid">
-      <div className="watch-detail-poster">{poster ? <img src={poster} alt={`Affiche de ${title}`} /> : <div className="watch-poster-placeholder"><span>YAMONFIM</span><strong>{title}</strong></div>}<span className="watch-detail-format">{series ? 'LA SÉRIE' : 'LE FILM'}</span></div>
+      <div className="watch-detail-poster">{poster ? <img decoding="async" src={poster} alt={`Affiche de ${title}`} /> : <div className="watch-poster-placeholder"><span>YAMONFIM</span><strong>{title}</strong></div>}<span className="watch-detail-format">{series ? 'LA SÉRIE' : 'LE FILM'}</span></div>
       <div className="watch-detail-copy">
         <span className="watch-kicker">{series ? 'UNE HISTOIRE À SUIVRE' : 'UNE SÉANCE À VIVRE'}</span>
         <div className="watch-detail-tags"><span>{series ? 'Série' : 'Film'}</span>{series && <span>{seasonCount} saison{seasonCount > 1 ? 's' : ''}</span>}{!series && !!runtime && <span>{runtime} min</span>}{watched && <span className="watch-tag-seen">✓ {series ? 'Série vue' : 'Déjà vu'}</span>}</div>

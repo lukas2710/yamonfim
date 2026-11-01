@@ -78,7 +78,7 @@ export default function MangaReview() {
         const metadata = item.family_classification!;
         const decided = typeof metadata.manga_manual === 'boolean';
         return <article key={item.id} className="yf-rise flex gap-4 rounded-2xl border border-white/10 bg-white/[.02] p-4" style={{ '--i': Math.min(index, 12) } as React.CSSProperties}>
-          {item.poster ? <img alt="" loading="lazy" src={item.poster} className="h-36 w-24 shrink-0 rounded-xl object-cover" /> : <div className="h-36 w-24 shrink-0 rounded-xl bg-white/5" />}
+          {item.poster ? <img decoding="async" alt="" loading="lazy" src={item.poster} className="h-36 w-24 shrink-0 rounded-xl object-cover" /> : <div className="h-36 w-24 shrink-0 rounded-xl bg-white/5" />}
           <div className="flex min-w-0 flex-1 flex-col">
             <h2 className="font-semibold leading-snug">{item.title}</h2>
             <p className="mt-1 text-xs text-zinc-500">{item.type === 'series' ? 'Série' : 'Film'}{metadata.tmdb_title && metadata.tmdb_title !== item.title ? ` · TMDB : ${metadata.tmdb_title}` : ''}{metadata.status === 'missing_id' || metadata.status === 'not_found' ? ' · sans fiche TMDB' : ''}</p>

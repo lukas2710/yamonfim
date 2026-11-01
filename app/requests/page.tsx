@@ -444,7 +444,7 @@ export default function RequestsPage() {
                 <div className="flex items-center gap-4 rounded-2xl bg-red-600/10 p-3 ring-1 ring-red-500/30">
                   <div className="h-24 w-16 shrink-0 overflow-hidden rounded-xl bg-zinc-900">
                     {selectedMedia.poster_path && (
-                      <img src={`https://image.tmdb.org/t/p/w185${selectedMedia.poster_path}`} alt="" className="h-full w-full object-cover" />
+                      <img decoding="async" src={`https://image.tmdb.org/t/p/w185${selectedMedia.poster_path}`} alt="" className="h-full w-full object-cover" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -508,7 +508,7 @@ export default function RequestsPage() {
                           >
                             <div className="h-14 w-10 shrink-0 overflow-hidden rounded-lg bg-zinc-800">
                               {item.poster_path && (
-                                <img src={`https://image.tmdb.org/t/p/w92${item.poster_path}`} alt="" className="h-full w-full object-cover" />
+                                <img decoding="async" src={`https://image.tmdb.org/t/p/w92${item.poster_path}`} alt="" className="h-full w-full object-cover" />
                               )}
                             </div>
                             <div className="min-w-0 flex-1">
@@ -645,7 +645,7 @@ export default function RequestsPage() {
                     <div className="flex min-w-0 flex-1 items-center gap-4">
                       <div className="flex h-20 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-zinc-900 text-zinc-600">
                         {req.poster
-                          ? <img src={req.poster} alt="" loading="lazy" className="h-full w-full object-cover" />
+                          ? <img decoding="async" src={req.poster} alt="" loading="lazy" className="h-full w-full object-cover" />
                           : <Icon name={req.type === 'movie' ? 'film' : 'tv'} className="h-5 w-5" />}
                       </div>
 

@@ -810,7 +810,7 @@ export default function AdminPage() {
                           >
                             <div className="h-14 w-10 shrink-0 overflow-hidden rounded-lg bg-zinc-800">
                               {item.poster_path && (
-                                <img src={`https://image.tmdb.org/t/p/w92${item.poster_path}`} alt="" className="h-full w-full object-cover" />
+                                <img decoding="async" src={`https://image.tmdb.org/t/p/w92${item.poster_path}`} alt="" className="h-full w-full object-cover" />
                               )}
                             </div>
                             <div className="min-w-0 flex-1">
@@ -840,11 +840,11 @@ export default function AdminPage() {
               </div>
               {(poster || backdrop) && (
                 <div className="relative overflow-hidden rounded-2xl ring-1 ring-white/10">
-                  {backdrop && <img src={backdrop} alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" />}
+                  {backdrop && <img decoding="async" src={backdrop} alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" />}
                   <div className="absolute inset-0 bg-gradient-to-r from-[#0a0a0b] via-[#0a0a0b]/80 to-transparent" />
                   <div className="relative flex items-center gap-4 p-4">
                     <div className="h-28 w-20 shrink-0 overflow-hidden rounded-xl bg-zinc-900 ring-1 ring-white/10">
-                      {poster && <img src={poster} alt="" className="h-full w-full object-cover" />}
+                      {poster && <img decoding="async" src={poster} alt="" className="h-full w-full object-cover" />}
                     </div>
                     <div className="min-w-0">
                       <span className="rounded-md bg-red-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
@@ -1078,7 +1078,7 @@ export default function AdminPage() {
                     >
                       <div className="flex h-16 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-zinc-900 text-zinc-600">
                         {item.poster
-                          ? <img src={item.poster} alt="" loading="lazy" className="h-full w-full object-cover" />
+                          ? <img decoding="async" src={item.poster} alt="" loading="lazy" className="h-full w-full object-cover" />
                           : <Icon name="image" />}
                       </div>
                       <div className="min-w-0 flex-1">

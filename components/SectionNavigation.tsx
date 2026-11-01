@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 const MEMBER_LINKS = [
   { href: '/', label: 'Catalogue' },
@@ -29,7 +29,8 @@ const ADMIN_LINKS = [
 
 export default function SectionNavigation({ admin = false }: { admin?: boolean }) {
   const pathname = usePathname();
+  const router = useRouter();
   return <nav className="yf-section-nav" aria-label={admin ? 'Sections de l’administration' : 'Sections du site'}>
-    <div className="yf-section-nav-inner"><span className="yf-nav-context">{admin ? 'ESPACE ADMIN' : 'TON ESPACE'}</span><div>{(admin ? ADMIN_LINKS : MEMBER_LINKS).map(link => <Link key={link.href} href={link.href} aria-current={pathname === link.href ? 'page' : undefined}>{link.label}</Link>)}</div></div>
+    <div className="yf-section-nav-inner"><span className="yf-nav-context">{admin ? 'ESPACE ADMIN' : 'TON ESPACE'}</span><div>{(admin ? ADMIN_LINKS : MEMBER_LINKS).map(link => <Link key={link.href} href={link.href} prefetch={admin ? false : undefined} onPointerEnter={admin ? () => router.prefetch(link.href) : undefined} onFocus={admin ? () => router.prefetch(link.href) : undefined} aria-current={pathname === link.href ? 'page' : undefined}>{link.label}</Link>)}</div></div>
   </nav>;
 }

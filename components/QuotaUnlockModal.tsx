@@ -94,7 +94,7 @@ export default function QuotaUnlockModal({ onClose }: { onClose: () => void }) {
   return <div className={styles.backdrop} onClick={onClose}>
     <section role="dialog" aria-modal="true" aria-labelledby="quota-unlock-title" aria-describedby="quota-unlock-text" className={styles.dialog} onClick={event => event.stopPropagation()}>
       <button ref={closeRef} onClick={onClose} aria-label="Fermer" className={styles.close}>×</button>
-      {posters.length === 3 ? <div className={styles.posters} aria-hidden="true">{posters.map(src => <img key={src} src={src} alt="" />)}</div> : <div style={{ height: 30 }} />}
+      {posters.length === 3 ? <div className={styles.posters} aria-hidden="true">{posters.map(src => <img decoding="async" key={src} src={src} alt="" />)}</div> : <div style={{ height: 30 }} />}
       <div className={styles.body}>
         <div className={styles.lock}><LockIcon /></div>
         <p className={styles.kicker}>PAUSE DANS TA SÉANCE</p>

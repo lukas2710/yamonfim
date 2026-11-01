@@ -7,7 +7,7 @@ import { createSearchMatcher } from '@/lib/search';
 
 import SectionNavigation from '@/components/SectionNavigation';
 import PageHero from '@/components/PageHero';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import styles from './banners.module.css';
@@ -191,11 +191,13 @@ export default function AdminBannersPage() {
     else setErrorMsg('Le statut de la bannière n’a pas été enregistré. Vérifie les droits de la table « banners » dans Supabase.');
   };
 
+  const filteredMedia = useMemo(() => {
+    const matches = createSearchMatcher(search);
+    return mediaList.filter(item => matches(item.title));
+  }, [mediaList, search]);
   if (loadingAuth) {
     return <main className={`yf-page yf-banners ${styles.page}`}><div className={styles.loading}>Vérification de votre accès administrateur…</div></main>;
   }
-
-  const filteredMedia = mediaList.filter(item => createSearchMatcher(search)(item.title));
   const selectedMedia = selectedMediaIds.flatMap(entry => {
     const { mediaId, season } = parseBannerEntry(entry);
     const item = mediaList.find(m => String(m.id) === mediaId);
@@ -230,7 +232,7 @@ export default function AdminBannersPage() {
                 {filteredMedia.map(m => {
                   const selected = isSelected(String(m.id));
                   return <button type="button" key={m.id} aria-pressed={selected} onClick={() => handleMediaToggle(String(m.id))} className={`${styles.media} ${selected ? styles.selected : ''}`}>
-                    <div className={styles.poster}>{m.poster && <img src={m.poster} alt="" />}</div><span className={styles.mediaName}><strong>{m.title}</strong><small>{m.type === 'movie' ? 'FILM' : 'SÉRIE'}</small></span><span className={styles.check}>{selected ? '✓' : '+'}</span>
+                    <div className={styles.poster}>{m.poster && <img decoding="async" src={m.poster} alt="" />}</div><span className={styles.mediaName}><strong>{m.title}</strong><small>{m.type === 'movie' ? 'FILM' : 'SÉRIE'}</small></span><span className={styles.check}>{selected ? '✓' : '+'}</span>
                   </button>;
                 })}
                 {filteredMedia.length === 0 && <p className={styles.empty}>{search ? 'Aucun titre ne correspond à votre recherche.' : 'Votre catalogue est encore vide.'}</p>}
@@ -258,17 +260,17 @@ export default function AdminBannersPage() {
           <aside className={styles.previewColumn}>
             <div className={styles.previewLabel}><span className={styles.liveDot} /> APERÇU EN DIRECT<span>PAGE D’ACCUEIL</span></div>
             <div className={styles.preview}>
-              {backdrop && <img className={styles.cover} src={backdrop} alt="Aperçu de la couverture" />}
+              {backdrop && <img decoding="async" className={styles.cover} src={backdrop} alt="Aperçu de la couverture" />}
               <div className={styles.previewContent}><span className={styles.badge}>LA SÉLECTION YAMONFIM</span><h2>{title || 'Votre prochaine obsession.'}</h2><p>{subtitle || 'Une collection à votre image. Ajoutez un titre et laissez la magie opérer.'}</p><span className={styles.discover}>Découvrir la sélection <span>→</span></span></div>
             </div>
-            <div className={styles.filmstrip}>{selectedMedia.slice(0, 5).map((m, i) => <div key={m.key} className={styles.miniPoster}>{ranked && <span className={styles.miniRank}>{i + 1}</span>}{m.poster ? <img src={m.poster} alt={m.season === null ? m.title : m.title + ' – saison ' + m.season} /> : <span>{m.title}</span>}</div>)}{selectedMedia.length === 0 && <p>Les affiches de votre sélection apparaîtront ici.</p>}</div>
+            <div className={styles.filmstrip}>{selectedMedia.slice(0, 5).map((m, i) => <div key={m.key} className={styles.miniPoster}>{ranked && <span className={styles.miniRank}>{i + 1}</span>}{m.poster ? <img decoding="async" src={m.poster} alt={m.season === null ? m.title : m.title + ' – saison ' + m.season} /> : <span>{m.title}</span>}</div>)}{selectedMedia.length === 0 && <p>Les affiches de votre sélection apparaîtront ici.</p>}</div>
             <div className={styles.tip}><span>✦</span><div><h3>Le détail qui change tout</h3><p>Un titre court, une belle image et des films qui partagent la même énergie : les meilleures sélections racontent déjà une histoire.</p></div></div>
           </aside>
         </div>
         <section className={styles.library}>
           <div className={styles.libraryHeading}><div className={styles.sectionTitle}><span className={styles.number}>02</span><div><h2>Vos sélections</h2><p>Gérez ce qui passe sous les projecteurs.</p></div></div><span className={styles.total}>{banners.length} au total</span></div>
           {banners.length === 0 ? <div className={styles.emptyLibrary}><span>✧</span><h3>Le début d’une belle programmation.</h3><p>Votre première bannière trouvera sa place ici.</p></div> : <div className={styles.cards}>{banners.map(b => <article key={b.id} className={`${styles.card} ${editingId === b.id ? styles.editing : ''}`}>
-            <div className={styles.cardVisual}><img src={b.backdrop} alt="" /><span className={`${styles.status} ${b.active ? styles.active : ''}`}>{b.active ? '● En ligne' : '○ Masquée'}</span><div><h3>{b.title}</h3>{b.subtitle && <p>{b.subtitle}</p>}</div></div>
+            <div className={styles.cardVisual}><img decoding="async" src={b.backdrop} alt="" /><span className={`${styles.status} ${b.active ? styles.active : ''}`}>{b.active ? '● En ligne' : '○ Masquée'}</span><div><h3>{b.title}</h3>{b.subtitle && <p>{b.subtitle}</p>}</div></div>
             <footer><span>{b.media_ids?.length || 0} titres associés{b.ranked ? ' · Top numéroté' : ''}</span><div><button type="button" onClick={() => startEditing(b)}>Modifier</button><button type="button" onClick={() => toggleActive(b.id, b.active)}>{b.active ? 'Masquer' : 'Afficher'}</button><button type="button" className={styles.delete} aria-label={`Supprimer ${b.title}`} onClick={() => void handleDeleteBanner(b)}>Supprimer</button></div></footer>
           </article>)}</div>}
         </section>

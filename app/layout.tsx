@@ -46,6 +46,7 @@ export default function RootLayout({
       lang="fr"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head><link rel="preconnect" href="https://image.tmdb.org" /></head>
       <body className="min-h-full flex flex-col bg-[#0a0a0b] text-white">
         <Script src="/install-capture.js" strategy="beforeInteractive" />
         <SessionRecovery />

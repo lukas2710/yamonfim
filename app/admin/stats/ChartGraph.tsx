@@ -1,0 +1,7 @@
+'use client';
+import { ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+const shortDate = (key: string) => new Date(`${key}T12:00:00Z`).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', timeZone: 'Europe/Paris' });
+export default function ChartGraph({ data, bars = false, field, label, color, dates = false }: { data: object[]; bars?: boolean; field: string; label: string; color: string; dates?: boolean }) {
+  const grid = <><CartesianGrid vertical={false} stroke="#272832" strokeDasharray="3 5" /><XAxis dataKey="name" tickFormatter={dates ? shortDate : undefined} stroke="#777985" tick={{ fontSize: 10 }} minTickGap={25} tickLine={false} axisLine={false} /><YAxis allowDecimals={false} stroke="#777985" tick={{ fontSize: 10 }} width={30} tickLine={false} axisLine={false} /><Tooltip labelFormatter={dates ? l => shortDate(String(l)) : undefined} cursor={{ fill: 'rgba(255,255,255,.04)' }} contentStyle={{ background: '#191a22', border: '1px solid #363742', borderRadius: 12, fontSize: 12, color: '#eee' }} /></>;
+  return <ResponsiveContainer width="100%" height="100%">{bars ? <BarChart data={data}>{grid}<Bar dataKey={field} name={label} fill={color} radius={[4, 4, 0, 0]} isAnimationActive={false} /></BarChart> : <AreaChart data={data}>{grid}<Area type="monotone" dataKey={field} name={label} stroke={color} fill={color} fillOpacity={.12} strokeWidth={2} isAnimationActive={false} /></AreaChart>}</ResponsiveContainer>;
+}

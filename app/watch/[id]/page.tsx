@@ -895,7 +895,7 @@ export default function WatchPage() {
           <div className="flex items-center gap-3">
             {activeProfile && (
               <div className="hidden sm:flex items-center gap-2 bg-white/5 border border-white/10 px-2.5 py-1.5 rounded-full">
-                {activeProfile.avatar_url?.startsWith('http') ? <img
+                {activeProfile.avatar_url?.startsWith('http') ? <img decoding="async"
                   src={activeProfile.avatar_url} 
                   alt={activeProfile.name} 
                   className="w-6 h-6 rounded-full object-cover" 
@@ -1045,7 +1045,7 @@ export default function WatchPage() {
                 >
                   <div className="relative w-28 sm:w-36 shrink-0 aspect-video rounded-xl overflow-hidden bg-zinc-900 ring-1 ring-white/10">
                     {thumb && (
-                      <img
+                      <img decoding="async"
                         src={thumb}
                         alt=""
                         loading="lazy"

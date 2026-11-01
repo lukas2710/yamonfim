@@ -125,7 +125,7 @@ export function InstallGuide({ platform, onClose }: { platform: InstallPlatform;
       <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#11131a] p-6 text-left shadow-2xl" style={{ animation: 'yfGuideIn .4s cubic-bezier(.2,.9,.3,1.2) both' }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element -- Icône locale, déjà à la bonne taille. */}
-          <img src="/icons/icon-192.png" alt="" className="h-14 w-14 rounded-2xl shadow-lg" />
+          <img decoding="async" src="/icons/icon-192.png" alt="" className="h-14 w-14 rounded-2xl shadow-lg" />
           <div>
             <h2 id="install-guide-title" className="text-lg font-bold leading-tight text-white">{guide.title}</h2>
             <p className="mt-0.5 text-sm text-zinc-400">L’icône YAMONFILM ira sur ton écran d’accueil, comme une vraie appli.</p>
