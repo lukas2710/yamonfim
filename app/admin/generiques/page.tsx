@@ -133,17 +133,28 @@ export default function CreditsAdmin() {
     return map;
   }, [markers]);
   const summary = useMemo(() => creditsSummary(markers), [markers]);
+  const lengths = useMemo(() => new Map(markers.filter(record => record.episode_key.startsWith('length:') && record.source === 'admin').map(record => [record.episode_key, record])), [markers]);
+  const [view, setView] = useState<'todo' | 'validated'>('todo');
   const [justSaved, setJustSaved] = useState<Record<string, boolean>>({});
   // A length set for the whole series validates all of its episodes.
   const seriesLength = (item: Series, list?: Season[]) => {
     const keys = list ? lengthKeys(item, list) : [seriesLengthKey(`media:${item.id}`), ...(item.tmdb_id ? [seriesLengthKey(`tmdb:${item.tmdb_id}`)] : [])];
-    return markers.find(record => keys.includes(record.episode_key) && record.source === 'admin');
+    for (const key of keys) if (lengths.has(key)) return lengths.get(key);
   };
   const covered = (row: Row, length?: Marker) => !!(row.manual || length || row.automatic);
   // An episode just saved stays in view so its validated state is visible.
   const matches = (row: Row, length?: Marker) => justSaved[row.id] || filter === 'all' || filter === 'missing' && !covered(row, length) || filter === 'filled' && covered(row, length) || row.status === filter;
   const query = search.trim().toLocaleLowerCase();
-  const groups = series.filter(item => item.title.toLocaleLowerCase().includes(query)).sort((a, b) => a.title.localeCompare(b.title, 'fr', { sensitivity: 'base', numeric: true }));
+  // Validated: one length for the whole series, or a manual time on every episode.
+  const validated = (item: Series) => {
+    const list = seasons[String(item.id)];
+    if (seriesLength(item, list)) return true;
+    const rows = list ? episodeRows(item, list, lookup) : [];
+    return rows.length > 0 && rows.every(row => row.manual);
+  };
+  const searched = series.filter(item => item.title.toLocaleLowerCase().includes(query));
+  const validatedCount = searched.filter(validated).length;
+  const groups = searched.filter(item => validated(item) === (view === 'validated')).sort((a, b) => a.title.localeCompare(b.title, 'fr', { sensitivity: 'base', numeric: true }));
   const pageCount = Math.max(1, Math.ceil(groups.length / 10));
   const currentPage = Math.min(page, pageCount - 1);
   const visible = groups.slice(currentPage * 10, (currentPage + 1) * 10);
@@ -260,13 +271,16 @@ export default function CreditsAdmin() {
       {error && <p role="alert" className="rounded-xl border border-red-600/40 bg-red-950/30 p-4">{error} <button className="underline" onClick={() => setRevision(value => value + 1)}>Réessayer</button></p>}
       {message && <p role="status" className="rounded-xl bg-emerald-950/50 p-4 text-emerald-200">{message}</p>}
       {allowed && <>
+        <nav aria-label="Pages des génériques" className="flex gap-2 border-b border-white/10">
+          {([['todo', 'À faire', searched.length - validatedCount], ['validated', 'Validées', validatedCount]] as const).map(([value, label, count]) => <button key={value} aria-current={view === value ? 'page' : undefined} className={`-mb-px border-b-2 px-4 py-2 font-semibold ${view === value ? 'border-red-500 text-white' : 'border-transparent text-zinc-400 hover:text-white'}`} onClick={() => { setView(value); setPage(0); }}>{label} <span className="text-sm font-normal text-zinc-400">{loading ? '' : count}</span></button>)}
+        </nav>
         <div className="flex flex-wrap gap-3">
           <input aria-label="Rechercher une série" placeholder="Rechercher une série…" className={`${field} min-w-0 grow`} value={search} onChange={event => { setSearch(event.target.value); setPage(0); }} />
           <select aria-label="Filtrer les épisodes affichés" className={field} value={filter} onChange={event => setFilter(event.target.value)}>
             <option value="missing">Épisodes à compléter</option><option value="filled">Déjà remplis</option><option value="absent">Vérifiés sans résultat</option><option value="unknown">Non vérifiés / à revérifier</option><option value="manual">Manuels</option><option value="automatic">Automatiques</option><option value="all">Tous les épisodes</option>
           </select>
           <button className={field} disabled={!!scan} onClick={() => setRevision(value => value + 1)}>Actualiser</button>
-          <button disabled={loading || !!scan || !groups.length} className="rounded-lg bg-red-600 px-4 py-2 font-semibold disabled:opacity-50" onClick={() => void scanCatalogue()}>{query ? `Scanner ces ${groups.length} séries` : 'Scanner toutes les séries'}</button>
+          {view === 'todo' && <button disabled={loading || !!scan || !groups.length} className="rounded-lg bg-red-600 px-4 py-2 font-semibold disabled:opacity-50" onClick={() => void scanCatalogue()}>{query ? `Scanner ces ${groups.length} séries` : 'Scanner toutes les séries'}</button>}
         </div>
         {scan && <div role="status" className="space-y-2 rounded-xl border border-red-500/30 bg-red-950/20 p-4"><p>Scan : {scan.seriesDone} / {scan.seriesTotal} séries · {scan.done} épisodes recherchés · {scan.found} minutages disponibles</p><p className="text-sm text-zinc-400">{scan.current}</p><progress className="h-2 w-full accent-red-600" value={scan.seriesDone} max={scan.seriesTotal} /><p className="text-xs text-zinc-400">Garde cette page ouverte pendant le scan. Tu peux arrêter puis reprendre sans perdre les résultats.</p><button className={field} onClick={() => scanController.current?.abort()}>Arrêter le scan</button></div>}
         <p className="text-sm text-zinc-400">{loading ? 'Chargement…' : `${groups.length} séries · ${summary.manual} minutages manuels · ${summary.automatic} automatiques`}</p>
@@ -306,7 +320,7 @@ export default function CreditsAdmin() {
             </div>}
           </details>;
         })}</div>
-        {!loading && !visible.length && !error && <p>Aucune série ne correspond à cette recherche.</p>}
+        {!loading && !visible.length && !error && <p>{view === 'validated' ? 'Aucune série validée pour l’instant. Saisis la durée du générique d’une série pour la valider.' : 'Aucune série ne correspond à cette recherche.'}</p>}
         <div className="flex items-center justify-between"><button className={field} disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Précédent</button><span>Page {currentPage + 1} / {pageCount}</span><button className={field} disabled={currentPage + 1 >= pageCount} onClick={() => setPage(currentPage + 1)}>Suivant</button></div>
         <p className="text-xs text-zinc-500">Sources : <a href="https://theintrodb.org" className="underline">TheIntroDB</a>, <a href="https://introdb.app" className="underline">IntroDB</a>, <a href="https://skipdb.tv" className="underline">SkipDB</a> (consultation seule).</p>
       </>}
