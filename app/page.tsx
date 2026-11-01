@@ -14,6 +14,7 @@ import { fetchPublicCatalogueCards } from '@/lib/client-catalogue';
 import { indexSearch, rankSearch, type SearchEntry } from '@/lib/search';
 import { inCategory, isMainstream, MANGA_GENRE, FOREIGN_GENRE, type Category } from '@/lib/catalogue-categories';
 import { continueWatchingEntries } from '@/lib/watch-progress';
+import { personalizedRecommendations, type RecommendationHistory } from '@/lib/recommendations';
 import QuotaUnlockModal, { LockedPosterOverlay, QuotaBanner, LockIcon } from '@/components/QuotaUnlockModal';
 import PromoBanner from '@/components/PromoBanner';
 import HomeCollections from '@/components/HomeCollections';
@@ -209,7 +210,8 @@ export default function Home() {
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [continueWatchingList, setContinueWatchingList] = useState<MediaItem[]>([]);
   const [becauseYouWatched, setBecauseYouWatched] = useState<{ parentTitle: string; list: MediaItem[] } | null>(null);
-  const [recommendedForYou, setRecommendedForYou] = useState<MediaItem[]>([]);
+  const [recommendationHistory, setRecommendationHistory] = useState<RecommendationHistory[]>([]);
+  const recommendedForYou = useMemo(() => personalizedRecommendations(mediaList, recommendationHistory), [mediaList, recommendationHistory]);
   const [customBanners, setCustomBanners] = useState<any[]>([]);
   const [hero, setHero] = useState<{ ids: string[]; seasonsById: Record<string, SeasonSummary[]> }>({ ids: [], seasonsById: {} });
   const [loading, setLoading] = useState(true);
@@ -284,7 +286,7 @@ export default function Home() {
         const watchedTask = watchedQuery.order('watched_at', { ascending: false });
         let progressQuery = supabase.from('watch_history').select('media_id,type,current_time,duration,season_number,episode_number,updated_at').eq('user_id', user.id);
         if (currentProfile?.id) progressQuery = progressQuery.eq('profile_id', currentProfile.id);
-        const progressTask = progressQuery.then(result => result, () => ({ data: null }));
+        const progressTask = progressQuery.order('updated_at', { ascending: false }).then(result => result, () => ({ data: null }));
         const bannerTask = readClientResource('home:banners', async () => {
           const { data, error } = await supabase.from('banners').select('*').eq('active', true).order('created_at', { ascending: false });
           if (error) throw error;
@@ -313,6 +315,9 @@ export default function Home() {
           return { ids, seasonsById: Object.fromEntries((seasonRows || []).map((row: { id: unknown; seasons: SeasonSummary[] }) => [String(row.id), row.seasons])) };
         }).then(setHero).catch(() => { /* The latest additions remain a valid carousel. */ });
         const historyTask = Promise.all([catalogueTask, watchedTask, progressTask]).then(([mediaData, watchedRes, progressRes]) => {
+          const progress = progressRes.data || [];
+          const recorded = new Set(progress.map(row => String(row.media_id)));
+          setRecommendationHistory([...progress, ...(watchedRes.data || []).filter(row => !recorded.has(String(row.media_id))).map(row => ({ media_id: row.media_id, current_time: 600, updated_at: row.watched_at }))]);
           const byId = new Map(mediaData.filter(item => canWatch(item, currentProfile.profile_mode || 'standard')).map(item => [String(item.id), item]));
           // « Reprendre » suit l'historique de lecture (dernier titre regardé en premier) :
           // films en cours jusqu'à leur générique, séries sur l'épisode en cours ou le suivant.
@@ -1045,25 +1050,10 @@ export default function Home() {
             )}
 
             {recommendedForYou.length > 0 && (
-              <Row title="Recommandé pour vous" icon={<Icon name="sparkles" className="h-5 w-5 text-red-500" />}>
+              <Row title="Recommandé pour vous" subtitle="Selon les films et séries regardés sur ce profil" icon={<Icon name="sparkles" className="h-5 w-5 text-red-500" />}>
                 {recommendedForYou.map((item: MediaItem) => (
                   <PosterCard
                     key={item.id}
-                    item={item}
-                    locked={userLimitReached}
-                    onOpen={() => handleMediaClick(item)}
-                    onPrepare={() => prepareMedia(item)}
-                    className="w-[130px] sm:w-[170px]"
-                  />
-                ))}
-              </Row>
-            )}
-
-            {recommendedForYou.length > 3 && (
-              <Row title="Tendances actuelles" icon={<Icon name="flame" className="h-5 w-5 text-red-500" />}>
-                {recommendedForYou.slice().reverse().map((item: MediaItem) => (
-                  <PosterCard
-                    key={'trend-' + item.id}
                     item={item}
                     locked={userLimitReached}
                     onOpen={() => handleMediaClick(item)}
