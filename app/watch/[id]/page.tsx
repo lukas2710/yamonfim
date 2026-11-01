@@ -170,7 +170,10 @@ export default function WatchPage() {
   const [stableUrl, setStableUrl] = useState('');
   const [resumeAt, setResumeAt] = useState(0);
   const [nextCountdown, setNextCountdown] = useState<number | null>(null);
-  const nextLaunchRef = useRef<() => void>(() => {});
+  const nextLaunchRef = useRef<(automatic?: boolean) => void>(() => {});
+  // After three episodes started on their own, ask before playing a fourth.
+  const autoChainRef = useRef(0);
+  const [stillWatching, setStillWatching] = useState(false);
   const preparedEpisodeRef = useRef('');
   const autoNextOfferedRef = useRef(false);
   const creditsRef = useRef<{ key: string; marker: CreditsMarker | null; checkedAt: number } | null>(null);
@@ -183,6 +186,7 @@ export default function WatchPage() {
     creditsRequestRef.current?.abort();
     creditsRef.current = null;
     setNextCountdown(null);
+    setStillWatching(false);
   }, [stableUrl]);
   useEffect(() => () => creditsRequestRef.current?.abort(), []);
   useEffect(() => {
@@ -718,7 +722,7 @@ export default function WatchPage() {
     if (decision.advance) {
       autoNextOfferedRef.current = true;
       setNextCountdown(null);
-      nextLaunchRef.current();
+      nextLaunchRef.current(true);
       return;
     }
     // This notice follows the VIDEO clock: pausing, buffering and seeking never
@@ -742,14 +746,16 @@ export default function WatchPage() {
     const next = nextPositionOf(mediaRef.current?.seasons, position);
     if (next && !autoNextOfferedRef.current) {
       autoNextOfferedRef.current = true;
-      nextLaunchRef.current();
+      nextLaunchRef.current(true);
     }
     setNotice(next ? 'Épisode terminé. La suite t’attend.' : 'Lecture terminée. Ton historique est à jour.');
   };
 
   useEffect(() => {
-    nextLaunchRef.current = () => {
+    nextLaunchRef.current = (automatic = false) => {
       setNextCountdown(null);
+      if (automatic && autoChainRef.current >= 3) { setStillWatching(true); return; }
+      autoChainRef.current = automatic ? autoChainRef.current + 1 : 0;
       const position = lastPlaybackRef.current;
       const next = position && nextPositionOf(mediaRef.current?.seasons, position);
       if (next) {
@@ -925,9 +931,9 @@ export default function WatchPage() {
                   {!isDirectVideo(stableUrl) && <button onClick={isFullscreen ? exitFullscreenPlayer : requestFullscreenPlayer} className="watch-icon-button" aria-label={isFullscreen ? 'Quitter le plein écran' : 'Plein écran'}><Icon name={isFullscreen ? 'minimize' : 'maximize'} /></button>}
                 </div>}
                 <WatchPlayer src={stableUrl} title={media.title} resumeAt={resumeAt} controlRef={playerControlRef} onExit={closePlayer} onProgress={handleProgress} onState={paused => { setIsPlayerPaused(paused); if (paused) persistProgress(); }} onEnded={source => { if (!source || source === stableUrl) void handlePlaybackEnded(); }}
-                  nextEpisodeIn={nextCountdown} nextEpisodeSource={creditsRef.current?.marker?.source} onPlayNext={() => nextLaunchRef.current()} onCancelNext={() => { autoNextOfferedRef.current = true; setNextCountdown(null); }} />
+                  nextEpisodeIn={nextCountdown} nextEpisodeSource={creditsRef.current?.marker?.source} onPlayNext={() => nextLaunchRef.current()} stillWatching={stillWatching} onStillWatching={keepWatching => { setStillWatching(false); autoChainRef.current = 0; if (keepWatching) nextLaunchRef.current(); else closePlayer(); }} onCancelNext={() => { autoNextOfferedRef.current = true; setNextCountdown(null); }} />
               </div>
-              {isSeries && <EpisodeQueue key={selectedSeasonIdx} seasons={media.seasons || []} active={{ s: selectedSeasonIdx, e: selectedEpisodeIdx }} seasonLabel={seasonLabel} watched={w} poster={media.poster} disabled={isStarting} onSelect={(s, e) => void startPlaying(s, e, true)} />}
+              {isSeries && <EpisodeQueue key={selectedSeasonIdx} seasons={media.seasons || []} active={{ s: selectedSeasonIdx, e: selectedEpisodeIdx }} seasonLabel={seasonLabel} watched={w} poster={media.poster} disabled={isStarting} onSelect={(s, e) => { autoChainRef.current = 0; void startPlaying(s, e, true); }} />}
               </div>
 
             </div>

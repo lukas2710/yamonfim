@@ -47,9 +47,11 @@ interface Props {
   nextEpisodeSource?: string;
   onPlayNext?: () => void;
   onCancelNext?: () => void;
+  stillWatching?: boolean;
+  onStillWatching?: (keepWatching: boolean) => void;
 }
 
-export default function WatchPlayer({ src, title, resumeAt, controlRef, onProgress, onState, onEnded, initialExcludedEmbeds, onExit, nextEpisodeIn, nextEpisodeSource, onPlayNext, onCancelNext }: Props) {
+export default function WatchPlayer({ src, title, resumeAt, controlRef, onProgress, onState, onEnded, initialExcludedEmbeds, onExit, nextEpisodeIn, nextEpisodeSource, onPlayNext, onCancelNext, stillWatching, onStillWatching }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
@@ -101,6 +103,7 @@ export default function WatchPlayer({ src, title, resumeAt, controlRef, onProgre
     if (video.paused) void video.play().catch(() => setError('La lecture n’a pas pu reprendre. Utilise les commandes vidéo.'));
     else video.pause();
   };
+  useEffect(() => { if (stillWatching && videoRef.current && !videoRef.current.paused) { playbackIntent.current = false; videoRef.current.pause(); } }, [stillWatching]);
   useImperativeHandle(controlRef, () => ({ togglePause, ...(process.env.NODE_ENV === 'development' ? { simulateFailure: () => failureRef.current?.() } : {}) }));
   const reveal = useCallback(() => {
     setVisible(true);
@@ -579,7 +582,12 @@ export default function WatchPlayer({ src, title, resumeAt, controlRef, onProgre
         {pipSupported && <button className={styles.castButton} onClick={() => { setSettingsOpen(false); void pictureInPicture(); }}><PlayerIcon name="pip" /> {inPip ? 'Fermer le mini-lecteur' : 'Mini-lecteur'}</button>}
       </div>
     </div>}
-    {nextEpisodeIn != null && !loading && !error && <div role="status" className={styles.nextEpisode}>
+    {stillWatching && <div role="dialog" aria-modal="false" aria-labelledby="still-watching-title" className={styles.nextEpisode}>
+      <span className={styles.nextBadge}><PlayerIcon name="pause" /></span>
+      <div className={styles.nextCopy}><span>TROIS ÉPISODES D’AFFILÉE</span><strong id="still-watching-title">Tu regardes toujours ?</strong></div>
+      <div><button autoFocus onClick={() => onStillWatching?.(true)}>Continuer</button><button onClick={() => onStillWatching?.(false)}>Arrêter</button></div>
+    </div>}
+    {nextEpisodeIn != null && !stillWatching && !loading && !error && <div role="status" className={styles.nextEpisode}>
       <span className={styles.nextBadge}><PlayerIcon name="play" /></span>
       <div className={styles.nextCopy}><span>LA SUITE DE TON HISTOIRE</span><strong>Lecture suivante dans {nextEpisodeIn} s</strong>{nextEpisodeSource === 'SkipDB' && <a href="https://skipdb.tv" target="_blank" rel="noreferrer">Minutage : SkipDB · ODbL</a>}</div>
       {pausedState && <p>En pause avec la vidéo</p>}
