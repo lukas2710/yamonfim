@@ -32,6 +32,7 @@ function episodeRows(item: Series, seasons: Season[], lookup: Map<string, Marker
   }));
 }
 type Row = ReturnType<typeof episodeRows>[number];
+const validatedClass = 'mt-1 text-xs font-semibold text-emerald-400';
 // Saved under the media id and, when known, the TMDB id the TV app sends.
 function lengthKeys(item: Series, seasons: Season[]) {
   const tmdb = creditsTmdb(item, seasons.flatMap(season => season.episodes).find(episode => episode.embedUrl)?.embedUrl);
@@ -132,7 +133,15 @@ export default function CreditsAdmin() {
     return map;
   }, [markers]);
   const summary = useMemo(() => creditsSummary(markers), [markers]);
-  const matches = (row: Row) => filter === 'all' || filter === 'missing' && !row.manual && !row.automatic || filter === 'filled' && !!(row.manual || row.automatic) || row.status === filter;
+  const [justSaved, setJustSaved] = useState<Record<string, boolean>>({});
+  // A length set for the whole series validates all of its episodes.
+  const seriesLength = (item: Series, list?: Season[]) => {
+    const keys = list ? lengthKeys(item, list) : [seriesLengthKey(`media:${item.id}`), ...(item.tmdb_id ? [seriesLengthKey(`tmdb:${item.tmdb_id}`)] : [])];
+    return markers.find(record => keys.includes(record.episode_key) && record.source === 'admin');
+  };
+  const covered = (row: Row, length?: Marker) => !!(row.manual || length || row.automatic);
+  // An episode just saved stays in view so its validated state is visible.
+  const matches = (row: Row, length?: Marker) => justSaved[row.id] || filter === 'all' || filter === 'missing' && !covered(row, length) || filter === 'filled' && covered(row, length) || row.status === filter;
   const query = search.trim().toLocaleLowerCase();
   const groups = series.filter(item => item.title.toLocaleLowerCase().includes(query)).sort((a, b) => a.title.localeCompare(b.title, 'fr', { sensitivity: 'base', numeric: true }));
   const pageCount = Math.max(1, Math.ceil(groups.length / 10));
@@ -156,7 +165,11 @@ export default function CreditsAdmin() {
           current.set(key, [...(current.get(key) || []), marker]);
         }
         let pending: Row[] = [];
-        try { pending = episodeRows(item, await loadSeasons(String(item.id)), current).filter(row => !row.manual && !row.automatic); }
+        try {
+          const list = await loadSeasons(String(item.id));
+          const keys = lengthKeys(item, list);
+          if (!markersRef.current.some(record => keys.includes(record.episode_key) && record.source === 'admin')) pending = episodeRows(item, list, current).filter(row => !row.manual && !row.automatic);
+        }
         catch { progress.failed++; }
         for (const row of pending) {
           if (controller.signal.aborted) break;
@@ -211,7 +224,8 @@ export default function CreditsAdmin() {
         const { error } = await supabase.from('episode_credits').upsert({ episode_key: row.key, season: row.season, episode: row.episode, duration_ms: 0, start_sec: seconds, source: 'admin', checked_at: new Date().toISOString(), expires_at: null });
         if (error) throw error;
       }
-      setMessage(text ? 'Minutage manuel enregistré pour tous les appareils.' : 'Valeur manuelle retirée : API disponible, sinon 30 secondes avant la fin.');
+      setJustSaved(values => ({ ...values, [row.id]: true }));
+      setMessage(text ? `Épisode ${row.episode} validé : minutage manuel enregistré pour tous les appareils.` : 'Valeur manuelle retirée : API disponible, sinon 30 secondes avant la fin.');
       try { localStorage.setItem('yamonfim_credits_updated', JSON.stringify([row.id, text, revision])); } catch {}
       setRevision(value => value + 1);
     } catch { setError('Enregistrement impossible. Vérifie ta session administrateur et la migration de la base.'); }
@@ -230,7 +244,7 @@ export default function CreditsAdmin() {
         ? await supabase.from('episode_credits').upsert(keys.map(key => ({ episode_key: key, season: 1, episode: 1, duration_ms: 0, start_sec: seconds, source: 'admin', checked_at: new Date().toISOString(), expires_at: null })))
         : await supabase.from('episode_credits').delete().in('episode_key', keys).eq('source', 'admin');
       if (error) throw error;
-      setMessage(text ? `Générique de ${text} appliqué à tous les épisodes de ${item.title}.` : `Durée retirée pour ${item.title}.`);
+      setMessage(text ? `${item.title} validée : tous les épisodes passent à la suite ${text} avant la fin.` : `Durée retirée pour ${item.title}.`);
       setRevision(value => value + 1);
     } catch { setError('Enregistrement impossible. Vérifie ta session administrateur.'); }
     finally { setSaving(null); }
@@ -259,21 +273,22 @@ export default function CreditsAdmin() {
         <div className="space-y-4">{visible.map(item => {
           const id = String(item.id), list = seasons[id];
           const rows = list ? episodeRows(item, list, lookup) : [];
-          const shown = rows.filter(matches);
-          const filled = rows.filter(row => row.manual || row.automatic).length;
+          const length = seriesLength(item, list);
+          const shown = rows.filter(row => matches(row, length));
+          const filled = rows.filter(row => covered(row, length)).length;
           return <details key={id} open={!!expandedSeries[id]} onToggle={event => {
             const open = event.currentTarget.open;
             setExpandedSeries(values => values[id] === open ? values : { ...values, [id]: open });
             if (open) void openSeries(id);
           }} className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
-            <summary className="cursor-pointer px-5 py-5 marker:text-red-400"><span className="ml-2 text-lg font-semibold">{item.title}</span><span className="ml-3 text-sm text-zinc-400">{list ? `${filled} / ${rows.length} épisodes remplis` : `${summary.count(item)} minutages enregistrés`}</span></summary>
+            <summary className="cursor-pointer px-5 py-5 marker:text-red-400"><span className="ml-2 text-lg font-semibold">{item.title}</span>{length ? <span className="ml-3 text-sm font-semibold text-emerald-400">✓ Série validée · suite {formatTime(length.start_sec!)} avant la fin</span> : <span className="ml-3 text-sm text-zinc-400">{list ? `${filled} / ${rows.length} épisodes remplis` : `${summary.count(item)} minutages enregistrés`}</span>}</summary>
             {expandedSeries[id] && <div className="space-y-6 border-t border-white/10 p-4 sm:p-5">
               <div className="flex flex-wrap items-center gap-4"><Link href={`/watch/${item.id}`} className="inline-block text-sm text-red-400">Ouvrir la série →</Link><button disabled={loading || !!scan} className={`${field} text-sm disabled:opacity-50`} onClick={() => void scanCatalogue(id)}>Scanner cette série</button></div>
               {list && (() => {
-                const keys = lengthKeys(item, list), current = markers.find(record => keys.includes(record.episode_key) && record.source === 'admin');
+                const current = length;
                 const draftId = `length:${item.id}`;
                 return <form className="flex flex-wrap items-center gap-3 rounded-xl border border-red-500/20 bg-red-950/10 p-4" onSubmit={event => { event.preventDefault(); void saveLength(item, list); }}>
-                  <div className="min-w-48 flex-1"><strong className="text-sm">Générique de toute la série</strong><p className="mt-1 text-xs text-zinc-400">{current ? `Tous les épisodes passent à la suite ${formatTime(current.start_sec!)} avant la fin, sauf ceux avec une valeur manuelle.` : 'Durée du générique de fin (ex. 1:00), appliquée à tous les épisodes de la série.'}</p></div>
+                  <div className="min-w-48 flex-1"><strong className="text-sm">Générique de toute la série</strong>{current ? <p className={validatedClass}>✓ Série validée : tous les épisodes passent à la suite {formatTime(current.start_sec!)} avant la fin, sauf ceux avec une valeur manuelle.</p> : <p className="mt-1 text-xs text-zinc-400">Durée du générique de fin (ex. 1:00), appliquée à tous les épisodes de la série.</p>}</div>
                   <input aria-label={`Durée du générique de ${item.title}`} placeholder="0:45" className={`${field} w-28`} value={drafts[draftId] ?? (current ? formatTime(current.start_sec!) : '')} onChange={event => setDrafts(values => ({ ...values, [draftId]: event.target.value }))} />
                   <button disabled={saving !== null || loading || !!scan} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold disabled:opacity-50">{saving === draftId ? 'Enregistrement…' : 'Enregistrer'}</button>
                 </form>;
@@ -283,7 +298,7 @@ export default function CreditsAdmin() {
                 : [...new Set(shown.map(row => row.season))].map(season => <section key={season} aria-label={`${item.title}, saison ${season}`} className="space-y-3">
                 <h2 className="text-base font-semibold text-zinc-200">Saison {season}</h2>
                 {shown.filter(row => row.season === season).map(row => <form key={row.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-black/20 p-4" onSubmit={event => { event.preventDefault(); void save(row); }}>
-                  <div className="min-w-48 flex-1"><strong className="text-sm">Épisode {row.episode} — {row.title || 'Épisode'}</strong><p className="mt-1 text-xs text-zinc-400">{row.manual ? `Manuel · ${formatTime(row.manual.start_sec!)}` : row.automatic ? `${row.automatic.source} · ${formatTime(row.automatic.start_sec!)}` : row.status === 'absent' ? 'Recherche sans minutage exploitable · estimation de la série ou secours 30 s' : row.checked ? 'À revérifier · estimation de la série ou secours 30 s' : 'Non vérifié · estimation de la série ou secours 30 s'}</p></div>
+                  <div className="min-w-48 flex-1"><strong className="text-sm">Épisode {row.episode} — {row.title || 'Épisode'}</strong>{row.manual ? <p className={validatedClass}>✓ Validé · manuel · {formatTime(row.manual.start_sec!)}</p> : length ? <p className={validatedClass}>✓ Validé · générique de la série, {formatTime(length.start_sec!)} avant la fin</p> : <p className="mt-1 text-xs text-zinc-400">{row.automatic ? `${row.automatic.source} · ${formatTime(row.automatic.start_sec!)}` : row.status === 'absent' ? 'Recherche sans minutage exploitable · estimation de la série ou secours 30 s' : row.checked ? 'À revérifier · estimation de la série ou secours 30 s' : 'Non vérifié · estimation de la série ou secours 30 s'}</p>}</div>
                   <input aria-label={`Début du générique ${row.item.title} saison ${row.season} épisode ${row.episode}`} placeholder="42:15" className={`${field} w-28`} value={drafts[row.id] ?? (row.manual ? formatTime(row.manual.start_sec!) : '')} onChange={event => setDrafts(values => ({ ...values, [row.id]: event.target.value }))} />
                   <button disabled={saving !== null || loading || !!scan} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold disabled:opacity-50">{saving === row.id ? 'Enregistrement…' : 'Enregistrer'}</button>
                 </form>)}
