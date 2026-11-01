@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { InstallGuide, useInstallApp } from '@/components/InstallAppButton';
 
 // « J'ai déjà l'application » : plus jamais d'annonce sur cet appareil.
 const STORAGE_KEY = 'yf_apps_owned_v3';
@@ -20,6 +21,10 @@ export default function TvAppAnnouncement() {
   const [closing, setClosing] = useState(false);
   const [launcher, setLauncher] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const app = useInstallApp();
+  const phone = app.platform !== 'desktop';
+  // Raccourci installé depuis l'annonce : elle ne revient plus.
+  useEffect(() => { if (app.installed && open) dismiss(true); }, [app.installed, open]);
 
   useEffect(() => {
     // Déjà lancé depuis l'icône de l'écran d'accueil : l'application est installée.
@@ -123,12 +128,24 @@ export default function TvAppAnnouncement() {
           <span>📺 Android TV</span><span>Google TV</span><span>Fire TV Stick</span><span>Bbox 4K</span><span>📱 iPhone</span><span>Android</span>
         </div>
         <div className="yf-tva-actions yf-tva-up" style={{ animationDelay: '1.95s' }}>
-          <Link href="/app" onClick={() => remember(SESSION_KEY, 'session')} className="yf-tva-cta">
-            Découvrir les applications
-          </Link>
+          {phone ? (
+            <>
+              <button type="button" onClick={() => void app.install()} className="yf-tva-cta">
+                📱 Installer sur mon téléphone
+              </button>
+              <Link href="/app" onClick={() => remember(SESSION_KEY, 'session')} className="yf-tva-owned yf-tva-link">
+                📺 Voir l’application TV
+              </Link>
+            </>
+          ) : (
+            <Link href="/app" onClick={() => remember(SESSION_KEY, 'session')} className="yf-tva-cta">
+              Découvrir les applications
+            </Link>
+          )}
           <button onClick={() => dismiss(true)} className="yf-tva-owned">J’ai déjà l’application</button>
           <button onClick={() => dismiss()} className="yf-tva-later">Plus tard</button>
         </div>
+        {app.guide && <InstallGuide platform={app.platform} onClose={app.closeGuide} />}
       </section>
     </div>
   );
@@ -173,6 +190,8 @@ const CSS = `
 .yf-tva-cta:focus-visible{outline:3px solid #fff;outline-offset:3px}
 .yf-tva-cta::after{content:"";position:absolute;top:0;bottom:0;left:-60%;width:40%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.45),transparent);transform:skewX(-20deg);animation:yfTvaShine 2.8s ease-in-out 2.2s infinite}
 .yf-tva-owned{min-height:46px;border-radius:999px;font-size:14px;font-weight:700;color:#fff;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);cursor:pointer;transition:background .2s,border-color .2s}
+.yf-tva-link{display:flex;align-items:center;justify-content:center}
+.yf-tva-cta{width:100%;cursor:pointer;text-align:center}
 .yf-tva-owned:hover,.yf-tva-owned:focus-visible{background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.3);outline:none}
 .yf-tva-phone{position:absolute;z-index:4;left:50%;top:50%;width:62px;height:118px;margin:-38px 0 0 78px;border-radius:14px;padding:5px;background:linear-gradient(160deg,#34343d,#16161c);box-shadow:-10px 16px 30px -10px rgba(0,0,0,.9),inset 0 1px 0 rgba(255,255,255,.1);animation:yfTvaPhone .85s cubic-bezier(.2,.9,.3,1.3) 1.2s both}
 .yf-tva-phone-screen{position:relative;width:100%;height:100%;border-radius:10px;overflow:hidden;background:#050507}

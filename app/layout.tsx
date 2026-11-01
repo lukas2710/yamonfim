@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "./site-theme.css";
@@ -46,6 +47,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-[#0a0a0b] text-white">
+        <Script src="/install-capture.js" strategy="beforeInteractive" />
         <SessionRecovery />
         <PresenceTracker />
         <ReviewPrompt />
