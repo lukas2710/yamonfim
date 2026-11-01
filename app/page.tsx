@@ -14,7 +14,8 @@ import { fetchPublicCatalogueCards } from '@/lib/client-catalogue';
 import { indexSearch, rankSearch, type SearchEntry } from '@/lib/search';
 import { inCategory, isMainstream, MANGA_GENRE, FOREIGN_GENRE, type Category } from '@/lib/catalogue-categories';
 import { continueWatchingEntries } from '@/lib/watch-progress';
-import { personalizedRecommendations, type RecommendationHistory } from '@/lib/recommendations';
+import { personalizedRecommendations, discoveryPreferences, homeDiscoveryTitles, type RecommendationHistory } from '@/lib/recommendations';
+import { bestRated, weeklyTrending, tmdbKey, type HomeRankings } from '@/lib/home-rankings';
 import QuotaUnlockModal, { LockedPosterOverlay, QuotaBanner, LockIcon } from '@/components/QuotaUnlockModal';
 import PromoBanner from '@/components/PromoBanner';
 import HomeCollections from '@/components/HomeCollections';
@@ -35,6 +36,8 @@ interface MediaItem {
   genres?: string[];
   audience?: string;
   release_year?: number;
+  tmdb_id?: string | number;
+  tmdbAnime?: boolean;
   seasons?: any[];
   runtime?: number;
   heroSeason?: number;
@@ -208,10 +211,27 @@ function Row({
 export default function Home() {
   const router = useRouter();
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
+  const [activeProfile, setActiveProfile] = useState<any>(null);
   const [continueWatchingList, setContinueWatchingList] = useState<MediaItem[]>([]);
-  const [becauseYouWatched, setBecauseYouWatched] = useState<{ parentTitle: string; list: MediaItem[] } | null>(null);
   const [recommendationHistory, setRecommendationHistory] = useState<RecommendationHistory[]>([]);
-  const recommendedForYou = useMemo(() => personalizedRecommendations(mediaList, recommendationHistory), [mediaList, recommendationHistory]);
+  const [rankings, setRankings] = useState<HomeRankings | null>(null);
+  const [browseSort, setBrowseSort] = useState<'recent' | 'rating'>('recent');
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch('/api/home-rankings', { signal: controller.signal }).then(response => response.ok ? response.json() : null).then(data => {
+      if (data?.ratings && data?.trending && !controller.signal.aborted) setRankings(data);
+    }).catch(() => { /* Catalogue and personal suggestions remain available. */ });
+    return () => controller.abort();
+  }, []);
+  const discoveryCatalogue = useMemo(() => mediaList.map(item => ({ ...item, tmdbAnime: rankings?.ratings[tmdbKey(item)]?.anime })), [mediaList, rankings]);
+  const tastes = useMemo(() => discoveryPreferences(discoveryCatalogue, recommendationHistory), [discoveryCatalogue, recommendationHistory]);
+  const childProfile = !!activeProfile?.profile_mode && activeProfile.profile_mode !== 'standard';
+  const homeCatalogue = useMemo(() => homeDiscoveryTitles(discoveryCatalogue, tastes, childProfile), [discoveryCatalogue, tastes, childProfile]);
+  const homeIds = useMemo(() => new Set(homeCatalogue.map(item => String(item.id))), [homeCatalogue]);
+  const recommendedForYou = useMemo(() => personalizedRecommendations(discoveryCatalogue, recommendationHistory), [discoveryCatalogue, recommendationHistory]);
+  const ratedCatalogue = useMemo(() => bestRated(homeCatalogue.filter(isMainstream), rankings), [homeCatalogue, rankings]);
+  const trendingMovies = useMemo(() => weeklyTrending(homeCatalogue.filter(isMainstream), rankings, 'movie'), [homeCatalogue, rankings]);
+  const trendingSeries = useMemo(() => weeklyTrending(homeCatalogue.filter(isMainstream), rankings, 'series'), [homeCatalogue, rankings]);
   const [customBanners, setCustomBanners] = useState<any[]>([]);
   const [hero, setHero] = useState<{ ids: string[]; seasonsById: Record<string, SeasonSummary[]> }>({ ids: [], seasonsById: {} });
   const [loading, setLoading] = useState(true);
@@ -225,7 +245,6 @@ export default function Home() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [activeProfile, setActiveProfile] = useState<any>(null);
 
   const [isVip, setIsVip] = useState(false);
   const [watchCount, setWatchCount] = useState(0);
@@ -428,6 +447,7 @@ export default function Home() {
   };
 
   const selectType = (type: Category) => {
+    setBrowseSort('recent');
     setResultLimit(60);
     setSelectedType(type);
     setSelectedGenre('all');
@@ -471,10 +491,10 @@ export default function Home() {
   }
 
   const availableGenres = Array.from(new Set(dbGenres.length > 0 ? dbGenres : DEFAULT_GENRES)).sort();
-  const carouselItems = useMemo(() => pickHeroItems(mediaList, hero.ids).map(({ item, season }) => {
+  const carouselItems = useMemo(() => pickHeroItems(homeCatalogue, hero.ids.length ? hero.ids : [...recommendedForYou, ...trendingMovies, ...trendingSeries].map(item => String(item.id))).map(({ item, season }) => {
     const found = season === null ? null : findSeason(hero.seasonsById[String(item.id)], season);
     return found ? { ...item, heroSeason: season!, heroStart: found.index } : item;
-  }), [mediaList, hero]);
+  }), [homeCatalogue, hero, recommendedForYou, trendingMovies, trendingSeries]);
 
   useEffect(() => {
     if (carouselItems.length <= 1) return;
@@ -497,16 +517,19 @@ export default function Home() {
   const deferredQuery = useDeferredValue(searchQuery);
   // Normalized once per catalogue load, not on every keystroke (slow TV browsers).
   const searchIndex = useMemo(() => new Map<MediaItem, SearchEntry>(mediaList.map(item => [item, indexSearch(item.title, item.description, ...(item.genres || []))])), [mediaList]);
-  const filteredMedia = useMemo(() => rankSearch(
+  const filteredMedia = useMemo(() => {
+    const matches = rankSearch(
     mediaList.filter(item => inCategory(item, selectedType)
       && (selectedGenre === 'all' || item.genres?.includes(selectedGenre))
       && (selectedYear === 'all' || String(releaseYear(item)) === selectedYear)),
     deferredQuery, item => searchIndex.get(item)!,
-  ), [mediaList, searchIndex, selectedType, selectedGenre, selectedYear, deferredQuery]);
+    );
+    return browseSort === 'rating' && !deferredQuery ? bestRated(matches.filter(item => selectedType === 'manga' || homeIds.has(String(item.id))), rankings) : matches;
+  }, [mediaList, searchIndex, selectedType, selectedGenre, selectedYear, deferredQuery, browseSort, rankings, homeIds]);
 
   const recentMovies: MediaItem[] = [];
   const recentSeries: MediaItem[] = [];
-  for (const item of filteredMedia) {
+  for (const item of homeCatalogue) {
     if (!isMainstream(item)) continue;
     if (item.type === 'movie') recentMovies.push(item);
     if (item.type === 'series') recentSeries.push(item);
@@ -911,9 +934,24 @@ export default function Home() {
           </Row>
         )}
 
+            {!isFiltered && recommendedForYou.length > 0 && (
+              <Row title="Recommandé pour vous" subtitle="Selon les films et séries regardés sur ce profil" icon={<Icon name="sparkles" className="h-5 w-5 text-red-500" />}>
+                {recommendedForYou.map((item: MediaItem) => (
+                  <PosterCard
+                    key={item.id}
+                    item={item}
+                    locked={userLimitReached}
+                    onOpen={() => handleMediaClick(item)}
+                    onPrepare={() => prepareMedia(item)}
+                    className="w-[130px] sm:w-[170px]"
+                  />
+                ))}
+              </Row>
+            )}
+
         {showHero && selectedGenre === 'all' && (
           <div className="-mx-4 sm:-mx-10">
-            <HomeCollections child={!!activeProfile?.profile_mode && activeProfile.profile_mode !== 'standard'} catalogue={mediaList} onOpen={item => void handleMediaClick(item)} admin={isAdmin} />
+            <HomeCollections child={!!activeProfile?.profile_mode && activeProfile.profile_mode !== 'standard'} catalogue={homeCatalogue} onOpen={item => void handleMediaClick(item)} admin={isAdmin} />
           </div>
         )}
 
@@ -928,7 +966,9 @@ export default function Home() {
               <span className="text-sm text-zinc-500">
                 {filteredMedia.length} titre{filteredMedia.length > 1 ? 's' : ''}
               </span>
+              {!searchQuery && <select aria-label="Classer le catalogue" className="ml-auto rounded-lg border border-white/15 bg-zinc-900 px-3 py-2 text-sm" value={browseSort} onChange={event => setBrowseSort(event.target.value as 'recent' | 'rating')}><option value="recent">Derniers ajouts</option><option value="rating" disabled={!rankings}>Meilleures notes TMDB</option></select>}
             </div>
+            {browseSort === 'rating' && !searchQuery && <p className="mb-4 text-sm text-zinc-400">Sélection TMDB disponible sur le site · au moins 300 votes pour les films, 150 pour les séries.</p>}
 
             {filteredMedia.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-white/10 py-16 text-center">
@@ -952,6 +992,7 @@ export default function Home() {
                   <PosterCard
                     key={item.id}
                     item={item}
+                    badge={browseSort === 'rating' && rankings?.ratings[tmdbKey(item)] ? `★ ${rankings.ratings[tmdbKey(item)].rating.toFixed(1)} / 10` : undefined}
                     locked={userLimitReached}
                     onOpen={() => handleMediaClick(item)}
                     onPrepare={() => prepareMedia(item)}
@@ -967,11 +1008,20 @@ export default function Home() {
             <TvAppAnnouncement />
             {(!activeProfile?.profile_mode || activeProfile.profile_mode === 'standard') && <DailyAdditions />}
 
+            {([
+              { title: 'Films en tendance cette semaine', subtitle: 'Tendances TMDB de la semaine · disponibles sur Yamonfilm', items: trendingMovies },
+              { title: 'Séries en tendance cette semaine', subtitle: 'Tendances TMDB de la semaine · disponibles sur Yamonfilm', items: trendingSeries },
+              { title: 'Les films les mieux notés', subtitle: 'Notes TMDB · au moins 300 votes', items: ratedCatalogue.filter(item => item.type === 'movie') },
+              { title: 'Les séries les mieux notées', subtitle: 'Notes TMDB · au moins 150 votes', items: ratedCatalogue.filter(item => item.type === 'series') },
+            ]).map(section => section.items.length > 0 && <Row key={section.title} title={section.title} subtitle={section.subtitle} icon={<Icon name="chart" className="h-5 w-5 text-amber-400" />}>
+              {section.items.slice(0, 20).map(item => <PosterCard key={item.id} item={item} locked={userLimitReached} badge={rankings?.ratings[tmdbKey(item)]?.rating ? `★ ${rankings.ratings[tmdbKey(item)].rating.toFixed(1)} / 10` : undefined} onOpen={() => handleMediaClick(item)} onPrepare={() => prepareMedia(item)} className="w-[130px] sm:w-[170px]" />)}
+            </Row>)}
+
             {customBanners.filter(() => !activeProfile?.profile_mode || activeProfile.profile_mode === 'standard').map((banner: any) => {
               // Admin order is kept; a season entry shows the season poster and opens on it.
               const bannerMedia = (Array.isArray(banner.media_ids) ? banner.media_ids : []).flatMap((value: unknown) => {
                 const { mediaId, season } = parseBannerEntry(value);
-                const item = mediaList.find(m => String(m.id) === mediaId);
+                const item = homeCatalogue.find(m => String(m.id) === mediaId);
                 if (!item) return [];
                 const found = season === null ? null : findSeason(banner.seasonsById?.[mediaId], season);
                 if (season !== null && found) return [{ key: `${mediaId}:s${season}`, item: { ...item, poster: found.season.poster_path || item.poster }, badge: `Saison ${season} · Nouveau`, start: found.index }];
@@ -1031,49 +1081,17 @@ export default function Home() {
               );
             })}
 
-            {becauseYouWatched && becauseYouWatched.list.length > 0 && (
-              <Row
-                title={`Parce que vous avez regardé « ${becauseYouWatched.parentTitle} »`}
-                icon={<Icon name="sparkles" className="h-5 w-5 text-amber-400" />}
-              >
-                {becauseYouWatched.list.map((item: MediaItem) => (
-                  <PosterCard
-                    key={item.id}
-                    item={item}
-                    locked={userLimitReached}
-                    onOpen={() => handleMediaClick(item)}
-                    onPrepare={() => prepareMedia(item)}
-                    className="w-[130px] sm:w-[170px]"
-                  />
-                ))}
-              </Row>
-            )}
-
-            {recommendedForYou.length > 0 && (
-              <Row title="Recommandé pour vous" subtitle="Selon les films et séries regardés sur ce profil" icon={<Icon name="sparkles" className="h-5 w-5 text-red-500" />}>
-                {recommendedForYou.map((item: MediaItem) => (
-                  <PosterCard
-                    key={item.id}
-                    item={item}
-                    locked={userLimitReached}
-                    onOpen={() => handleMediaClick(item)}
-                    onPrepare={() => prepareMedia(item)}
-                    className="w-[130px] sm:w-[170px]"
-                  />
-                ))}
-              </Row>
-            )}
-
-            {availableGenres.map((genre: string) => {
+            {availableGenres.filter(genre => genre !== MANGA_GENRE || tastes.manga).map((genre: string) => {
               // Mangas and foreign-language titles appear only in their own rows.
-              const genreItems = mediaList.filter(m => m.genres && m.genres.includes(genre) && (genre === MANGA_GENRE || genre === FOREIGN_GENRE || isMainstream(m)));
+              const genreItems = bestRated(homeCatalogue.filter(m => m.genres && m.genres.includes(genre) && (genre === MANGA_GENRE || genre === FOREIGN_GENRE || isMainstream(m))), rankings);
               if (genreItems.length === 0) return null;
               return (
-                <Row key={genre} title={genre === MANGA_GENRE ? 'Mangas' : genre === FOREIGN_GENRE ? 'En langue étrangère' : `Populaires en ${genre}`} onSeeAll={() => { if (genre === MANGA_GENRE) selectType('manga'); else if (genre === FOREIGN_GENRE) selectType('foreign'); else { setSelectedGenre(genre); setSelectedType('all'); setSearchQuery(''); } }} icon={<Icon name="film" className="h-5 w-5 text-zinc-400" />}>
+                <Row key={genre} title={genre === MANGA_GENRE ? 'Mangas les mieux notés' : genre === FOREIGN_GENRE ? 'Les mieux notés en langue étrangère' : `Les mieux notés en ${genre}`} subtitle="Notes TMDB · au moins 300 votes pour les films, 150 pour les séries" onSeeAll={() => { if (genre === MANGA_GENRE) selectType('manga'); else if (genre === FOREIGN_GENRE) selectType('foreign'); else { setSelectedGenre(genre); setSelectedType('all'); setSearchQuery(''); setBrowseSort('rating'); } }} icon={<Icon name="film" className="h-5 w-5 text-zinc-400" />}>
                   {genreItems.slice(0, 20).map((item: MediaItem) => (
                     <PosterCard
                       key={genre + '-' + item.id}
                       item={item}
+                      badge={`★ ${rankings!.ratings[tmdbKey(item)].rating.toFixed(1)} / 10`}
                       locked={userLimitReached}
                       onOpen={() => handleMediaClick(item)}
                     onPrepare={() => prepareMedia(item)}

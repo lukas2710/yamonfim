@@ -4,9 +4,20 @@ export type RecommendationHistory = {
   duration?: number | null;
   updated_at?: string | null;
 };
-type Title = { id: string | number; type: string; genres?: string[]; description?: string };
+type Title = { id: string | number; type: string; genres?: string[]; description?: string; tmdbAnime?: boolean };
 const normalize = (value: string) => value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
 const genres = (item: Title) => [...new Set((item.genres || []).map(normalize).filter(Boolean))];
+export const mangaTitle = (item: Title) => !!item.tmdbAnime || genres(item).some(genre => ['manga', 'anime', 'animes'].includes(genre));
+export function discoveryPreferences(catalogue: Title[], history: RecommendationHistory[]) {
+  const byId = new Map(catalogue.map(item => [String(item.id), item]));
+  const engaged = history.filter(row => Number(row.current_time) >= 600 && (!(Number(row.duration) > 0) || Number(row.current_time) / Number(row.duration) >= 0.2)).flatMap(row => {
+    const item = byId.get(String(row.media_id)); return item ? [item] : [];
+  });
+  return { manga: engaged.some(mangaTitle), animation: engaged.some(item => mangaTitle(item) || genres(item).includes('animation')), foreign: engaged.some(item => genres(item).includes('langue etrangere')) };
+}
+export function homeDiscoveryTitles<T extends Title>(catalogue: T[], preferences: ReturnType<typeof discoveryPreferences>, childProfile = false): T[] {
+  return catalogue.filter(item => (preferences.manga || !mangaTitle(item)) && (childProfile || preferences.animation || !genres(item).includes('animation')));
+}
 const words = (item: Title) => new Set(normalize(item.description || '').match(/[a-z]{5,}/g)?.filter(word => !['cette', 'leurs', 'entre', 'apres', 'avant', 'comme', 'quand', 'alors', 'ainsi', 'contre', 'depuis', 'toute', 'monde', 'jeune', 'histoire', 'serie', 'saison', 'film', 'autres', 'nouveau', 'nouvelle', 'decouvre', 'trouve'].includes(word)) || []);
 
 // History is supplied only for the active profile. No other members' data is used.
@@ -27,13 +38,18 @@ export function personalizedRecommendations<T extends Title>(catalogue: T[], his
     if (!previous || weight > previous.weight) seeds.set(String(item.id), { item, weight });
   }
   if (!seeds.size) return [];
+  const preferencesForProfile = discoveryPreferences(catalogue, history);
   const frequency = new Map<string, number>();
   for (const item of catalogue) for (const genre of genres(item)) frequency.set(genre, (frequency.get(genre) || 0) + 1);
   const preferences = [...seeds.values()].sort((a, b) => b.weight - a.weight).slice(0, 40).map(seed => ({ ...seed, genres: genres(seed.item), words: words(seed.item) }));
-  const ranked = catalogue.filter(item => !seen.has(String(item.id))).map(item => {
+  const ranked = catalogue.filter(item => !seen.has(String(item.id))
+    && (!mangaTitle(item) || preferencesForProfile.manga)
+    && (!genres(item).includes('animation') || preferencesForProfile.animation)
+    && (!genres(item).includes('langue etrangere') || preferencesForProfile.foreign)).map(item => {
     const candidateGenres = genres(item), candidateWords = words(item);
     let score = 0;
     for (const seed of preferences) {
+      if (mangaTitle(item) !== mangaTitle(seed.item)) continue;
       const shared = candidateGenres.filter(genre => seed.genres.includes(genre));
       if (!shared.length) continue;
       const affinity = shared.reduce((sum, genre) => sum + Math.log(1 + catalogue.length / (frequency.get(genre) || 1)), 0);
