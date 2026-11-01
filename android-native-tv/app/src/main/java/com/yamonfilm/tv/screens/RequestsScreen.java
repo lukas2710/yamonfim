@@ -182,6 +182,9 @@ public final class RequestsScreen extends Screen {
         return false;
     }
 
+    /** Titre introuvable dans la recherche : déjà tapé ici, il ne reste qu'à choisir. */
+    public void prefill(String title) { if (keyboard != null && !title.isEmpty()) keyboard.set(title); }
+
     @Override protected View defaultFocus() { return keyboard.firstKey(); }
     @Override protected void onDestroy() { App.MAIN.removeCallbacks(runSearch); }
 }

@@ -617,6 +617,16 @@ public final class MainActivity extends Activity {
             if (action == KeyEvent.ACTION_UP && !e.isCanceled()) back();
             return true;
         }
+        // Touche Recherche / micro de la télécommande : ouvre la recherche et écoute directement.
+        if (code == KeyEvent.KEYCODE_SEARCH) {
+            Screen top = top();
+            if (action == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0 && top != null && App.repo().profile() != null && !(top instanceof LoginScreen) && !(top instanceof ProfilesScreen)) {
+                closeDialog();
+                openRail("search");
+                if (top() instanceof SearchScreen) ((SearchScreen) top()).startVoice();
+            }
+            return true;
+        }
         if (dialog == null && action == KeyEvent.ACTION_DOWN) {
             Screen top = top();
             View focus = getCurrentFocus();
@@ -665,6 +675,37 @@ public final class MainActivity extends Activity {
         resumed = false;
         pausedOnce = true;
         App.MAIN.removeCallbacks(heartbeat);
+    }
+
+    // ------------------------------------------------------------ Recherche vocale
+
+    private static final int VOICE_REQUEST = 41;
+    private Keyboard.Listener voiceDone;
+
+    private static Intent voiceIntent() {
+        return new Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "fr-FR")
+            .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Dis le titre d'un film ou d'une série")
+            .putExtra(android.speech.RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+    }
+
+    /** La TV propose-t-elle la reconnaissance vocale (Google, assistant de la box…) ? */
+    public boolean voiceAvailable() { return voiceIntent().resolveActivity(getPackageManager()) != null; }
+
+    /** Écoute la télécommande et rend le texte reconnu ; rien si l'utilisateur annule. */
+    public void listen(Keyboard.Listener done) {
+        try { voiceDone = done; startActivityForResult(voiceIntent(), VOICE_REQUEST); }
+        catch (android.content.ActivityNotFoundException e) { voiceDone = null; toast("La recherche vocale n'est pas disponible sur cette TV."); }
+    }
+
+    @Override protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request != VOICE_REQUEST) return;
+        Keyboard.Listener done = voiceDone;
+        voiceDone = null;
+        java.util.ArrayList<String> heard = result == RESULT_OK && data != null ? data.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS) : null;
+        if (done != null && heard != null && !heard.isEmpty() && heard.get(0) != null && !heard.get(0).trim().isEmpty()) done.changed(heard.get(0).trim());
     }
 
     private boolean returningFromPlayer;

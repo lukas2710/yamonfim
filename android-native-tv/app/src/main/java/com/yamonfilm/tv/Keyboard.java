@@ -54,6 +54,8 @@ public final class Keyboard extends LinearLayout {
 
     public String text() { return text.toString(); }
     public void type(String c) { if (text.length() < 60) { text.append(c); listener.changed(text()); } }
+    /** Remplace tout le texte (recherche vocale, titre repris d'un autre écran). */
+    public void set(String value) { text.setLength(0); text.append(value.length() > 60 ? value.substring(0, 60) : value); listener.changed(text()); }
     public void erase() { if (text.length() > 0) { text.setLength(text.length() - 1); listener.changed(text()); } }
     public void clear() { text.setLength(0); listener.changed(""); }
     public android.view.View firstKey() { return ((LinearLayout) getChildAt(0)).getChildAt(0); }

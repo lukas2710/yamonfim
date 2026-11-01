@@ -30,7 +30,7 @@ import static com.yamonfilm.tv.Ui.dp;
  */
 public final class SearchScreen extends Screen {
     private Keyboard keyboard;
-    private TextView field, info;
+    private TextView field, info, requestButton;
     private GridView grid;
     private Cards.MediaAdapter adapter;
     private int generation, columns;
@@ -68,8 +68,17 @@ public final class SearchScreen extends Screen {
             String[] labels = new String[options.size()]; for (int i=0; i<options.size(); i++) labels[i] = options.get(i) == 0 ? "Toutes les années" : String.valueOf(options.get(i));
             new android.app.AlertDialog.Builder(main).setTitle("Année de sortie").setItems(labels, (dialog, index) -> { selectedYear = options.get(index); yearButton.setText("Année : " + labels[index]); search(); }).show();
         });
-        left.addView(yearButton, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(12), 0, 0));
-        TextView hint = Ui.label(main, "Les touches chiffres de la télécommande fonctionnent aussi.", 12, Ui.DIM, Ui.W_REGULAR);
+        LinearLayout actions = Ui.row(main);
+        Ui.noClip(actions);
+        actions.addView(yearButton);
+        boolean voice = main.voiceAvailable();
+        if (voice) {
+            TextView voiceButton = Ui.button(main, "Dicter", R.drawable.ic_mic, Ui.STYLE_NORMAL);
+            voiceButton.setOnClickListener(v -> startVoice());
+            actions.addView(voiceButton, Ui.lp(Ui.WRAP, Ui.WRAP, dp(10), 0, 0, 0));
+        }
+        left.addView(actions, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(12), 0, 0));
+        TextView hint = Ui.lines(Ui.label(main, voice ? "Astuce : « Dicter » ou la touche micro de la télécommande, puis dis le titre. Les chiffres de la télécommande fonctionnent aussi." : "Les touches chiffres de la télécommande fonctionnent aussi.", 12, Ui.DIM, Ui.W_REGULAR), 3);
         left.addView(hint, Ui.lp(dp(330), Ui.WRAP, 0, dp(14), 0, 0));
         row.addView(left, Ui.lp(dp(350), Ui.MATCH));
 
@@ -77,6 +86,15 @@ public final class SearchScreen extends Screen {
         Ui.noClip(right);
         info = Ui.lines(Ui.label(main, "Suggestions", 20, Ui.TEXT, Ui.W_SEMIBOLD), 1);
         right.addView(info, Ui.lp(Ui.MATCH, Ui.WRAP, dp(10), dp(4), 0, dp(4)));
+        // Rien trouvé : on propose de demander le titre, déjà rempli dans l'écran Demandes.
+        requestButton = Ui.button(main, "Demander ce titre", R.drawable.ic_request, Ui.STYLE_PRIMARY);
+        requestButton.setVisibility(View.GONE);
+        requestButton.setOnClickListener(v -> {
+            String q = keyboard.text().trim();
+            main.openRail("requests");
+            if (main.top() instanceof RequestsScreen) ((RequestsScreen) main.top()).prefill(q);
+        });
+        right.addView(requestButton, Ui.lp(Ui.WRAP, Ui.WRAP, dp(10), dp(14), 0, 0));
         int widthDp = (int) (main.getResources().getDisplayMetrics().widthPixels / main.getResources().getDisplayMetrics().density);
         columns = Math.max(2, (widthDp - Ui.SIDE - 350 - (Ui.SIDE - 10)) / (Cards.POSTER_W + 22));
         grid = Cards.grid(main, columns, false);
@@ -135,8 +153,20 @@ public final class SearchScreen extends Screen {
         });
     }
 
+    /** Dictée : le texte reconnu remplace la saisie et la recherche part tout de suite. */
+    public void startVoice() {
+        main.listen(heard -> {
+            if (!alive()) return;
+            keyboard.set(heard.toLowerCase(java.util.Locale.FRENCH));
+            keyboard.firstKey().requestFocus();
+        });
+    }
+
     private void updateInfo() {
         String q = keyboard.text().trim();
+        boolean nothing = !q.isEmpty() && adapter.getCount() == 0 && !App.repo().catalogue().isEmpty() && !App.repo().childProfile();
+        if (requestButton.hasFocus() && !nothing) keyboard.firstKey().requestFocus();
+        requestButton.setVisibility(nothing ? View.VISIBLE : View.GONE);
         if (App.repo().catalogue().isEmpty()) info.setText("Le catalogue est en cours de chargement…");
         else if (q.isEmpty()) info.setText("Suggestions");
         else if (adapter.getCount() == 0) info.setText("Aucun résultat pour « " + q + " »");
@@ -150,9 +180,11 @@ public final class SearchScreen extends Screen {
         View f = main.getCurrentFocus();
         // Clavier → résultats (droite depuis la dernière colonne) et résultats → clavier (gauche depuis la première).
         if (code == KeyEvent.KEYCODE_DPAD_RIGHT && f != null && MainActivity.isInside(f, keyboard) && keyboard.isLastInRow(f)) {
-            if (adapter.getCount() > 0) { grid.requestFocus(); return true; }
+            if (adapter.getCount() > 0) grid.requestFocus();
+            else if (requestButton.getVisibility() == View.VISIBLE) requestButton.requestFocus();
             return true;
         }
+        if (code == KeyEvent.KEYCODE_DPAD_LEFT && f == requestButton) { keyboard.focusRowEnd(0); return true; }
         if (code == KeyEvent.KEYCODE_DPAD_LEFT && f == grid && grid.getSelectedItemPosition() % columns == 0) {
             keyboard.focusRowEnd(0);
             return true;
@@ -163,7 +195,9 @@ public final class SearchScreen extends Screen {
         // Saisie directe : chiffres de la télécommande ou clavier physique.
         if (code == KeyEvent.KEYCODE_DEL) { keyboard.erase(); return true; }
         if (code >= KeyEvent.KEYCODE_0 && code <= KeyEvent.KEYCODE_9) { keyboard.type(String.valueOf(code - KeyEvent.KEYCODE_0)); return true; }
-        if (code >= KeyEvent.KEYCODE_A && code <= KeyEvent.KEYCODE_Z) { keyboard.type(String.valueOf((char) ('a' + code - KeyEvent.KEYCODE_A))); return true; }
+        // Clavier physique ou télécommande à clavier : toutes les lettres, accents compris.
+        int ch = e.getUnicodeChar();
+        if (ch > 0 && (Character.isLetterOrDigit(ch) || ch == ' ' || ch == '\'')) { keyboard.type(String.valueOf((char) Character.toLowerCase(ch))); return true; }
         if (code == KeyEvent.KEYCODE_SPACE) { keyboard.type(" "); return true; }
         return false;
     }
