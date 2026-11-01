@@ -230,7 +230,7 @@ export default function CreditsAdmin() {
         ? await supabase.from('episode_credits').upsert(keys.map(key => ({ episode_key: key, season: 1, episode: 1, duration_ms: 0, start_sec: seconds, source: 'admin', checked_at: new Date().toISOString(), expires_at: null })))
         : await supabase.from('episode_credits').delete().in('episode_key', keys).eq('source', 'admin');
       if (error) throw error;
-      setMessage(text ? `Générique de ${text} appliqué aux épisodes de ${item.title} sans minutage.` : `Durée retirée pour ${item.title}.`);
+      setMessage(text ? `Générique de ${text} appliqué à tous les épisodes de ${item.title}.` : `Durée retirée pour ${item.title}.`);
       setRevision(value => value + 1);
     } catch { setError('Enregistrement impossible. Vérifie ta session administrateur.'); }
     finally { setSaving(null); }
@@ -241,7 +241,7 @@ export default function CreditsAdmin() {
     <div className="mx-auto max-w-6xl space-y-6 px-4 pt-10">
       <Link href="/admin" className="text-sm text-red-400">← Administration</Link>
       <h1 className="text-3xl font-bold">Génériques des épisodes</h1>
-      <p className="max-w-3xl text-zinc-400">Saisis le début du générique (minutes:secondes). Le bouton apparaît à ce moment, puis la suite démarre après 5 secondes. Une valeur manuelle est prioritaire. Sans minutage pour un épisode, la durée de générique de la série est utilisée : celle que tu saisis pour toute la série, sinon celle mesurée sur ses autres épisodes. Sinon, la suite démarre 30 secondes avant la fin.</p>
+      <p className="max-w-3xl text-zinc-400">Saisis le début du générique (minutes:secondes). Le bouton apparaît à ce moment, puis la suite démarre après 5 secondes. Une valeur manuelle est prioritaire, puis la durée saisie pour toute la série, puis les services. Sans minutage pour un épisode, la durée mesurée sur ses autres épisodes est utilisée. Sinon, la suite démarre 30 secondes avant la fin.</p>
       <p className="text-sm text-zinc-400">Scanne une série pour importer ses minutages avant les visionnages. Les durées de référence des services sont enregistrées ; le lecteur vérifie leur compatibilité avec la vidéo. Les valeurs manuelles restent prioritaires.</p>
       {error && <p role="alert" className="rounded-xl border border-red-600/40 bg-red-950/30 p-4">{error} <button className="underline" onClick={() => setRevision(value => value + 1)}>Réessayer</button></p>}
       {message && <p role="status" className="rounded-xl bg-emerald-950/50 p-4 text-emerald-200">{message}</p>}
@@ -273,7 +273,7 @@ export default function CreditsAdmin() {
                 const keys = lengthKeys(item, list), current = markers.find(record => keys.includes(record.episode_key) && record.source === 'admin');
                 const draftId = `length:${item.id}`;
                 return <form className="flex flex-wrap items-center gap-3 rounded-xl border border-red-500/20 bg-red-950/10 p-4" onSubmit={event => { event.preventDefault(); void saveLength(item, list); }}>
-                  <div className="min-w-48 flex-1"><strong className="text-sm">Générique de toute la série</strong><p className="mt-1 text-xs text-zinc-400">{current ? `Les épisodes sans minutage passent à la suite ${formatTime(current.start_sec!)} avant la fin.` : 'Durée du générique de fin (ex. 0:45), appliquée aux épisodes sans minutage.'}</p></div>
+                  <div className="min-w-48 flex-1"><strong className="text-sm">Générique de toute la série</strong><p className="mt-1 text-xs text-zinc-400">{current ? `Tous les épisodes passent à la suite ${formatTime(current.start_sec!)} avant la fin, sauf ceux avec une valeur manuelle.` : 'Durée du générique de fin (ex. 1:00), appliquée à tous les épisodes de la série.'}</p></div>
                   <input aria-label={`Durée du générique de ${item.title}`} placeholder="0:45" className={`${field} w-28`} value={drafts[draftId] ?? (current ? formatTime(current.start_sec!) : '')} onChange={event => setDrafts(values => ({ ...values, [draftId]: event.target.value }))} />
                   <button disabled={saving !== null || loading || !!scan} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold disabled:opacity-50">{saving === draftId ? 'Enregistrement…' : 'Enregistrer'}</button>
                 </form>;

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { fetchEpisodeCredits } from '@/lib/episode-credits-providers';
-import { storedCredits, storeCredits, estimatedCredits } from '@/lib/episode-credits-store';
+import { storedCredits, storeCredits, estimatedCredits, seriesLengthCredits } from '@/lib/episode-credits-store';
 import { playbackCreditsMarker } from '@/lib/episode-credits';
 
 // Public catalogue metadata only. No viewing history, account IDs or tokens are
@@ -15,6 +15,10 @@ export async function GET(request: Request) {
   }
   const keys = [...(media ? [`media:${media}`] : []), ...(tmdb ? [`tmdb:${tmdb}`] : [])];
   const stored = await storedCredits(keys, season, episode, duration);
+  if (stored.marker?.source !== 'admin') {
+    const series = await seriesLengthCredits(keys, duration);
+    if (series) return NextResponse.json({ marker: playbackCreditsMarker(series, duration), cached: true }, { headers: { 'Cache-Control': 'no-store' } });
+  }
   if (stored.hit) return NextResponse.json({ marker: playbackCreditsMarker(stored.marker ?? await estimatedCredits(keys, season, duration), duration), cached: true }, { headers: { 'Cache-Control': 'no-store' } });
   const signal = AbortSignal.any([request.signal, AbortSignal.timeout(20000)]);
   const { marker, incomplete } = await fetchEpisodeCredits(tmdb, season, episode, { duration, signal, includeSkipDb: true });

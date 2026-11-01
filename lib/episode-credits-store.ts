@@ -20,6 +20,13 @@ export async function storeCredits(key: string, season: number, episode: number,
     expires_at: new Date(Date.now() + (marker ? 7 * 86400000 : retrySoon ? 60000 : 3600000)).toISOString() });
   return !error;
 }
+// The length set for a whole series applies to all its episodes but those
+// with their own manual time.
+export async function seriesLengthCredits(keys: string[], duration: number) {
+  const { data, error } = await database().from('episode_credits').select('episode_key,season,duration_ms,start_sec,source')
+    .in('episode_key', keys.map(seriesLengthKey)).eq('source', 'admin').limit(10);
+  return error || !data?.length ? null : seriesCreditsEstimate(data, 1, duration);
+}
 // Computed on each request from the series' timed episodes, never stored.
 export async function estimatedCredits(keys: string[], season: number, duration: number) {
   const { data, error } = await database().from('episode_credits').select('episode_key,season,episode,duration_ms,start_sec,source')
