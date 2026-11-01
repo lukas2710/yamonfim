@@ -852,7 +852,7 @@ export default function Home() {
               >
                 {(item.backdrop || item.poster) && (
                   <img
-                    src={item.backdrop || item.poster}
+                    src={item.backdrop ? cardImage(item.backdrop, 'w780') : item.poster}
                     alt={item.title}
                     loading="lazy"
                     className={`absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105 ${
@@ -972,7 +972,7 @@ export default function Home() {
                   <div className="absolute inset-0">
                     {banner.backdrop && (
                       <img
-                        src={banner.backdrop}
+                        src={cardImage(banner.backdrop, 'w1280')}
                         alt=""
                         loading="lazy"
                         className="h-full w-full object-cover object-center opacity-40 sm:opacity-30"
