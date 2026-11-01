@@ -89,6 +89,22 @@ export async function buildCatalogueNews(apiKey: string): Promise<CatalogueNews>
   return { at: Date.now(), series, movies };
 }
 
+// Episodes added since the last refresh must not stay listed as missing:
+// re-read the few series concerned and recompute what they still lack.
+export async function refreshMissing(news: CatalogueNews): Promise<CatalogueNews> {
+  const pending = news.series.filter(item => item.missingFrom !== null);
+  if (!pending.length) return news;
+  const db = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { data, error } = await db.from('media').select('id,seasons').in('id', pending.map(item => item.mediaId));
+  if (error || !data) return news;
+  const seasons = new Map(data.map(row => [String(row.id), (row.seasons || []) as SiteSeason[]]));
+  return { ...news, series: news.series.map(item => {
+    if (item.missingFrom === null || !seasons.has(item.mediaId)) return item;
+    const known = Math.max(0, ...(seasons.get(item.mediaId)!.find(season => season.seasonNumber === item.season)?.episodes || []).map(episode => Number(episode.number) || 0));
+    return { ...item, missingFrom: known >= item.episode ? null : known + 1 };
+  }) };
+}
+
 const STORE = 'catalogue', KEY = 'news';
 export async function readCatalogueNews(): Promise<CatalogueNews | null> {
   try { return await getStore(STORE).get(KEY, { type: 'json' }) as CatalogueNews | null; } catch { return null; }

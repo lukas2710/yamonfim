@@ -20,10 +20,13 @@ button.textContent=state&&state.ok?'Nouveautés ajoutées ✓':state&&state.busy
 button.title=state&&state.error||'Ajouter les nouveaux épisodes à la série de ton site';
 button.onclick=()=>{if(!catalogueStatusReady||importStates.get(id)?.busy)return;if(!importPending&&!importQueue.length){bulkTotal=0;bulkFinished=0;bulkErrors=0}
 importQueue.push({id,type:'series',job:crypto.randomUUID(),update:true});importStates.set(id,{busy:true});bulkTotal++;updateBulkStatus();sendImport();render()};return button};
-fetch('/api/catalogue-news',{signal:AbortSignal.timeout(40000)}).then(r=>r.ok?r.json():Promise.reject()).then(n=>{
+let at=0;const describe=()=>{status.textContent=yfNews.size?yfNews.size+(kind==='movie'?' film(s) récent(s) de la liste à ajouter':' série(s) de ton site avec une nouvelle saison ou de nouveaux épisodes')+' · filtre « Nouveautés » · TMDB, mis à jour le '+new Date(at).toLocaleString('fr-FR',{dateStyle:'medium',timeStyle:'short'}):'Aucune nouveauté à ajouter pour le moment.'};
+// Once the site confirms an addition, the title leaves the news at once.
+window.addEventListener('message',event=>{const m=event.data;if(event.origin!==importSite||!m||m.action!=='catalogue:result'||m.ok!==true||!yfNews.has(String(m.id)))return;yfNews.delete(String(m.id));if(at)describe();render()});
+fetch('/api/catalogue-news',{cache:'no-store',signal:AbortSignal.timeout(40000)}).then(r=>r.ok?r.json():Promise.reject()).then(n=>{at=n.at;
 if(kind==='movie'){const listed=new Set(data.map(x=>x.source_id));for(const m of n.movies)if(!m.mediaId&&listed.has(m.tmdb))yfNews.set(String(m.tmdb),{label:'🆕 Sorti le '+when(m.releaseDate)})}
 else for(const s of n.series)if(s.missingFrom!==null)yfNews.set(String(s.tmdb),{update:true,label:'🆕 '+(s.newSeason?'Nouvelle saison '+s.season:'Saison '+s.season+' : nouveaux épisodes dès l’épisode '+s.missingFrom)+' · diffusé le '+when(s.airDate),button:s.newSeason&&s.missingFrom===1?'Ajouter la saison '+s.season+' ＋':'Ajouter les nouveaux épisodes ＋'});
-status.textContent=yfNews.size?yfNews.size+(kind==='movie'?' film(s) récent(s) de la liste à ajouter':' série(s) de ton site avec une nouvelle saison ou de nouveaux épisodes')+' · filtre « Nouveautés » · TMDB, mis à jour le '+new Date(n.at).toLocaleString('fr-FR',{dateStyle:'medium',timeStyle:'short'}):'Aucune nouveauté à ajouter cette semaine.';render()}).catch(()=>{status.textContent='Nouveautés momentanément indisponibles. Recharge la page dans une minute.'});})();</script>`;
+describe();render()}).catch(()=>{status.textContent='Nouveautés momentanément indisponibles. Recharge la page dans une minute.'});})();</script>`;
 }
 
 const FILTER = /(<div class="filters"><button data-filter="all" class="active">[^<]*<\/button>)/;
