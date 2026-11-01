@@ -88,10 +88,10 @@ public final class Models {
         public String image() { return !backdrop.trim().isEmpty() ? backdrop : poster; }
         public Logic.Indexed index() {
             if (index == null) {
-                String[] values = new String[genres.size() + 2];
-                values[0] = title; values[1] = description;
-                for (int i = 0; i < genres.size(); i++) values[i + 2] = genres.get(i);
-                index = new Logic.Indexed(values);
+                String[] extra = new String[genres.size() + 1];
+                extra[0] = description;
+                for (int i = 0; i < genres.size(); i++) extra[i + 1] = genres.get(i);
+                index = new Logic.Indexed(title, extra);
             }
             return index;
         }

@@ -27,6 +27,25 @@ public final class LogicTest {
         check(!new Logic.SearchMatcher("saw 2").matches("Saw 3"), "nombres exacts");
         check(!new Logic.SearchMatcher("dune").matches("Dame"), "mots courts");
         check(new Logic.SearchMatcher("").matches("Tout"), "recherche vide");
+        Logic.SearchMatcher avatar = new Logic.SearchMatcher("avatar");
+        int exact = avatar.score(new Logic.Indexed("Avatar", "Sur Pandora."));
+        int start = avatar.score(new Logic.Indexed("Avatar : La Voie de l’eau", "Jake Sully vit avec sa famille."));
+        int synopsis = avatar.score(new Logic.Indexed("Le Dernier Maître de l’air", "Aang est le dernier avatar."));
+        check(exact > start && start > synopsis && synopsis > 0, "classement titre avant résumé");
+        check(avatar.score(new Logic.Indexed("La Planète des singes", "Un astronaute découvre une planète.")) == 0, "sans rapport");
+        check(new Logic.SearchMatcher("lion").score(new Logic.Indexed("Titre sans rapport", "Un million de dollars.")) == 0, "pas dans un mot du résumé");
+        check(new Logic.SearchMatcher("spiderman").matches("Spider-Man : No Way Home"), "mots collés");
+        check(new Logic.SearchMatcher("spider man").matches("Spiderman"), "mots séparés");
+        check(new Logic.SearchMatcher("intesrtellar").matches("Interstellar"), "lettres inversées");
+        check(new Logic.SearchMatcher("interstelar").matches("Interstellar"), "lettre oubliée");
+        check(new Logic.SearchMatcher("interstle").matches("Interstellar"), "mot en cours de saisie");
+        check(new Logic.SearchMatcher("casa de papeel").matches("La Casa de Papel"), "faute en fin de saisie");
+        check(!new Logic.SearchMatcher("aventure").matches("Avatar"), "mot différent");
+        Logic.SearchMatcher dune = new Logic.SearchMatcher("dune");
+        check(dune.score(new Logic.Indexed("Dune (2021)")) == 1000, "titre exact avec année");
+        check(new Logic.SearchMatcher("interstelar").score(new Logic.Indexed("Interstellar (2014)")) > new Logic.SearchMatcher("interstelar").score(new Logic.Indexed("Interstella 5555 (2003)")), "une faute avant deux");
+        check(new Logic.SearchMatcher("lion").score(new Logic.Indexed("Le Roi lion")) > new Logic.SearchMatcher("lion").score(new Logic.Indexed("Lioness (2023)")), "mot entier avant début de mot");
+        check(new Logic.SearchMatcher("breking bad").score(new Logic.Indexed("Breaking Bad")) > new Logic.SearchMatcher("breking bad").score(new Logic.Indexed("El Camino : Un film \"Breaking Bad\" (2019)")), "titre le plus court");
         check(Logic.searchQueryVariants("Étoiles").equals(Arrays.asList("Étoiles", "etoiles", "etoile")), "variantes Étoiles");
         check(Logic.searchQueryVariants("Dune").equals(Arrays.asList("Dune", "dune")), "variantes Dune");
 

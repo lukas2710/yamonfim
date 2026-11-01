@@ -11,7 +11,7 @@ import { readClientResource } from '@/lib/resource-cache';
 import { supabase } from '@/lib/supabase';
 import { fetchSubscriptionProfile } from '@/lib/subscription';
 import { fetchPublicCatalogueCards } from '@/lib/client-catalogue';
-import { createSearchMatcher } from '@/lib/search';
+import { indexSearch, rankSearch, type SearchEntry } from '@/lib/search';
 import { inCategory, isMainstream, MANGA_GENRE, FOREIGN_GENRE, type Category } from '@/lib/catalogue-categories';
 import { continueWatchingEntries } from '@/lib/watch-progress';
 import QuotaUnlockModal, { LockedPosterOverlay, QuotaBanner, LockIcon } from '@/components/QuotaUnlockModal';
@@ -490,13 +490,14 @@ export default function Home() {
   };
 
   const deferredQuery = useDeferredValue(searchQuery);
-  const filteredMedia = useMemo(() => {
-    const matches = createSearchMatcher(deferredQuery);
-    return mediaList.filter(item => inCategory(item, selectedType)
+  // Normalized once per catalogue load, not on every keystroke (slow TV browsers).
+  const searchIndex = useMemo(() => new Map<MediaItem, SearchEntry>(mediaList.map(item => [item, indexSearch(item.title, item.description, ...(item.genres || []))])), [mediaList]);
+  const filteredMedia = useMemo(() => rankSearch(
+    mediaList.filter(item => inCategory(item, selectedType)
       && (selectedGenre === 'all' || item.genres?.includes(selectedGenre))
-      && (selectedYear === 'all' || String(releaseYear(item)) === selectedYear)
-      && matches(item.title, item.description, ...(item.genres || [])));
-  }, [mediaList, selectedType, selectedGenre, selectedYear, deferredQuery]);
+      && (selectedYear === 'all' || String(releaseYear(item)) === selectedYear)),
+    deferredQuery, item => searchIndex.get(item)!,
+  ), [mediaList, searchIndex, selectedType, selectedGenre, selectedYear, deferredQuery]);
 
   const recentMovies: MediaItem[] = [];
   const recentSeries: MediaItem[] = [];
@@ -608,12 +609,21 @@ export default function Home() {
               </button>
               <input
                 ref={searchInputRef}
-                type="text"
-                placeholder="Titres, descriptions…"
+                type="search"
+                inputMode="search"
+                enterKeyHint="search"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                aria-label="Rechercher un film ou une série"
+                placeholder="Film, série, genre…"
                 value={searchQuery}
                 onChange={e => { setResultLimit(60); setSearchQuery(e.target.value); setSelectedType('all'); setSelectedGenre('all'); }}
                 onBlur={() => !searchQuery && setSearchOpen(false)}
-                className="min-w-0 flex-1 bg-transparent pr-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none"
+                // « OK » / Entrée closes the TV or phone keyboard so the results are visible.
+                onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                className="min-w-0 flex-1 appearance-none bg-transparent pr-2 text-sm [&::-webkit-search-cancel-button]:appearance-none text-white placeholder:text-zinc-500 focus:outline-none"
               />
               {searchQuery && (
                 <button

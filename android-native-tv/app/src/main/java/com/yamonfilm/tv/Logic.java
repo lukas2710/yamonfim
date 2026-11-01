@@ -41,7 +41,7 @@ public final class Logic {
 
     private static final Pattern COMBINING = Pattern.compile("[\\u0300-\\u036f]");
     private static final Pattern NON_WORD = Pattern.compile("[^\\p{L}\\p{N}]+");
-    private static final Set<String> STOP = new HashSet<>(Arrays.asList("le", "la", "les", "l", "de", "des", "du", "un", "une", "the", "et", "and"));
+    private static final Set<String> STOP = new HashSet<>(Arrays.asList("le", "la", "les", "l", "de", "des", "du", "un", "une", "the", "et", "and", "a", "of"));
 
     public static String normalizeSearch(String value) {
         if (value == null) return "";
@@ -52,53 +52,112 @@ public final class Logic {
 
     static String singular(String word) { return word.length() > 3 && !word.endsWith("ss") && word.endsWith("s") ? word.substring(0, word.length() - 1) : word; }
 
-    static boolean oneEdit(String a, String b) {
-        if (Math.abs(a.length() - b.length()) > 1) return false;
-        int i = 0, j = 0, edits = 0;
-        while (i < a.length() && j < b.length()) {
-            if (a.charAt(i) == b.charAt(j)) { i++; j++; continue; }
-            if (++edits > 1) return false;
-            if (a.length() >= b.length()) i++;
-            if (b.length() >= a.length()) j++;
+    /** Distance d'édition (transpositions comprises), arrêtée dès qu'elle dépasse max. */
+    static int editDistance(String a, String b, int max) {
+        if (Math.abs(a.length() - b.length()) > max) return max + 1;
+        int[] prev2 = new int[b.length() + 1], prev = new int[b.length() + 1], row = new int[b.length() + 1];
+        for (int j = 0; j <= b.length(); j++) prev[j] = j;
+        for (int i = 1; i <= a.length(); i++) {
+            row[0] = i; int best = i;
+            for (int j = 1; j <= b.length(); j++) {
+                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                int d = Math.min(Math.min(prev[j] + 1, row[j - 1] + 1), prev[j - 1] + cost);
+                if (i > 1 && j > 1 && a.charAt(i - 1) == b.charAt(j - 2) && a.charAt(i - 2) == b.charAt(j - 1)) d = Math.min(d, prev2[j - 2] + 1);
+                row[j] = d; if (d < best) best = d;
+            }
+            if (best > max) return max + 1;
+            int[] t = prev2; prev2 = prev; prev = row; row = t;
         }
-        return edits + ((i < a.length() || j < b.length()) ? 1 : 0) <= 1;
+        return prev[b.length()];
     }
 
-    /** Texte pré-normalisé d'un titre, calculé une seule fois pour une recherche fluide. */
+    private static int allowedEdits(String needle) { return needle.length() >= 8 ? 2 : needle.length() >= 5 ? 1 : 0; }
+
+    /** Qualité d'un mot, en demi-points : 8 identique, 6 début, 4 à l'intérieur, 3 ou 2 pour une ou deux fautes, 0 aucun. */
+    static int wordMatch(String needle, String word, boolean loose) {
+        if (word.equals(needle)) return 8;
+        if (needle.matches("\\d+")) return 0;
+        if (word.startsWith(needle)) return 6;
+        if (!loose) return 0;
+        if (needle.length() >= 3 && word.contains(needle)) return 4;
+        int edits = allowedEdits(needle);
+        // Une faute touche rarement les deux premières lettres : on saute ces mots pour une saisie fluide.
+        if (edits == 0 || (word.charAt(0) != needle.charAt(0) && (word.length() < 2 || needle.length() < 2 || word.charAt(1) != needle.charAt(1)))) return 0;
+        // Mot en cours de saisie : on compare aussi avec le début d'un mot plus long.
+        int d = editDistance(needle, word, edits);
+        if (d > edits && word.length() > needle.length()) d = editDistance(needle, word.substring(0, needle.length()), edits);
+        return d > edits ? 0 : d == 1 ? 3 : 2;
+    }
+
+    private static int bestMatch(String needle, String[] list, boolean loose) {
+        int best = 0;
+        for (String word : list) { int m = wordMatch(needle, word, loose); if (m > best) best = m; if (best == 8) break; }
+        return best;
+    }
+
+    private static String[] words(String text) {
+        String[] raw = text.isEmpty() ? new String[0] : text.split(" ");
+        for (int k = 0; k < raw.length; k++) raw[k] = singular(raw[k]);
+        return raw;
+    }
+
+    /** Texte pré-normalisé d'un titre (et de son résumé, ses genres), calculé une seule fois pour une recherche fluide. */
     public static final class Indexed {
-        public final String text; public final String[] words;
-        public Indexed(String... values) {
+        public final String title, base, compact; public final String[] titleWords, extraWords;
+        public Indexed(String title, String... extra) {
+            this.title = normalizeSearch(title);
+            // « Dune (2021) » reste le titre exact « Dune ».
+            base = this.title.replaceFirst(" (18|19|20)\\d\\d$", "");
+            compact = this.title.replace(" ", "");
+            titleWords = words(this.title);
             StringBuilder sb = new StringBuilder();
-            for (String v : values) if (v != null && !v.isEmpty()) { if (sb.length() > 0) sb.append(' '); sb.append(v); }
-            text = normalizeSearch(sb.toString());
-            String[] raw = text.isEmpty() ? new String[0] : text.split(" ");
-            words = new String[raw.length];
-            for (int k = 0; k < raw.length; k++) words[k] = singular(raw[k]);
+            for (String v : extra) if (v != null && !v.isEmpty()) { if (sb.length() > 0) sb.append(' '); sb.append(v); }
+            extraWords = words(normalizeSearch(sb.toString()));
         }
     }
 
+    /**
+     * Note de pertinence (0 = absent). Le titre passe toujours avant le résumé : titre exact, début du titre,
+     * expression entière, tous les mots dans le titre, puis seulement le résumé et les genres.
+     */
     public static final class SearchMatcher {
-        private final String normalized; private final List<String> needles = new ArrayList<>();
+        private final String normalized, compact; private final List<String> needles = new ArrayList<>();
         public SearchMatcher(String query) {
             normalized = normalizeSearch(query);
+            compact = normalized.replace(" ", "");
             List<String> all = new ArrayList<>(), meaningful = new ArrayList<>();
             if (!normalized.isEmpty()) for (String w : normalized.split(" ")) if (!w.isEmpty()) { all.add(w); if (!STOP.contains(w)) meaningful.add(w); }
             for (String w : meaningful.isEmpty() ? all : meaningful) needles.add(singular(w));
         }
         public boolean isEmpty() { return normalized.isEmpty(); }
-        public boolean matches(Indexed item) {
-            if (normalized.isEmpty()) return true;
-            if (item.text.contains(normalized)) return true;
+        public int score(Indexed item) {
+            if (normalized.isEmpty()) return 1;
+            String t = item.title; int longer = Math.min(t.length() - normalized.length(), 49);
+            if (item.base.equals(normalized) || t.equals(normalized)) return 1000;
+            if ((t + " ").startsWith(normalized + " ")) return 950 - longer;
+            if ((" " + t + " ").contains(" " + normalized + " ")) return 900 - longer;
+            if (t.startsWith(normalized)) return 850 - longer;
+            if ((" " + t).contains(" " + normalized)) return 800 - longer;
+            if (compact.length() >= 3 && item.compact.contains(compact)) return 700 - Math.min(item.compact.length() - compact.length(), 49);
+            int inTitle = 0, everywhere = 0; boolean titleOnly = true;
             for (String needle : needles) {
-                boolean numeric = needle.matches("\\d+"), found = false;
-                for (String word : item.words) {
-                    if (word.equals(needle) || (!numeric && (word.contains(needle) || (needle.length() >= 5 && word.length() >= 5 && oneEdit(needle, word))))) { found = true; break; }
-                }
-                if (!found) return false;
+                int m = bestMatch(needle, item.titleWords, true);
+                if (m > 0) { inTitle += m; everywhere += m; continue; }
+                titleOnly = false;
+                // Le résumé est long : seuls les mots entiers ou leurs débuts comptent, jamais les fautes.
+                int e = needle.length() >= 3 || needle.matches("\\d+") ? bestMatch(needle, item.extraWords, false) : 0;
+                if (e == 0) return 0;
+                everywhere += e;
             }
-            return true;
+            // Mêmes mots trouvés : le titre le plus court est le plus proche (« Breaking Bad » avant « El Camino : Un film Breaking Bad »).
+            return titleOnly ? 300 + Math.round(inTitle * 45f / needles.size()) - Math.min(item.titleWords.length - needles.size(), 10) : 100 + Math.round(everywhere * 10f / needles.size());
         }
-        public boolean matches(String... values) { return matches(new Indexed(values)); }
+        public boolean matches(Indexed item) { return score(item) > 0; }
+        public boolean matches(String... values) {
+            StringBuilder sb = new StringBuilder();
+            for (String v : values) if (v != null && !v.isEmpty()) { if (sb.length() > 0) sb.append(' '); sb.append(v); }
+            return matches(new Indexed(sb.toString()));
+        }
     }
 
     public static List<String> searchQueryVariants(String query) {

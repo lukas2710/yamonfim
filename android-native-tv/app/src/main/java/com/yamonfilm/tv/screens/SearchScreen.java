@@ -116,8 +116,15 @@ public final class SearchScreen extends Screen {
         App.io(this, () -> {
             List<Media> out = new ArrayList<>();
             if (q.trim().isEmpty()) { for (int i = 0; i < all.size() && out.size() < 40; i++) if (year == 0 || all.get(i).releaseYear == year) out.add(all.get(i)); return out; }
+            // Meilleurs résultats d'abord (titre exact, début du titre…) ; à égalité, l'ordre du catalogue.
             Logic.SearchMatcher matcher = new Logic.SearchMatcher(q);
-            for (Media m : all) if ((year == 0 || m.releaseYear == year) && matcher.matches(m.index())) out.add(m);
+            final java.util.Map<Media, Integer> scores = new java.util.IdentityHashMap<>();
+            for (Media m : all) {
+                if (year != 0 && m.releaseYear != year) continue;
+                int score = matcher.score(m.index());
+                if (score > 0) { scores.put(m, score); out.add(m); }
+            }
+            java.util.Collections.sort(out, (a, b) -> Integer.compare(scores.get(b), scores.get(a)));
             return out;
         }, (list, e) -> {
             if (gen != generation || list == null) return;
