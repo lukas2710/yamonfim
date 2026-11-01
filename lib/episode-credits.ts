@@ -41,12 +41,13 @@ export const ESTIMATED_CREDITS_MAX = 300;
 // The administrator can set one credits length for a whole series, stored as
 // an admin row whose start_sec is that length.
 export const seriesLengthKey = (key: string) => `length:${key}`;
-export const validCreditsLength = (length: number, duration = Infinity) => Number.isFinite(length) && length >= 10 && length <= ESTIMATED_CREDITS_MAX && length <= duration * .3;
+// Measured lengths under 10 s are noise; the administrator may set any length from 1 s.
+export const validCreditsLength = (length: number, duration = Infinity, minimum = 10) => Number.isFinite(length) && length >= minimum && length <= ESTIMATED_CREDITS_MAX && length <= duration * .3;
 type EstimateRow = { episode_key?: string; season: number; episode?: number; duration_ms: number; start_sec: number | null; source?: string };
 export function seriesCreditsEstimate(rows: EstimateRow[], season: number, duration: number): CreditsMarker | null {
   if (!validDuration(duration)) return null;
   const estimate = (length: number): CreditsMarker => ({ start: Math.round((duration - length) * 1000) / 1000, duration, source: 'estimated' });
-  const series = rows.find(row => row.episode_key?.startsWith('length:') && row.source === 'admin' && validCreditsLength(row.start_sec ?? NaN, duration));
+  const series = rows.find(row => row.episode_key?.startsWith('length:') && row.source === 'admin' && validCreditsLength(row.start_sec ?? NaN, duration, 1));
   if (series) return estimate(series.start_sec!);
   // A manual time gives a length once that episode has been played: any other
   // row for it records the actual video duration.

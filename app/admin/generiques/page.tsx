@@ -246,9 +246,10 @@ export default function CreditsAdmin() {
   async function saveLength(item: Series, list: Season[]) {
     const id = `length:${item.id}`, keys = lengthKeys(item, list);
     const current = markers.find(record => keys.includes(record.episode_key) && record.source === 'admin');
-    const text = (drafts[id] ?? (current ? formatTime(current.start_sec!) : '')).trim();
+    // « 0.05 » is accepted as 0:05.
+    const text = (drafts[id] ?? (current ? formatTime(current.start_sec!) : '')).trim().replace('.', ':');
     const seconds = text ? parseCreditsTime(text) : null;
-    if (text && (seconds === null || !validCreditsLength(seconds))) { setError('Saisis la durée du générique entre 0:10 et 5:00, par exemple 0:45.'); return; }
+    if (text && (seconds === null || !validCreditsLength(seconds, Infinity, 1))) { setError('Saisis la durée du générique entre 0:01 et 5:00, par exemple 0:05 ou 1:00.'); return; }
     setSaving(id); setError(''); setMessage('');
     try {
       const { error } = text
