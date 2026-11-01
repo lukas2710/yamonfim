@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { getStore } from '@netlify/blobs';
 import { supabaseUrl, supabaseAnonKey } from './supabase';
+import { readCatalogueSnapshot } from './catalogue-snapshot';
 
 // Daily news for the administrator, from TMDB public data only: seasons and
 // episodes aired for series already on the site, and recent digital releases.
@@ -44,9 +45,11 @@ export async function buildCatalogueNews(apiKey: string): Promise<CatalogueNews>
     return null;
   };
   const db = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  // Reading the titles from Supabase is slow from Netlify: reuse the prepared catalogue.
+  const snapshot = (await readCatalogueSnapshot())?.rows as { id: string; title: string; type: string; tmdb_id: unknown }[] | undefined;
   const siteRows = async (type: 'series' | 'movie') => {
-    const all: { id: string; title: string; tmdb_id: unknown }[] = [];
-    for (let offset = 0; ; offset += 1000) {
+    const all: { id: string; title: string; tmdb_id: unknown }[] = snapshot?.filter(row => row.type === type) || [];
+    for (let offset = 0; !snapshot; offset += 1000) {
       const { data, error } = await db.from('media').select('id,title,tmdb_id').eq('type', type).order('id').range(offset, offset + 999);
       if (error) throw error;
       all.push(...data); if (data.length < 1000) break;
@@ -63,10 +66,10 @@ export async function buildCatalogueNews(apiKey: string): Promise<CatalogueNews>
   const aired = new Set([first, ...rest].flatMap(result => (result?.results || []).map((show: { id: number }) => show.id)).filter(id => siteSeries.has(id)));
 
   const ids = [...aired], series: SeriesNews[] = [];
-  for (let start = 0; start < ids.length; start += 40) {
-    const chunk = ids.slice(start, start + 40);
+  const chunks = Array.from({ length: Math.ceil(ids.length / 40) }, (_, index) => ids.slice(index * 40, index * 40 + 40));
+  await mapLimit(chunks, 4, async chunk => {
     const { data } = await db.from('media').select('id,tmdb_id,seasons').eq('type', 'series').in('tmdb_id', chunk.map(String));
-    const details = await mapLimit(chunk, 15, id => tmdb(`tv/${id}`));
+    const details = await mapLimit(chunk, 8, id => tmdb(`tv/${id}`));
     chunk.forEach((id, index) => {
       const site = siteSeries.get(id)!, row = data?.find(item => String(item.tmdb_id) === String(id));
       const detail = details[index], last = detail?.last_episode_to_air;
@@ -74,7 +77,7 @@ export async function buildCatalogueNews(apiKey: string): Promise<CatalogueNews>
       const entry = seriesNewsEntry((row?.seasons || []) as SiteSeason[], last, seasonStart, since);
       if (entry) series.push({ tmdb: id, mediaId: String(row?.id ?? site.id), title: site.title, poster: poster(detail?.poster_path), ...entry });
     });
-  }
+  });
 
   // Popular digital and physical releases of the last two weeks, worldwide.
   const releases = await mapLimit([1, 2, 3, 4, 5], 5, page => tmdb('discover/movie', { 'release_date.gte': day(MOVIE_DAYS), 'release_date.lte': today, with_release_type: '4|5', sort_by: 'popularity.desc', page: String(page) }));
