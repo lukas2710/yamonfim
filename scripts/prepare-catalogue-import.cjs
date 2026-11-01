@@ -34,6 +34,11 @@ for (const name of ['catalogue-films-moviez.html', 'catalogue-series-moviez.html
   html = html.slice(0, presenceStart) + presence + '\n' + html.slice(presenceEnd);
   if (!html.includes('id="downloadCatalogues"')) html = html.replace('</nav><div class="eyebrow">', '<a id="downloadCatalogues" class="link primary" href="catalogues-yamonfim.zip" download>Télécharger les catalogues ↓</a></nav><p class="note">Même catalogue sur tous tes PC · ajouts synchronisés depuis le site toutes les 15 secondes. Connecte-toi avec ton compte administrateur pour ajouter des titres.</p><div class="eyebrow">');
   html = html.replace('function rebuildDone(){done=new Set([...manualDone,...dbDone])}', 'function rebuildDone(){done=new Set(dbDone)}');
+  if (!html.includes('cataloguePageItems=list.slice(p*40,p*40+40);updateBulkControls();')) {
+    const pageItems = 'for(const x of list.slice(p*40,p*40+40)){';
+    if (!html.includes(pageItems)) throw Error('Rendu des titres paginés introuvable');
+    html = html.replace(pageItems, 'cataloguePageItems=list.slice(p*40,p*40+40);updateBulkControls();for(const x of cataloguePageItems){');
+  }
   if (!html.includes('data.filter(x=>!hideCatalogueItem(x,filter)')) html = html.replace('data.filter(x=>x.search.includes(term)', 'data.filter(x=>!hideCatalogueItem(x,filter)&&x.search.includes(term)');
   html = html.replace("$('#total').textContent=data.length.toLocaleString('fr')", "$('#total').textContent=(data.length-data.filter(x=>unavailableImports.has(String(x.source_id))).length).toLocaleString('fr')");
   html = html.replace("$('#remaining').textContent=(data.length-done.size).toLocaleString('fr')", "$('#remaining').textContent=(data.length-done.size-data.filter(x=>unavailableImports.has(String(x.source_id))).length).toLocaleString('fr')");

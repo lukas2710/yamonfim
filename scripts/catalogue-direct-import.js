@@ -68,6 +68,7 @@ const bulkControls = document.createElement('div');
 bulkControls.className = 'filters';
 const addPageButton = document.createElement('button');
 addPageButton.textContent = 'Ajouter toute cette page au site';
+addPageButton.disabled = true;
 const stopImportsButton = document.createElement('button');
 stopImportsButton.textContent = 'Arrêter les ajouts en attente';
 const resetUnavailableButton = document.createElement('button');
