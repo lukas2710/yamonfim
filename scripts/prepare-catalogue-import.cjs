@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
+const { injectNews } = require('./catalogue-news-block.cjs');
 const original = 'C:/Users/Admin/Documents/Codex/2026-10-22/je-x20/outputs';
 const output = path.resolve(__dirname, '../outputs/catalogue-direct');
 fs.mkdirSync(output, { recursive: true });
@@ -40,6 +41,7 @@ for (const name of ['catalogue-films-moviez.html', 'catalogue-series-moviez.html
   html = html.replace(/toutes les minutes/g, 'toutes les 15 secondes');
   html = html.replace('Garder une copie de ma progression', 'Anciennes annotations locales').replace('Exporte tes coches manuelles pour les conserver. Les coches automatiques sont récupérées depuis ton site à chaque connexion.', 'Les vrais ajouts au site sont synchronisés automatiquement entre tes PC. Cette sauvegarde conserve uniquement tes anciennes annotations locales.');
   html = html.replace(/Les (?:films|séries) sans identifiant TMDB ne peuvent pas être reconnus automatiquement\./g, 'Les anciens titres sont également reconnus grâce à leurs liens Moviez.').replace('Aucun ajout ni changement n’est envoyé à ta base.', 'Le bouton Ajouter au site est réservé au compte administrateur.');
+  html = injectNews(html, name.includes('films') ? 'movie' : 'tv');
   for (const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)) new vm.Script(match[1]);
   fs.writeFileSync(path.join(output, name), html);
   fs.writeFileSync(path.join(hosted, name), html);
