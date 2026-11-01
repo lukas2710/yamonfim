@@ -22,7 +22,7 @@ button.onclick=()=>{if(!catalogueStatusReady||importStates.get(id)?.busy)return;
 importQueue.push({id,type:'series',job:crypto.randomUUID(),update:true});importStates.set(id,{busy:true});bulkTotal++;updateBulkStatus();sendImport();render()};return button};
 fetch('/api/catalogue-news',{signal:AbortSignal.timeout(40000)}).then(r=>r.ok?r.json():Promise.reject()).then(n=>{
 if(kind==='movie'){const listed=new Set(data.map(x=>x.source_id));for(const m of n.movies)if(!m.mediaId&&listed.has(m.tmdb))yfNews.set(String(m.tmdb),{label:'🆕 Sorti le '+when(m.releaseDate)})}
-else for(const s of n.series)if(s.missingFrom!==null)yfNews.set(String(s.tmdb),{update:true,label:'🆕 '+(s.newSeason?'Nouvelle saison '+s.season:'Saison '+s.season+' : nouveaux épisodes dès le '+s.missingFrom)+' · diffusé le '+when(s.airDate),button:s.newSeason&&s.missingFrom===1?'Ajouter la saison '+s.season+' ＋':'Ajouter les nouveaux épisodes ＋'});
+else for(const s of n.series)if(s.missingFrom!==null)yfNews.set(String(s.tmdb),{update:true,label:'🆕 '+(s.newSeason?'Nouvelle saison '+s.season:'Saison '+s.season+' : nouveaux épisodes dès l’épisode '+s.missingFrom)+' · diffusé le '+when(s.airDate),button:s.newSeason&&s.missingFrom===1?'Ajouter la saison '+s.season+' ＋':'Ajouter les nouveaux épisodes ＋'});
 status.textContent=yfNews.size?yfNews.size+(kind==='movie'?' film(s) récent(s) de la liste à ajouter':' série(s) de ton site avec une nouvelle saison ou de nouveaux épisodes')+' · filtre « Nouveautés » · TMDB, mis à jour le '+new Date(n.at).toLocaleString('fr-FR',{dateStyle:'medium',timeStyle:'short'}):'Aucune nouveauté à ajouter cette semaine.';render()}).catch(()=>{status.textContent='Nouveautés momentanément indisponibles. Recharge la page dans une minute.'});})();</script>`;
 }
 
