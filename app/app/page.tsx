@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 };
 
 const APK = '/yamonfilm-tv.apk';
-const VERSION = '2.6.0';
+const VERSION = '2.6.1';
 
 const GUIDES = [
   {
