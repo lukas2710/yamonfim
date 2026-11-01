@@ -1,0 +1,29 @@
+.section{padding:56px 0 0;min-width:0;max-width:100%}
+.head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px 24px;margin:0 0 22px}
+.head h2{order:-1;flex:1 1 100%;margin:0;text-align:center;font-size:clamp(26px,3vw,36px);font-weight:850;letter-spacing:-.03em}
+.score{display:flex;align-items:center;gap:12px}
+.score>strong{font-size:44px;font-weight:900;line-height:1;letter-spacing:-.04em;background:linear-gradient(180deg,#fde68a,#f59e0b);-webkit-background-clip:text;background-clip:text;color:transparent}
+.score div{display:flex;flex-direction:column;gap:3px}
+.score span:last-child{font-size:13px;color:#a1a1aa}
+.all{font-size:14px;font-weight:700;color:#fbbf24;text-decoration:none}
+.all:hover{text-decoration:underline}
+.stars{display:inline-flex;gap:2px;font-size:17px;line-height:1}
+.on{color:#fbbf24;filter:drop-shadow(0 0 6px rgba(251,191,36,.5))}
+.off{color:#3f3f46}
+.viewport{position:relative;overflow-x:auto;contain:inline-size;padding:6px 0 14px;scrollbar-width:none;-webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
+.viewport::-webkit-scrollbar{display:none}
+.moving{overflow:hidden}
+.track{display:flex;gap:16px;width:max-content}
+.moving .track{animation:scroll var(--duration,40s) linear infinite}
+.moving:hover .track,.moving:focus-within .track{animation-play-state:paused}
+.card{display:flex;flex-direction:column;gap:12px;width:300px;flex:none;padding:20px;border-radius:22px;background:linear-gradient(160deg,rgba(255,255,255,.07),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.09);box-shadow:0 18px 40px -24px rgba(0,0,0,.9);transition:transform .25s,border-color .25s}
+.card:hover{transform:translateY(-4px);border-color:rgba(251,191,36,.4)}
+.card p{flex:1;margin:0;font-size:14px;line-height:1.6;color:#e4e4e7}
+.card footer{display:flex;align-items:center;gap:10px}
+.card footer>span:last-child{display:flex;flex-direction:column}
+.card strong{font-size:14px;color:#fff}
+.card small{font-size:11px;font-weight:600;color:#4ade80}
+.avatar{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;font-size:15px;font-weight:900;color:#fff;flex:none}
+@keyframes scroll{to{transform:translateX(calc(-50% - 8px))}}
+@media(max-width:640px){.head{justify-content:center}.card{width:260px}}
+@media(prefers-reduced-motion:reduce){.moving{overflow-x:auto}.moving .track{animation:none}}

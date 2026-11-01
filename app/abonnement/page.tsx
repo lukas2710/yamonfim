@@ -12,6 +12,7 @@ import { PLANS, RECOMMENDED_PLAN, formatEuro, perMonth, perWeek, savingPercent, 
 import styles from './subscription.module.css';
 import sales from './sales.module.css';
 import MemberReviews from './MemberReviews';
+import ReviewHighlights from './ReviewHighlights';
 import { MarketingConsentToggle } from '@/components/MarketingConsent';
 import EmbeddedPayment, { embeddedPaymentEnabled } from './EmbeddedPayment';
 
@@ -221,6 +222,7 @@ export default function AbonnementPage() {
               <ul className={sales.trust}><li><Icon name="shield" />Paiement sécurisé Stripe</li><li><Icon name="check" />Activé sur ton compte</li><li><Icon name="screen" />Téléphone, PC & TV</li></ul>
             </div>
           </section>
+          <ReviewHighlights userId={account?.id} />
           <section id="formules" className={sales.offers}>
             <div className={sales.heading}><h2>Choisis ton offre</h2><p>Mêmes avantages partout. Plus c’est long, moins c’est cher.</p></div>
             <div className={sales.plans}>
