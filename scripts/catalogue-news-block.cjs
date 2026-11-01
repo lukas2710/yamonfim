@@ -50,6 +50,7 @@ function injectNews(html, kind) {
     if (!html.includes('const yfNews=new Map();')) throw Error('Données du catalogue introuvables');
   }
   if (!html.includes('data.filter(x=>!hideCatalogueItem(x,filter)')) html = html.replace('data.filter(x=>x.search.includes(term)', 'data.filter(x=>!hideCatalogueItem(x,filter)&&x.search.includes(term)');
+  if (!html.includes('function hideCatalogueItem(')) throw Error('Filtrage des titres indisponibles introuvable : exécute prepare-catalogue-import.cjs avant d’ajouter les nouveautés');
   if (!html.includes('window.yfNews=yfNews')) html = html.replace('const yfNews=new Map();let done=', 'const yfNews=new Map();window.yfNews=yfNews;let done=');
   html = html.replace('</div></section><div class="results">', `</div>${START}<p id="yfNewsStatus" class="note" role="status">Chargement des nouveautés…</p>${END}</section><div class="results">`);
   const body = html.lastIndexOf('</body>');
