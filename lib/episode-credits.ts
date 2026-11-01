@@ -1,4 +1,4 @@
-export interface CreditsMarker { start: number; duration: number; referenceDuration?: number; source: 'TheIntroDB' | 'IntroDB' | 'SkipDB' | 'admin' }
+export interface CreditsMarker { start: number; duration: number; referenceDuration?: number; source: 'TheIntroDB' | 'IntroDB' | 'SkipDB' | 'admin' | 'estimated' }
 // Small muxing/padding differences occur even for the same episode release.
 export const CREDITS_DURATION_TOLERANCE = 10;
 const validDuration = (duration: number) => Number.isFinite(duration) && duration >= 300 && duration <= 28800;
@@ -34,6 +34,19 @@ export function communityCredits(payload: unknown, imdb: string, season: number,
   const marker = data.outro;
   if (typeof marker?.confidence !== 'number' || marker.confidence < .9 || !compatibleCredits(marker.start_sec, marker.end_sec, duration)) return null;
   return { start: marker.start_sec!, duration: marker.end_sec!, source: 'IntroDB' };
+}
+// Credits usually last as long across a series. With no timing for an episode,
+// apply the median length measured on its other episodes, same season first.
+export const ESTIMATED_CREDITS_MAX = 300;
+export function seriesCreditsEstimate(rows: { season: number; duration_ms: number; start_sec: number | null }[], season: number, duration: number): CreditsMarker | null {
+  if (!validDuration(duration)) return null;
+  const lengths = (list: typeof rows) => list.map(row => row.duration_ms / 1000 - (row.start_sec ?? NaN))
+    .filter(length => Number.isFinite(length) && length >= 10 && length <= ESTIMATED_CREDITS_MAX && length <= duration * .3).sort((a, b) => a - b);
+  const same = lengths(rows.filter(row => row.season === season));
+  const pool = same.length ? same : lengths(rows);
+  if (!pool.length) return null;
+  const length = pool[Math.floor(pool.length / 2)];
+  return { start: Math.round((duration - length) * 1000) / 1000, duration, source: 'estimated' };
 }
 export function reachedEpisodeCredits(currentTime: number, duration: number, marker: CreditsMarker | null) {
   return !!marker && compatibleCredits(marker.start, marker.duration, duration) && Number.isFinite(currentTime) && currentTime >= marker.start && currentTime <= duration;

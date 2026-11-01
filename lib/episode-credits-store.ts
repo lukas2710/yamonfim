@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { supabaseUrl, supabaseAnonKey } from './supabase';
-import { type CreditsMarker } from './episode-credits';
+import { seriesCreditsEstimate, type CreditsMarker } from './episode-credits';
 import { selectStoredCredits } from './stored-credits-selection';
 
 const database = () => createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -19,4 +19,10 @@ export async function storeCredits(key: string, season: number, episode: number,
     start_sec: marker?.start ?? null, source: marker?.source || 'missing', checked_at: new Date().toISOString(),
     expires_at: new Date(Date.now() + (marker ? 7 * 86400000 : retrySoon ? 60000 : 3600000)).toISOString() });
   return !error;
+}
+// Computed on each request from the series' timed episodes, never stored.
+export async function estimatedCredits(keys: string[], season: number, duration: number) {
+  const { data, error } = await database().from('episode_credits').select('season,duration_ms,start_sec').in('episode_key', keys)
+    .in('source', ['TheIntroDB', 'IntroDB']).not('start_sec', 'is', null).limit(1000);
+  return error ? null : seriesCreditsEstimate(data || [], season, duration);
 }

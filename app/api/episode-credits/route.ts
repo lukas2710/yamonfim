@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { fetchEpisodeCredits } from '@/lib/episode-credits-providers';
-import { storedCredits, storeCredits } from '@/lib/episode-credits-store';
+import { storedCredits, storeCredits, estimatedCredits } from '@/lib/episode-credits-store';
 import { playbackCreditsMarker } from '@/lib/episode-credits';
 
 // Public catalogue metadata only. No viewing history, account IDs or tokens are
@@ -15,11 +15,12 @@ export async function GET(request: Request) {
   }
   const keys = [...(media ? [`media:${media}`] : []), ...(tmdb ? [`tmdb:${tmdb}`] : [])];
   const stored = await storedCredits(keys, season, episode, duration);
-  if (stored.hit) return NextResponse.json({ marker: playbackCreditsMarker(stored.marker, duration), cached: true }, { headers: { 'Cache-Control': 'no-store' } });
+  if (stored.hit) return NextResponse.json({ marker: playbackCreditsMarker(stored.marker ?? await estimatedCredits(keys, season, duration), duration), cached: true }, { headers: { 'Cache-Control': 'no-store' } });
   const signal = AbortSignal.any([request.signal, AbortSignal.timeout(20000)]);
   const { marker, incomplete } = await fetchEpisodeCredits(tmdb, season, episode, { duration, signal, includeSkipDb: true });
   // Record every attempted lookup so the admin page no longer calls it unverified.
   // Transient service failures expire after a minute and are retried on next playback.
   const saved = await storeCredits(tmdb ? `tmdb:${tmdb}` : keys[0], season, episode, duration, marker, incomplete);
-  return NextResponse.json({ marker: playbackCreditsMarker(marker, duration), cached: false, saved, incomplete }, { headers: { 'Cache-Control': 'no-store' } });
+  // Nothing for this episode: fall back to the length of the series' other credits.
+  return NextResponse.json({ marker: playbackCreditsMarker(marker ?? await estimatedCredits(keys, season, duration), duration), cached: false, saved, incomplete }, { headers: { 'Cache-Control': 'no-store' } });
 }
