@@ -6,7 +6,10 @@ import { createSearchMatcher } from '@/lib/search';
 
 import SectionNavigation from '@/components/SectionNavigation';
 import PageHero from '@/components/PageHero';
-import React, { useEffect, useMemo, useState } from 'react';
+import HistoryEpisodesDialog from '@/components/HistoryEpisodesDialog';
+import { fetchProfileWatched } from '@/lib/profile-watched';
+import { continueWatchingEntries } from '@/lib/watch-progress';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
@@ -44,6 +47,8 @@ interface HistoryRow {
   season_number: number | null;
   episode_number: number | null;
   updated_at: string;
+  current_time?: number;
+  duration?: number;
 }
 
 const MOVIE_KEY = 'movie_main';
@@ -120,6 +125,10 @@ export default function HistoryPage() {
   const [query, setQuery] = useState('');
   const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
   const [activeSeasonIdx, setActiveSeasonIdx] = useState(0);
+  const [watchBusy, setWatchBusy] = useState(false);
+  const [watchError, setWatchError] = useState('');
+  const watchWrite = useRef(false);
+  const closeEpisodes = useCallback(() => setSelectedSeriesId(null), []);
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [tableMissing, setTableMissing] = useState(false);
@@ -154,7 +163,7 @@ export default function HistoryPage() {
 
         // Requêtes isolées par profile_id
         const [watchedRes, historyRes] = await Promise.all([
-          supabase.from('user_watched').select('media_id, ep_key, watched_at').eq('user_id', uid).eq('profile_id', profile.id),
+          fetchProfileWatched(supabase, uid, profile.id).then(data => ({ data, error: null }), error => ({ data: null, error })),
           supabase.from('watch_history').select('*').eq('user_id', uid).eq('profile_id', profile.id).order('updated_at', { ascending: false }),
         ]);
 
@@ -197,68 +206,30 @@ export default function HistoryPage() {
   /* ---------------- Actions (propres au profil) ---------------- */
 
   const toggleWatched = async (mediaId: string, key: string) => {
-    if (!userId || !activeProfile) return;
-    const isWatched = !!watched[mediaId]?.[key];
-
-    setWatched(prev => {
-      const next = { ...prev, [mediaId]: { ...(prev[mediaId] || {}) } };
-      if (isWatched) delete next[mediaId][key];
-      else next[mediaId][key] = new Date().toISOString();
-      return next;
-    });
-
-    if (isWatched) {
-      await supabase.from('user_watched').delete()
-        .eq('user_id', userId).eq('profile_id', activeProfile.id).eq('media_id', mediaId).eq('ep_key', key);
-    } else {
-      await supabase.from('user_watched').upsert(
-        { user_id: userId, profile_id: activeProfile.id, media_id: mediaId, ep_key: key, watched_at: new Date().toISOString() },
-        { onConflict: 'user_id,profile_id,media_id,ep_key' }
-      );
-    }
+    await setManyWatched(mediaId, [key], !watched[mediaId]?.[key]);
   };
-
   const markSeasonWatched = async (mediaId: string, seasonIdx: number, value: boolean) => {
-    if (!userId || !activeProfile) return;
     const season = mediaById[mediaId]?.seasons?.[seasonIdx];
-    if (!season) return;
-    const keys = season.episodes.map((_, eIdx) => `s${seasonIdx}_e${eIdx}`);
-    const now = new Date().toISOString();
-
-    setWatched(prev => {
-      const next = { ...prev, [mediaId]: { ...(prev[mediaId] || {}) } };
-      keys.forEach(k => { if (value) next[mediaId][k] = now; else delete next[mediaId][k]; });
-      return next;
-    });
-
-    if (value) {
-      await supabase.from('user_watched').upsert(
-        keys.map(k => ({ user_id: userId, profile_id: activeProfile.id, media_id: mediaId, ep_key: k, watched_at: now })),
-        { onConflict: 'user_id,profile_id,media_id,ep_key' }
-      );
-    } else {
-      await supabase.from('user_watched').delete()
-        .eq('user_id', userId).eq('profile_id', activeProfile.id).eq('media_id', mediaId).in('ep_key', keys);
-    }
+    if (season) await setManyWatched(mediaId, season.episodes.map((_, index) => `s${seasonIdx}_e${index}`), value);
   };
-
-  const setManyWatched = async (mediaId: string, keys: string[], value: boolean) => {
-    if (!userId || !activeProfile || keys.length === 0) return;
+  const setManyWatched = async (mediaId: string, keys: string[], value: boolean): Promise<boolean> => {
+    if (!userId || !activeProfile || !keys.length || watchWrite.current) return false;
+    watchWrite.current = true; setWatchBusy(true); setWatchError('');
     const now = new Date().toISOString();
-    setWatched(prev => {
-      const next = { ...prev, [mediaId]: { ...(prev[mediaId] || {}) } };
-      keys.forEach(k => { if (value) next[mediaId][k] = now; else delete next[mediaId][k]; });
-      return next;
-    });
-    if (value) {
-      await supabase.from('user_watched').upsert(
-        keys.map(k => ({ user_id: userId, profile_id: activeProfile.id, media_id: mediaId, ep_key: k, watched_at: now })),
-        { onConflict: 'user_id,profile_id,media_id,ep_key' }
-      );
-    } else {
-      await supabase.from('user_watched').delete()
-        .eq('user_id', userId).eq('profile_id', activeProfile.id).eq('media_id', mediaId).in('ep_key', keys);
-    }
+    try {
+      const result = value
+        ? await supabase.from('user_watched').upsert(keys.map(key => ({ user_id: userId, profile_id: activeProfile.id, media_id: mediaId, ep_key: key, watched_at: now })), { onConflict: 'user_id,profile_id,media_id,ep_key' })
+        : await supabase.from('user_watched').delete().eq('user_id', userId).eq('profile_id', activeProfile.id).eq('media_id', mediaId).in('ep_key', keys);
+      if (result.error) throw result.error;
+      setWatched(previous => {
+        const next = { ...previous, [mediaId]: { ...(previous[mediaId] || {}) } };
+        for (const key of keys) { if (value) next[mediaId][key] = now; else delete next[mediaId][key]; }
+        return next;
+      });
+      return true;
+    } catch {
+      setWatchError('Les épisodes n’ont pas été enregistrés. Réessaie.'); return false;
+    } finally { watchWrite.current = false; setWatchBusy(false); }
   };
 
   const episodeKeys = (mediaId: string, upTo?: { s: number; e: number }) => {
@@ -273,13 +244,11 @@ export default function HistoryPage() {
   };
 
   const markUpTo = async (mediaId: string, s: number, e: number) => {
-    await setManyWatched(mediaId, episodeKeys(mediaId, { s, e }), true);
-    setToast(`Épisodes marqués comme vus jusqu'à S${mediaById[mediaId]?.seasons?.[s]?.seasonNumber ?? s + 1} · É${e + 1}`);
+    if (await setManyWatched(mediaId, episodeKeys(mediaId, { s, e }), true)) setToast(`Épisodes marqués comme vus jusqu'à S${mediaById[mediaId]?.seasons?.[s]?.seasonNumber ?? s + 1} · É${e + 1}`);
   };
 
   const markWholeSeries = async (mediaId: string, value: boolean) => {
-    await setManyWatched(mediaId, episodeKeys(mediaId), value);
-    setToast(value ? 'Série marquée comme vue' : 'Tous les épisodes décochés');
+    if (await setManyWatched(mediaId, episodeKeys(mediaId), value)) setToast(value ? 'Série marquée comme vue' : 'Tous les épisodes décochés');
   };
 
   const clearAll = async () => {
@@ -356,9 +325,10 @@ export default function HistoryPage() {
     return { minutes, movies, episodes };
   }, [watched, mediaById]);
 
-  const continueList = useMemo(() => entries
-    .filter(e => e.history && (e.media.type === 'movie' || e.seen < e.total))
-    .slice(0, 10), [entries]);
+  const continueList = useMemo(() => {
+    const resumable = new Set(continueWatchingEntries(history.map(row => ({ ...row, type: mediaById[row.media_id]?.type })), id => !!mediaById[id], row => !!watched[String(row.media_id)]?.[row.type === 'series' ? `s${row.season_idx ?? 0}_e${row.episode_idx ?? 0}` : MOVIE_KEY]).map(row => row.id));
+    return entries.filter(entry => resumable.has(entry.id)).slice(0, 10);
+  }, [entries, history, mediaById, watched]);
 
   const visible = useMemo(() => {
   const matchesQuery = createSearchMatcher(query);
@@ -629,6 +599,7 @@ export default function HistoryPage() {
           </>
         )}
       </div>
+      {selected && <HistoryEpisodesDialog title={selected.title} seasons={selected.seasons || []} watched={watched[String(selected.id)] || {}} seasonIndex={activeSeasonIdx} busy={watchBusy} error={watchError} onSeason={setActiveSeasonIdx} onClose={closeEpisodes} onToggle={key => void toggleWatched(String(selected.id), key)} onMarkSeason={(season, value) => void markSeasonWatched(String(selected.id), season, value)} onMarkSeries={value => void markWholeSeries(String(selected.id), value)} onMarkThrough={(season, episode) => void markUpTo(String(selected.id), season, episode)} />}
     </main>
   );
 }

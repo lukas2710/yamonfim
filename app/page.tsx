@@ -4,7 +4,8 @@ import { canWatch, releaseYear } from '@/lib/profile-audience';
 import { getPersistentSession } from '@/lib/auth-session';
 
 import React, { createContext, useContext, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { completedTitles, fetchSeriesEpisodeKeys, type SeenRow, type CompletionProgress } from '@/lib/completed-titles';
+import { completedTitles, inProgressTitles, fetchSeriesEpisodeKeys, type SeenRow, type CompletionProgress } from '@/lib/completed-titles';
+import { fetchProfileWatched } from '@/lib/profile-watched';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { prepareWatchMedia } from '@/lib/client-media';
@@ -127,10 +128,12 @@ function cardImage(source: string | null | undefined, width = 'w342') {
 }
 
 const CompletionContext = createContext<ReadonlySet<string>>(new Set());
+const InProgressContext = createContext<ReadonlySet<string>>(new Set());
 function PosterCard({
   item, locked, onOpen, onPrepare, className = '', badge,
 }: { item: MediaItem; locked: boolean; onOpen: () => void; onPrepare?: () => void; className?: string; badge?: string }) {
   const completed = useContext(CompletionContext).has(String(item.id));
+  const inProgress = useContext(InProgressContext).has(String(item.id));
   return (
     <div
       {...activateProps(onOpen)}
@@ -167,6 +170,7 @@ function PosterCard({
 
       {badge && <span className="absolute left-1.5 top-1.5 z-[3] max-w-[calc(100%-0.75rem)] truncate whitespace-nowrap rounded-md bg-red-600 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-white shadow-lg shadow-black/40 sm:left-2 sm:top-2 sm:px-2 sm:py-1 sm:text-[10px]">{badge}</span>}
       {completed && <span className="absolute right-1.5 top-1.5 z-[4] rounded-md bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white shadow-lg" aria-label="Titre vu entièrement">✓ Vu</span>}
+      {!completed && inProgress && <span className="absolute bottom-1.5 right-1.5 z-[4] rounded-md bg-blue-700 px-2 py-1 text-[10px] font-bold text-white shadow-lg">Lecture en cours</span>}
       {locked && <LockedPosterOverlay />}
     </div>
   );
@@ -221,13 +225,14 @@ export default function Home() {
   const [recommendationHistory, setRecommendationHistory] = useState<RecommendationHistory[]>([]);
   const [completionData, setCompletionData] = useState<{ seen: SeenRow[]; history: CompletionProgress[] }>({ seen: [], history: [] });
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
+  const inProgressIds = useMemo(() => inProgressTitles(completionData.seen, completionData.history, completedIds), [completionData, completedIds]);
   useEffect(() => {
     const controller = new AbortController();
     const seenIds = new Set(completionData.seen.map(row => String(row.media_id)));
     const series = mediaList.filter(item => item.type === 'series' && seenIds.has(String(item.id))).map(item => String(item.id));
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Completion data is independent of the main catalogue's loading state.
     setCompletedIds(completedTitles(mediaList, completionData.seen, completionData.history, {}));
-    if (series.length) void fetchSeriesEpisodeKeys(series, controller.signal).then(keys => { if (!controller.signal.aborted) setCompletedIds(completedTitles(mediaList, completionData.seen, completionData.history, keys)); }).catch(() => {});
+    if (series.length) void fetchSeriesEpisodeKeys(series, controller.signal, keys => { if (!controller.signal.aborted) setCompletedIds(completedTitles(mediaList, completionData.seen, completionData.history, keys)); }).catch(() => {});
     return () => controller.abort();
   }, [mediaList, completionData]);
   const [rankings, setRankings] = useState<HomeRankings | null>(rankingBootstrap);
@@ -327,10 +332,8 @@ export default function Home() {
         const catalogueTask = fetchPublicCatalogueCards<MediaItem>(supabase, rows => {
           setMediaList(rows.filter(item => canWatch(item, currentProfile.profile_mode || 'standard'))); firstPageReady = true; reveal();
         }).finally(() => setCatalogueLoading(false));
-        let watchedQuery = supabase.from('user_watched').select('media_id,ep_key,watched_at').eq('user_id', user.id);
-        if (currentProfile?.id) watchedQuery = watchedQuery.eq('profile_id', currentProfile.id);
-        const watchedTask = watchedQuery.order('watched_at', { ascending: false });
-        let progressQuery = supabase.from('watch_history').select('media_id,type,current_time,duration,season_number,episode_number,updated_at').eq('user_id', user.id);
+        const watchedTask = fetchProfileWatched(supabase, user.id, currentProfile.id).then(data => ({ data }), () => ({ data: [] }));
+        let progressQuery = supabase.from('watch_history').select('media_id,type,current_time,duration,season_idx,episode_idx,season_number,episode_number,updated_at').eq('user_id', user.id);
         if (currentProfile?.id) progressQuery = progressQuery.eq('profile_id', currentProfile.id);
         const progressTask = progressQuery.order('updated_at', { ascending: false }).then(result => result, () => ({ data: null }));
         const bannerTask = readClientResource('home:banners', async () => {
@@ -369,14 +372,15 @@ export default function Home() {
           // « Reprendre » suit l'historique de lecture (dernier titre regardé en premier) :
           // films en cours jusqu'à leur générique, séries sur l'épisode en cours ou le suivant.
           const resume = new Map<string, MediaItem>();
-          for (const entry of continueWatchingEntries(progressRes.data || [], id => byId.has(id))) {
+          const seenKeys = new Set((watchedRes.data || []).map(row => `${row.media_id}/${row.ep_key}`));
+          for (const entry of continueWatchingEntries(progressRes.data || [], id => byId.has(id), row => seenKeys.has(`${row.media_id}/${row.type === 'series' ? `s${row.season_idx ?? Math.max(0, (row.season_number || 1) - 1)}_e${row.episode_idx ?? Math.max(0, (row.episode_number || 1) - 1)}` : 'movie_main'}`))) {
             resume.set(entry.id, { ...byId.get(entry.id)!, progress: { seasonIdx: 0, episodeIdx: 0, seasonNumber: entry.seasonNumber, episodeNumber: entry.episodeNumber, fromHistory: true, ratio: entry.ratio, finished: entry.finished } });
           }
           // Older series watched before the viewing history existed keep their last episode.
           const historyIds = new Set((progressRes.data || []).map(row => String(row.media_id)));
           for (const watched of watchedRes.data || []) {
             const id = String(watched.media_id), item = byId.get(id);
-            if (!item || resume.has(id) || historyIds.has(id) || item.type === 'movie') continue;
+            if (!item || resume.has(id) || historyIds.has(id) || item.type === 'movie' || /^s\d+_e\d+$/.test(watched.ep_key)) continue;
             const match = /^s(\d+)_e(\d+)$/.exec(watched.ep_key || '');
             const seasonIdx = match ? Number(match[1]) : 0, episodeIdx = match ? Number(match[2]) : 0;
             resume.set(id, { ...item, progress: { seasonIdx, episodeIdx, seasonNumber: seasonIdx + 1, episodeNumber: episodeIdx + 1 } });
@@ -607,7 +611,7 @@ export default function Home() {
   const releaseYears = [...new Set(mediaList.filter(item => inCategory(item, selectedType)).map(releaseYear).filter((year): year is number => year !== null))].sort((a, b) => b - a);
 
   return (
-    <CompletionContext.Provider value={completedIds}><main className="yf-page yf-home min-h-screen max-w-[100vw] overflow-x-hidden bg-[#0a0a0b] pb-28 font-sans text-white antialiased selection:bg-red-600 selection:text-white sm:pb-16">
+    <CompletionContext.Provider value={completedIds}><InProgressContext.Provider value={inProgressIds}><main className="yf-page yf-home min-h-screen max-w-[100vw] overflow-x-hidden bg-[#0a0a0b] pb-28 font-sans text-white antialiased selection:bg-red-600 selection:text-white sm:pb-16">
 
       {showVipModal && <QuotaUnlockModal onClose={() => setShowVipModal(false)} />}
 
@@ -1202,6 +1206,6 @@ export default function Home() {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-    </main></CompletionContext.Provider>
+    </main></InProgressContext.Provider></CompletionContext.Provider>
   );
 }

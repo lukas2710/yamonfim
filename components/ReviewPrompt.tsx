@@ -87,6 +87,7 @@ export default function ReviewPrompt(_props: { eligible?: boolean } = {}) {
       if (publishing) {
         const { error: reviewError } = await supabase.from('site_reviews').upsert({ user_id: user.id, display_name: name.trim().slice(0, 50), rating, comment: comment.slice(0, 1000) }, { onConflict: 'user_id' });
         if (reviewError) throw reviewError;
+        window.dispatchEvent(new Event('yf-vip-reviews-updated'));
       }
       setThanks(true);
       window.setTimeout(() => close(AFTER_REVIEW), 2600);

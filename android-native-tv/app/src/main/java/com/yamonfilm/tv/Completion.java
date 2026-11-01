@@ -14,8 +14,8 @@ public final class Completion {
             boolean interrupted = viewing != null && viewing.duration > 0 && !finished;
             long latest = 0; if (keys != null) for (long time : keys.values()) latest = Math.max(latest, time);
             boolean manual = latest > 0 && latest > (viewing == null ? 0 : viewing.updated);
-            if ("movie".equals(item.type())) { if (finished || keys != null && keys.containsKey("movie_main") && (!interrupted || manual)) result.add(item.id()); }
-            else { List<String> episodes = required.get(item.id()); if (episodes != null && !episodes.isEmpty() && keys != null && keys.keySet().containsAll(episodes) && (!interrupted || manual)) result.add(item.id()); }
+            if ("movie".equals(item.type())) { if (keys != null && keys.containsKey("movie_main")) result.add(item.id()); }
+            else { List<String> episodes = required.get(item.id()); if (episodes != null && !episodes.isEmpty() && keys != null && keys.keySet().containsAll(episodes)) result.add(item.id()); }
         }
         return result;
     }

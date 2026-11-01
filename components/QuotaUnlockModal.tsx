@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { fetchSubscriptionProfile } from '@/lib/subscription';
 import { readClientResource } from '@/lib/resource-cache';
-import { PLANS, formatEuro, perWeek, nextSundayReset } from '@/app/abonnement/plans';
+import { PLANS, formatEuro, perWeek } from '@/app/abonnement/plans';
+import QuotaWaitNotice from './QuotaWaitNotice';
 import styles from './QuotaUnlock.module.css';
 
 const FREE_LIMIT = 5;
@@ -35,37 +35,9 @@ export function QuotaBanner() {
   </div>;
 }
 
-function useResetCountdown() {
-  const [resetAt, setResetAt] = useState<number | null>(null);
-  const [now, setNow] = useState<number | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const time = Date.now();
-      let target = nextSundayReset(time);
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          const { data, resetVerified } = await fetchSubscriptionProfile(session.user.id);
-          const stored = data?.watch_reset_at ? Date.parse(data.watch_reset_at) : NaN;
-          if (resetVerified && Number.isFinite(stored)) target = stored;
-        }
-      } catch { /* The scheduled Sunday reset remains a useful estimate. */ }
-      if (!cancelled) { setResetAt(target); setNow(Date.now()); }
-    })();
-    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, []);
-  if (resetAt === null || now === null) return null;
-  const seconds = Math.max(0, Math.floor((resetAt - now) / 1000));
-  const d = Math.floor(seconds / 86400), h = Math.floor(seconds / 3600) % 24, m = Math.floor(seconds / 60) % 60;
-  return d ? `${d} j ${h} h` : h ? `${h} h ${m} min` : `${m} min`;
-}
-
 export default function QuotaUnlockModal({ onClose }: { onClose: () => void }) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const [posters, setPosters] = useState<string[]>([]);
-  const wait = useResetCountdown();
   useEffect(() => {
     let active = true;
     readClientResource<{ poster?: string }[]>('quota:posters', async () => { const { data } = await supabase.from('media').select('poster').not('poster', 'is', null).limit(12); return data ?? []; }, 10 * 60_000)
@@ -101,11 +73,11 @@ export default function QuotaUnlockModal({ onClose }: { onClose: () => void }) {
         <h2 id="quota-unlock-title" className={styles.title}>Ne t’arrête pas maintenant.</h2>
         <p id="quota-unlock-text" className={styles.text}>Tu as utilisé tes <strong>{FREE_LIMIT} visions gratuites</strong> de la semaine. Passe VIP et continue tout de suite, sans attendre.</p>
         <div className={styles.meter} aria-hidden="true">{Array.from({ length: FREE_LIMIT }, (_, i) => <span key={i} />)}</div>
+        <QuotaWaitNotice />
         <ul className={styles.perks}>{['Films et épisodes en illimité', 'Accès immédiat, plus d’attente le dimanche', 'Téléphone, ordinateur et TV'].map(text => <li key={text}><Check />{text}</li>)}</ul>
         <Link href="/abonnement#formules" className={styles.cta}><Crown />Débloquer maintenant</Link>
         <p className={styles.price}>Dès <strong>{formatEuro(cheapestWeek)} par semaine</strong> · paiement sécurisé Stripe</p>
         <button onClick={onClose} className={styles.later}>Plus tard</button>
-        {wait && <p className={styles.wait}>Sans VIP, tes visions gratuites reviennent dans {wait}.</p>}
       </div>
     </section>
   </div>;

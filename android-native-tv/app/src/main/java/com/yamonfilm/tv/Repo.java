@@ -40,9 +40,13 @@ public final class Repo {
     private final Context appContext;
     private volatile Discovery.Rankings rankings = Discovery.Rankings.empty();
     private volatile Set<String> completed = Collections.emptySet();
+    private volatile Map<String, Set<String>> homeSeen = Collections.emptyMap();
+    private volatile Set<String> progressing = Collections.emptySet();
     private volatile String completedProfile;
     public boolean completed(String id) { return java.util.Objects.equals(profileId(), completedProfile) && completed.contains(id); }
-    public int completedRevision() { return completed.hashCode(); }
+    public int completedRevision() { return 31 * (31 * completed.hashCode() + homeSeen.hashCode()) + progressing.hashCode(); }
+    public boolean progressing(String id) { return java.util.Objects.equals(profileId(), completedProfile) && progressing.contains(id); }
+    public boolean seenPosition(String id, boolean series, int season, int episode) { Set<String> keys = java.util.Objects.equals(profileId(), completedProfile) ? homeSeen.get(id) : null; return keys != null && keys.contains(series ? Logic.epKey(season, episode) : "movie_main"); }
     private volatile List<Media> catalogue = Collections.emptyList();
     private volatile Map<String, Media> byId = Collections.emptyMap();
     private volatile Profile profile;
@@ -66,7 +70,7 @@ public final class Repo {
     public String profileId() { Profile p = profile; return p == null ? null : p.id; }
 
     public void setProfile(Profile p) {
-        completed = Collections.emptySet(); completedProfile = null;
+        completed = Collections.emptySet(); completedProfile = null; homeSeen = Collections.emptyMap(); progressing = Collections.emptySet();
         profile = p;
         if (p == null) prefs.edit().remove("profile").apply();
         else prefs.edit().putString("profile", p.toJson().toString()).apply();
@@ -383,7 +387,17 @@ public final class Repo {
         List<Discovery.Viewing> out = new ArrayList<>(); Set<String> recorded = new HashSet<>();
         for (History h : history) { recorded.add(h.mediaId); out.add(new Discovery.Viewing(h.mediaId, h.currentTime, h.duration, Logic.parseTime(h.updatedAt))); }
         if (profileId == null) return out;
-        JSONArray rows = api.select("user_watched", new Q().select("media_id,ep_key,watched_at").eq("user_id", requireUser()).eq("profile_id", profileId).order("watched_at.desc").limit(1000));
+        JSONArray rows = new JSONArray();
+        String userId = requireUser(); int rowOffset = 0, total = Integer.MAX_VALUE;
+        while (rowOffset < total) {
+            Q query = new Q().select("media_id,ep_key,watched_at").eq("user_id", userId).eq("profile_id", profileId).order("watched_at.desc,media_id.asc,ep_key.asc").offset(rowOffset).limit(1000);
+            Api.Result first = rowOffset == 0 ? api.selectCounted("user_watched", query) : null;
+            JSONArray page = first == null ? api.select("user_watched", query) : Api.parseArray(first.body);
+            if (first != null && first.total() >= 0) total = first.total();
+            if (page.length() == 0) { if (total != Integer.MAX_VALUE && rowOffset < total) throw new IOException("Liste des épisodes vus incomplète"); break; }
+            rowOffset += page.length(); for (int i = 0; i < page.length(); i++) rows.put(page.optJSONObject(i));
+            if (total == Integer.MAX_VALUE && page.length() < 1000) break;
+        }
         Map<String, Map<String, Long>> seen = new HashMap<>();
         for (int i = 0; i < rows.length(); i++) {
             JSONObject row = rows.optJSONObject(i); if (row == null) continue;
@@ -402,7 +416,13 @@ public final class Repo {
             if (metadata != null) { java.util.Iterator<String> ids = metadata.keys(); while (ids.hasNext()) { String id = ids.next(); required.put(id, rankingIds(metadata.optJSONArray(id))); } }
         } catch (IOException ignored) { }
         List<Discovery.Viewing> actual = new ArrayList<>(); for (History h : history) actual.add(new Discovery.Viewing(h.mediaId, h.currentTime, h.duration, Logic.parseTime(h.updatedAt)));
-        if (java.util.Objects.equals(profileId, profileId())) { completed = Collections.unmodifiableSet(Completion.titles(titles, seen, actual, required)); completedProfile = profileId; }
+        if (java.util.Objects.equals(profileId, profileId())) {
+            completed = Collections.unmodifiableSet(Completion.titles(titles, seen, actual, required));
+            Map<String, Set<String>> flags = new HashMap<>(); for (Map.Entry<String, Map<String, Long>> entry : seen.entrySet()) flags.put(entry.getKey(), new HashSet<>(entry.getValue().keySet()));
+            homeSeen = flags; Set<String> started = new HashSet<>(seen.keySet());
+            for (History h : history) if (h.currentTime > 0) started.add(h.mediaId);
+            started.removeAll(completed); progressing = started; completedProfile = profileId;
+        }
         return out;
     }
 

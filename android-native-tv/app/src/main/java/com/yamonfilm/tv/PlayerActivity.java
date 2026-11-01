@@ -991,7 +991,7 @@ public final class PlayerActivity extends Activity implements App.Alive {
 
     private void goNext() {
         if (live || media == null) return;
-        markSeen();
+        if (ended || Logic.shouldMarkSeen(safePosition(), safeDuration(), ps.unlimited)) markSeen();
         step(1);
     }
 
@@ -1025,20 +1025,13 @@ public final class PlayerActivity extends Activity implements App.Alive {
         if (src.isEmpty()) { toast("Aucun lecteur disponible pour cet épisode."); return; }
         switching = true;
         persist();
-        if (ps.unlimited) { switching = false; startEpisode(s, e, src); return; }
         showLoading("Vérification de ton accès…");
-        final boolean nativeSource = Logic.isNativePlayback(src);
-        App.io(this, () -> {
-            if (nativeSource) {
-                Models.Subscription sub = App.repo().accessBeforePlay();
-                return sub == null ? new Logic.WatchAccess(true, true, -1) : new Logic.WatchAccess(sub.count < Logic.FREE_WATCH_LIMIT, false, Logic.FREE_WATCH_LIMIT - sub.count);
-            }
-            return App.repo().reserveViewing();
-        }, (access, error) -> {
+        App.io(this, () -> App.repo().reserveViewing(), (access, error) -> {
             switching = false;
             if (error != null) { hideLoading(); toast(App.message(error)); return; }
             if (!access.allowed) { hideLoading(); showQuotaReached(); return; }
-            chargePending = nativeSource && !access.vip;
+            chargePending = false;
+            ps.unlimited = access.vip;
             startEpisode(s, e, src);
         });
     }
@@ -1097,7 +1090,6 @@ public final class PlayerActivity extends Activity implements App.Alive {
         if (!resumed) return;
         if (mode == MODE_WEB) {
             long played = playedMs + (playingSince >= 0 ? SystemClock.elapsedRealtime() - playingSince : 0);
-            if (!live && played >= Logic.SEEN_DELAY_MS) markSeen();
             return;
         }
         boolean playing = isPlaying();
@@ -1117,7 +1109,7 @@ public final class PlayerActivity extends Activity implements App.Alive {
         // Image figée plus de 30 s pendant la lecture : on passe à une autre source.
         if (playing && stallSince > 0 && SystemClock.elapsedRealtime() - stallSince > 30000 && mode == MODE_NATIVE) { stallSince = -1; failover(posMs, "Flux bloqué."); return; }
 
-        if (Logic.isCompleted(pos, dur)) markSeen();
+        if (Logic.shouldMarkSeen(pos, dur, ps.unlimited)) markSeen();
         if (lastSavedPosition < 0 || Math.abs(pos - lastSavedPosition) >= 10) persist();
 
         if (!media.hasEpisodes()) return;
@@ -1429,7 +1421,7 @@ public final class PlayerActivity extends Activity implements App.Alive {
         if (!live && media != null && prepared && mode != MODE_WEB) {
             double pos = safePosition() / 1000.0, dur = safeDuration() / 1000.0;
             // Un épisode quitté dans ses deux dernières minutes compte comme vu (site : episodeFinished).
-            if (media.hasEpisodes() && Logic.episodeFinished(pos, dur)) markSeen();
+            if (Logic.shouldMarkSeen(pos, dur, ps.unlimited)) markSeen();
         }
         persist();
         super.finish();

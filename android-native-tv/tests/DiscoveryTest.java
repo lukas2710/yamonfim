@@ -57,14 +57,16 @@ public final class DiscoveryTest {
         check(Discovery.bestRated(rated, Discovery.Rankings.empty()).isEmpty(), "no invented ratings during a provider outage");
         check(Discovery.build(Arrays.asList(movie("u", "Comédie"), movie("v", "comedie")), Arrays.asList(watched("u")), Discovery.Rankings.empty(), false, NOW).recommended.size() == 1, "genre accents normalized like the site");
         Map<String, Map<String, Long>> seen = new HashMap<>();
-        Map<String, Long> marks = new HashMap<>(); marks.put("movie_main", NOW - 1000); seen.put("a", marks);
         check(!Completion.titles(catalogue, seen, Arrays.asList(new Discovery.Viewing("a", 5, 100, NOW)), Collections.emptyMap()).contains("a"), "brief movie playback gets no complete badge");
+        Map<String, Long> marks = new HashMap<>(); marks.put("movie_main", NOW - 1000); seen.put("a", marks);
+        check(Completion.titles(catalogue, seen, Arrays.asList(new Discovery.Viewing("a", 5, 100, NOW)), Collections.emptyMap()).contains("a"), "explicit movie seen flag gets green badge");
         check(Completion.titles(catalogue, seen, Arrays.asList(new Discovery.Viewing("a", 95, 100, NOW)), Collections.emptyMap()).contains("a"), "finished movie gets green badge");
         Map<String, List<String>> required = new HashMap<>(); required.put("tv", Arrays.asList("s0_e0", "s0_e1"));
         Map<String, Long> episodes = new HashMap<>(); episodes.put("s0_e0", NOW); seen.put("tv", episodes);
         check(!Completion.titles(rated, seen, Collections.emptyList(), required).contains("tv"), "partial series gets no complete badge");
         episodes.put("s0_e1", NOW);
         check(Completion.titles(rated, seen, Collections.emptyList(), required).contains("tv"), "all episodes give green series badge");
+        check(Completion.titles(rated, seen, Arrays.asList(new Discovery.Viewing("tv", 5, 100, NOW + 1000)), required).contains("tv"), "saved resume cannot hide a series with every episode seen");
         check(Completion.titles(rated, Collections.emptyMap(), Collections.emptyList(), required).isEmpty(), "complete badges stay profile scoped");
         System.out.println(passed + " vérifications découverte TV réussies.");
     }

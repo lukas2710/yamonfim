@@ -34,7 +34,7 @@ public final class Actions {
     public static final class PlayerSession {
         public Media media; public int season, episode; public long resumeAt; public String url;
         public boolean live; public List<Models.Channel> channels; public int channel; public boolean unlimited;
-        /** Vision gratuite à compter quand la vidéo démarre vraiment. */
+        /** Reserved at the Watch button; never charged again on the first frame. */
         public boolean free;
     }
     public static PlayerSession session;
@@ -49,23 +49,15 @@ public final class Actions {
         Models.Episode ep = media.episode(s, e);
         String label = media.hasEpisodes() && ep != null ? "Préparation de l'épisode " + ep.number + "…" : "Préparation de la lecture…";
         final int token = main.showLoading(label);
-        // Comme sur le site : les sources lues par le lecteur natif ne comptent la vision
-        // qu'une fois l'image lancée ; les autres lecteurs la comptent au lancement.
-        final boolean nativeSource = Logic.isNativePlayback(media.rawSource(s, e));
-        App.io(null, () -> {
-            if (!nativeSource) return App.repo().reserveViewing();
-            Models.Subscription sub = App.repo().accessBeforePlay();
-            if (sub == null) return new Logic.WatchAccess(true, true, -1);
-            return new Logic.WatchAccess(sub.count < Logic.FREE_WATCH_LIMIT, false, Logic.FREE_WATCH_LIMIT - sub.count);
-        }, (access, error) -> {
+        App.io(null, () -> App.repo().reserveViewing(), (access, error) -> {
             if (!main.hideLoading(token)) return; // annulé avec Retour
             if (error != null) { main.fail(error); return; }
             if (!access.allowed) { Dialogs.vip(main); return; }
-            if (!nativeSource && !access.vip) main.toast(access.remaining > 0 ? "Vision gratuite utilisée · il t'en reste " + access.remaining + " sur " + Logic.FREE_WATCH_LIMIT + " cette semaine." : "C'était ta dernière vision gratuite de la semaine.");
+            if (!access.vip) main.toast(access.remaining > 0 ? "Vision gratuite utilisée · il t'en reste " + access.remaining + " sur " + Logic.FREE_WATCH_LIMIT + " cette semaine." : "C'était ta dernière vision gratuite de la semaine.");
             App.repo().enqueue(() -> App.repo().saveHistory(media, s, e, resumeAt, 0));
             PlayerSession ps = new PlayerSession();
             ps.media = media; ps.season = s; ps.episode = e; ps.resumeAt = resumeAt; ps.url = url; ps.unlimited = access.vip;
-            ps.free = nativeSource && !access.vip;
+            ps.free = false;
             session = ps;
             main.launchPlayer(new Intent(main, PlayerActivity.class));
         });

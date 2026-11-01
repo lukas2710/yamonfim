@@ -8,16 +8,15 @@ import { loadWatchMedia } from '@/lib/client-media';
 import { withTimeout } from '@/lib/with-timeout';
 import WatchPlayer, { type WatchPlayerControl } from '@/components/WatchPlayer';
 import { playbackRequest } from '@/lib/playback-request';
-import { isNativePlayback as isDirectVideo, isCompleted, sameEpisode, playbackProgress, preparePlayerUrl, nextEpisodePosition as nextPositionOf, episodeFinished, resumeStart } from '@/lib/watch-progress';
+import { isNativePlayback as isDirectVideo, isCompleted, shouldMarkSeen, sameEpisode, playbackProgress, preparePlayerUrl, nextEpisodePosition as nextPositionOf, episodeFinished, resumeStart } from '@/lib/watch-progress';
 import { episodeCreditsDecision, playbackCreditsMarker, type CreditsMarker } from '@/lib/episode-credits';
 import { creditsTmdb } from '@/lib/credits-identity';
-import useDelayedSeen from '@/components/useDelayedSeen';
 import useEstimatedEpisodeClock from '@/components/useEstimatedEpisodeClock';
 import { episodeDurationSeconds } from '@/lib/episode-clock';
 import EpisodeQueue from '@/components/EpisodeQueue';
 import WatchDetails from '@/components/WatchDetails';
 import VipQuotaModal from '@/components/VipQuotaModal';
-import { incrementWatchCount, reserveAccountViewing } from '@/lib/subscription';
+import { reserveAccountViewing } from '@/lib/subscription';
 import './watch.css';
 import { normalizeSeriesParts, displayToStored, storedToDisplay, remapWatchedKey, isLupin } from '@/lib/series-parts';
 
@@ -164,6 +163,7 @@ export default function WatchPage() {
   const mediaRef = useRef<MediaItem | null>(null);
   const posRef = useRef<Position>({ s: 0, e: 0 });
   const busyRef = useRef(false);
+  const vipPlaybackRef = useRef(false);
   const episodeListRef = useRef<HTMLDivElement>(null);
   const userIdRef = useRef<string | null>(null);
   const profileIdRef = useRef<string | null>(null);
@@ -200,7 +200,6 @@ export default function WatchPage() {
   const lastPlaybackRef = useRef<Position | null>(null);
   const resumeProgressRef = useRef<{ position: Position; time: number; duration: number } | null>(null);
   // A free viewing is charged only once the video really plays (see handleProgress).
-  const pendingChargeRef = useRef<{ userId: string; src: string; firstTime: number | null } | null>(null);
   const lastProgressSaveRef = useRef(0);
   const endedRef = useRef(false);
   const historyQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -568,19 +567,16 @@ export default function WatchPage() {
       }
       const user = session.user;
       userIdRef.current = user.id;
+      vipPlaybackRef.current = user.email === ADMIN_EMAIL;
       if (user.email !== ADMIN_EMAIL) {
-        const { data: profile } = await supabase.from('profiles').select('is_vip, watch_count').eq('id', user.id).maybeSingle();
-        if (profile && !profile.is_vip && (profile.watch_count || 0) >= 5) {
+        const access = await reserveAccountViewing(user.id);
+        vipPlaybackRef.current = access.vip;
+        if (!access.allowed) {
           if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
           setShowVipModal(true);
           return;
         }
-        // Native players report their progress: charge when the picture really moves.
-        // Other embedded players cannot tell us, so they are charged at launch as before.
-        if (profile?.is_vip) pendingChargeRef.current = null;
-        else if (isDirectVideo(playerUrl)) pendingChargeRef.current = { userId: user.id, src: playerUrl, firstTime: null };
-        else { pendingChargeRef.current = null; await incrementWatchCount(user.id, profile?.watch_count || 0).catch(() => false); }
-      } else pendingChargeRef.current = null;
+      }
 
       const next = { s: sIdx, e: eIdx };
       const previous = lastPlaybackRef.current;
@@ -672,17 +668,6 @@ export default function WatchPage() {
       setNextCountdown(null);
     }
     currentProgressRef.current = playbackProgress(time, duration);
-    const charge = pendingChargeRef.current;
-    if (charge && charge.src === stableUrl && !paused && Number.isFinite(time)) {
-      if (charge.firstTime === null) charge.firstTime = time;
-      else if (time - charge.firstTime >= 1) {
-        pendingChargeRef.current = null;
-        void reserveAccountViewing(charge.userId).then(access => {
-          // Another tab used the last free viewing meanwhile: stop and offer VIP.
-          if (!access.allowed) { closePlayer(); setShowVipModal(true); }
-        }).catch(() => { /* A recording failure never interrupts a video already playing. */ });
-      }
-    }
     const position = lastPlaybackRef.current;
     if (!position) return;
     const hasNext = mediaRef.current?.type === 'series' && !!nextPositionOf(mediaRef.current.seasons, position);
@@ -729,7 +714,7 @@ export default function WatchPage() {
     // cause a wall-clock countdown to advance while the video is stopped.
     if (decision.countdown !== nextCountdown) setNextCountdown(decision.countdown);
     const key = mediaRef.current?.type === 'series' ? epKey(position.s, position.e) : 'movie_main';
-    if (isCompleted(time, duration) && !mediaRef.current?.watched?.[key]) void markAsWatched(key);
+    if (shouldMarkSeen(time, duration, vipPlaybackRef.current) && !mediaRef.current?.watched?.[key]) void markAsWatched(key);
     if (Math.abs(time - lastProgressSaveRef.current) >= 10) {
       lastProgressSaveRef.current = time;
       persistProgress();
@@ -759,19 +744,12 @@ export default function WatchPage() {
       const position = lastPlaybackRef.current;
       const next = position && nextPositionOf(mediaRef.current?.seasons, position);
       if (next) {
-        void markAsWatched(epKey(position.s, position.e));
+        const progress = currentProgressRef.current;
+        if (endedRef.current || shouldMarkSeen(progress.currentTime, progress.duration, vipPlaybackRef.current)) void markAsWatched(epKey(position.s, position.e));
         void startPlaying(next.s, next.e, true);
       }
     };
   });
-
-  useDelayedSeen(isPlaying && !showAdPopup && !isPlayerPaused,
-    `${media?.id}:${selectedSeasonIdx}:${selectedEpisodeIdx}:${stableUrl}`,
-    () => {
-      if (busyRef.current) return;
-      const position = lastPlaybackRef.current;
-      if (position) void markAsWatched(mediaRef.current?.type === 'series' ? epKey(position.s, position.e) : 'movie_main');
-    });
 
   // Lecteurs intégrés (Moviez…) : ils ne donnent pas leur position. Le temps passé lecteur ouvert
   // sert d'estimation, pour la progression et la règle « vu à 70 % » de « Reprendre ».

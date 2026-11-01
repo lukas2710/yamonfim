@@ -271,6 +271,7 @@ public final class Logic {
     }
 
     public static boolean isCompleted(double currentTime, double duration) { return duration > 0 && currentTime / duration >= .95; }
+    public static boolean shouldMarkSeen(double time, double duration, boolean vip) { return Double.isFinite(time) && Double.isFinite(duration) && duration > 0 && time / duration >= (vip ? .8 : .95); }
 
     public static String epKey(int s, int e) { return "s" + s + "_e" + e; }
 
@@ -377,7 +378,7 @@ public final class Logic {
     /** Un épisode quitté dans ses deux dernières minutes (ou à 95 %) est considéré comme vu. */
     public static boolean episodeFinished(double time, double duration) { return duration > 0 && (time / duration >= .95 || (duration >= 600 && duration - time <= 120)); }
     /** Un film à peine commencé ou déjà au générique ne va pas dans « Reprendre ». */
-    public static boolean showInContinue(boolean series, double time, double duration) { return series || (time >= 60 && !isMostlyWatched(time, duration)); }
+    public static boolean showInContinue(boolean series, double time, double duration) { return series ? !episodeFinished(time, duration) : time >= 60 && !isCompleted(time, duration); }
 
     // ------------------------------------------------------------ Lecture native (lib/catalogue-source.ts)
 

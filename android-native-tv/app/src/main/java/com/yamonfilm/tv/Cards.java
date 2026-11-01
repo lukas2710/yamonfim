@@ -293,7 +293,7 @@ public final class Cards {
             card.setLayoutParams(new GridView.LayoutParams(card.imgW, card.imgH));
             Media m = items.get(position);
             card.bindMedia(m);
-            card.badge(App.repo().completed(m.id) ? "✓ Vu" : null, 0xE6168A45);
+            card.badge(App.repo().completed(m.id) ? "✓ Vu" : App.repo().progressing(m.id) ? "Lecture en cours" : null, App.repo().completed(m.id) ? 0xE6168A45 : 0xE62563A8);
             return card;
         }
     }

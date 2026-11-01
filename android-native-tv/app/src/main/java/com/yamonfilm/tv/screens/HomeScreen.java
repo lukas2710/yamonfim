@@ -521,6 +521,7 @@ public final class HomeScreen extends Screen {
                 if (rating != null && rating.average > 0) c.badge(String.format(java.util.Locale.FRANCE, "★ %.1f / 10", rating.average), 0xDD9D2631);
             }
             if (App.repo().completed(m.id)) c.badge("✓ Vu", 0xE6168A45);
+            else if (App.repo().progressing(m.id)) c.badge("Lecture en cours", 0xE62563A8);
             c.setOnClickListener(v -> main.openMedia(m));
             wrapFocus(c, () -> loadNear(c));
             cards.add(c);
@@ -571,6 +572,7 @@ public final class HomeScreen extends Screen {
         for (History h : history) {
             Media m = App.repo().cached(h.mediaId);
             if (m == null || cards.size() >= 20) continue;
+            if (App.repo().seenPosition(m.id, m.isSeries(), h.seasonIdx, h.episodeIdx) || m.isSeries() && Logic.episodeFinished(h.currentTime, h.duration)) continue;
             // Comme sur le site : un film à peine commencé ou déjà à son générique (92 %) ne va pas dans « Reprendre ».
             if (!Logic.showInContinue(m.isSeries(), h.currentTime, h.duration)) continue;
             Card c = new Card(main, 260, 146, true, true);
