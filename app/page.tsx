@@ -16,6 +16,7 @@ import { inCategory, isMainstream, MANGA_GENRE, FOREIGN_GENRE, type Category } f
 import { continueWatchingEntries } from '@/lib/watch-progress';
 import { personalizedRecommendations, discoveryPreferences, homeDiscoveryTitles, type RecommendationHistory } from '@/lib/recommendations';
 import { bestRated, weeklyTrending, tmdbKey, type HomeRankings } from '@/lib/home-rankings';
+import rankingBootstrap from '@/lib/home-rankings-bootstrap.json';
 import QuotaUnlockModal, { LockedPosterOverlay, QuotaBanner, LockIcon } from '@/components/QuotaUnlockModal';
 import PromoBanner from '@/components/PromoBanner';
 import HomeCollections from '@/components/HomeCollections';
@@ -214,7 +215,7 @@ export default function Home() {
   const [activeProfile, setActiveProfile] = useState<any>(null);
   const [continueWatchingList, setContinueWatchingList] = useState<MediaItem[]>([]);
   const [recommendationHistory, setRecommendationHistory] = useState<RecommendationHistory[]>([]);
-  const [rankings, setRankings] = useState<HomeRankings | null>(null);
+  const [rankings, setRankings] = useState<HomeRankings | null>(rankingBootstrap);
   const [browseSort, setBrowseSort] = useState<'recent' | 'rating'>('recent');
   useEffect(() => {
     const controller = new AbortController();
@@ -1086,7 +1087,7 @@ export default function Home() {
               const genreItems = bestRated(homeCatalogue.filter(m => m.genres && m.genres.includes(genre) && (genre === MANGA_GENRE || genre === FOREIGN_GENRE || isMainstream(m))), rankings);
               if (genreItems.length === 0) return null;
               return (
-                <Row key={genre} title={genre === MANGA_GENRE ? 'Mangas les mieux notés' : genre === FOREIGN_GENRE ? 'Les mieux notés en langue étrangère' : `Les mieux notés en ${genre}`} subtitle="Notes TMDB · au moins 300 votes pour les films, 150 pour les séries" onSeeAll={() => { if (genre === MANGA_GENRE) selectType('manga'); else if (genre === FOREIGN_GENRE) selectType('foreign'); else { setSelectedGenre(genre); setSelectedType('all'); setSearchQuery(''); setBrowseSort('rating'); } }} icon={<Icon name="film" className="h-5 w-5 text-zinc-400" />}>
+                <Row key={genre} title={genre === MANGA_GENRE ? 'Mangas populaires' : genre === FOREIGN_GENRE ? 'Populaires en langue étrangère' : `Populaires en ${genre}`} subtitle="Notes TMDB · au moins 300 votes pour les films, 150 pour les séries" onSeeAll={() => { if (genre === MANGA_GENRE) selectType('manga'); else if (genre === FOREIGN_GENRE) selectType('foreign'); else { setSelectedGenre(genre); setSelectedType('all'); setSearchQuery(''); setBrowseSort('rating'); } }} icon={<Icon name="film" className="h-5 w-5 text-zinc-400" />}>
                   {genreItems.slice(0, 20).map((item: MediaItem) => (
                     <PosterCard
                       key={genre + '-' + item.id}

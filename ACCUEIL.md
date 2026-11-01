@@ -16,7 +16,9 @@
 - Les tops sont classés par note décroissante, puis nombre de votes. Les tendances
   gardent l’ordre TMDB. La note affichée sur la carte est la moyenne brute sur dix.
 - Les sélections sont enregistrées dans Netlify Blobs et rafraîchies toutes les six
-  heures par `refresh-home-rankings`. La route les prépare aussi si nécessaire.
+  heures par `refresh-home-rankings`. Un instantané TMDB vérifié est embarqué
+  pour répondre immédiatement au premier démarrage, sans calcul coûteux pendant
+  la visite. Les tendances de plus de 48 heures sont masquées si le rafraîchissement échoue.
   `TMDB_API_KEY` reste une variable serveur. Un échec conserve le dernier résultat
   complet ; sans données, les tops restent masqués, sans bloquer l’accueil.
 
