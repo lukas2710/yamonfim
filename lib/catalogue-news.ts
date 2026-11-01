@@ -34,7 +34,7 @@ async function mapLimit<T, R>(items: T[], limit: number, task: (item: T) => Prom
   return results;
 }
 
-export async function buildCatalogueNews(apiKey: string, step: (name: string) => void = () => {}): Promise<CatalogueNews> {
+export async function buildCatalogueNews(apiKey: string): Promise<CatalogueNews> {
   const tmdb = async (path: string, params: Record<string, string> = {}) => {
     const url = `https://api.themoviedb.org/3/${path}?${new URLSearchParams({ api_key: apiKey, language: 'fr-FR', ...params })}`;
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -46,7 +46,6 @@ export async function buildCatalogueNews(apiKey: string, step: (name: string) =>
   };
   const db = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } });
   // Reading the titles from Supabase is slow from Netlify: reuse the prepared catalogue.
-  step('début');
   const snapshot = (await readCatalogueSnapshot())?.rows as { id: string; title: string; type: string; tmdb_id: unknown }[] | undefined;
   const siteRows = async (type: 'series' | 'movie') => {
     const all: { id: string; title: string; tmdb_id: unknown }[] = snapshot?.filter(row => row.type === type) || [];
@@ -57,19 +56,14 @@ export async function buildCatalogueNews(apiKey: string, step: (name: string) =>
     }
     return new Map(all.filter(row => /^[1-9]\d*$/.test(String(row.tmdb_id))).map(row => [Number(row.tmdb_id), row]));
   };
-  step(snapshot ? 'catalogue préparé lu' : 'pas de catalogue préparé');
   const [siteSeries, siteMovies] = await Promise.all([siteRows('series'), siteRows('movie')]);
-  step('titres du site');
   const since = day(NEWS_DAYS), today = day(0);
 
   // Every series that aired an episode in the window, kept when it is on the site.
-  step('tmdb début');
   const first = await tmdb('discover/tv', { 'air_date.gte': since, 'air_date.lte': today, page: '1' });
   const pages = Math.min(500, Number(first?.total_pages) || 1);
   const rest = await mapLimit(Array.from({ length: pages - 1 }, (_, index) => index + 2), 15, page => tmdb('discover/tv', { 'air_date.gte': since, 'air_date.lte': today, page: String(page) }));
   const aired = new Set([first, ...rest].flatMap(result => (result?.results || []).map((show: { id: number }) => show.id)).filter(id => siteSeries.has(id)));
-
-  step(`tmdb diffusions (${pages} pages)`);
   const ids = [...aired], series: SeriesNews[] = [];
   const chunks = Array.from({ length: Math.ceil(ids.length / 40) }, (_, index) => ids.slice(index * 40, index * 40 + 40));
   await mapLimit(chunks, 4, async chunk => {
@@ -83,8 +77,6 @@ export async function buildCatalogueNews(apiKey: string, step: (name: string) =>
       if (entry) series.push({ tmdb: id, mediaId: String(row?.id ?? site.id), title: site.title, poster: poster(detail?.poster_path), ...entry });
     });
   });
-
-  step('séries détaillées');
   // Popular digital and physical releases of the last two weeks, worldwide.
   const releases = await mapLimit([1, 2, 3, 4, 5], 5, page => tmdb('discover/movie', { 'release_date.gte': day(MOVIE_DAYS), 'release_date.lte': today, with_release_type: '4|5', sort_by: 'popularity.desc', page: String(page) }));
   const seen = new Set<number>(), movies: MovieNews[] = [];
