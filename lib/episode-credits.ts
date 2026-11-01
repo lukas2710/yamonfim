@@ -38,15 +38,30 @@ export function communityCredits(payload: unknown, imdb: string, season: number,
 // Credits usually last as long across a series. With no timing for an episode,
 // apply the median length measured on its other episodes, same season first.
 export const ESTIMATED_CREDITS_MAX = 300;
-export function seriesCreditsEstimate(rows: { season: number; duration_ms: number; start_sec: number | null }[], season: number, duration: number): CreditsMarker | null {
+// The administrator can set one credits length for a whole series, stored as
+// an admin row whose start_sec is that length.
+export const seriesLengthKey = (key: string) => `length:${key}`;
+export const validCreditsLength = (length: number, duration = Infinity) => Number.isFinite(length) && length >= 10 && length <= ESTIMATED_CREDITS_MAX && length <= duration * .3;
+type EstimateRow = { episode_key?: string; season: number; episode?: number; duration_ms: number; start_sec: number | null; source?: string };
+export function seriesCreditsEstimate(rows: EstimateRow[], season: number, duration: number): CreditsMarker | null {
   if (!validDuration(duration)) return null;
-  const lengths = (list: typeof rows) => list.map(row => row.duration_ms / 1000 - (row.start_sec ?? NaN))
-    .filter(length => Number.isFinite(length) && length >= 10 && length <= ESTIMATED_CREDITS_MAX && length <= duration * .3).sort((a, b) => a - b);
-  const same = lengths(rows.filter(row => row.season === season));
-  const pool = same.length ? same : lengths(rows);
-  if (!pool.length) return null;
-  const length = pool[Math.floor(pool.length / 2)];
-  return { start: Math.round((duration - length) * 1000) / 1000, duration, source: 'estimated' };
+  const estimate = (length: number): CreditsMarker => ({ start: Math.round((duration - length) * 1000) / 1000, duration, source: 'estimated' });
+  const series = rows.find(row => row.episode_key?.startsWith('length:') && row.source === 'admin' && validCreditsLength(row.start_sec ?? NaN, duration));
+  if (series) return estimate(series.start_sec!);
+  // A manual time gives a length once that episode has been played: any other
+  // row for it records the actual video duration.
+  const episodes = rows.filter(row => !row.episode_key?.startsWith('length:'));
+  const played = (row: EstimateRow) => episodes.find(other => other.duration_ms > 0 && other.episode_key === row.episode_key && other.season === row.season && other.episode === row.episode);
+  const timed = episodes.flatMap(row => {
+    if (row.start_sec === null || row.source === 'missing') return [];
+    if (row.source !== 'admin') return [{ season: row.season, length: row.duration_ms / 1000 - row.start_sec }];
+    const reference = played(row);
+    return reference ? [{ season: row.season, length: reference.duration_ms / 1000 - row.start_sec }] : [];
+  });
+  const lengths = (list: typeof timed) => list.map(row => row.length).filter(length => validCreditsLength(length, duration)).sort((a, b) => a - b);
+  const same = lengths(timed.filter(row => row.season === season));
+  const pool = same.length ? same : lengths(timed);
+  return pool.length ? estimate(pool[Math.floor(pool.length / 2)]) : null;
 }
 export function reachedEpisodeCredits(currentTime: number, duration: number, marker: CreditsMarker | null) {
   return !!marker && compatibleCredits(marker.start, marker.duration, duration) && Number.isFinite(currentTime) && currentTime >= marker.start && currentTime <= duration;

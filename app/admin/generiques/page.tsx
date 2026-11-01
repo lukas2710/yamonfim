@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { getPersistentSession } from '@/lib/auth-session';
 import { parseCreditsTime } from '@/lib/credits-time';
 import { creditsTmdb } from '@/lib/credits-identity';
+import { seriesLengthKey, validCreditsLength } from '@/lib/episode-credits';
 
 type Series = { id: string; title: string; tmdb_id?: string | number };
 type Season = { seasonNumber: number; episodes: { number: number; title?: string; embedUrl?: string }[] };
@@ -31,11 +32,16 @@ function episodeRows(item: Series, seasons: Season[], lookup: Map<string, Marker
   }));
 }
 type Row = ReturnType<typeof episodeRows>[number];
+// Saved under the media id and, when known, the TMDB id the TV app sends.
+function lengthKeys(item: Series, seasons: Season[]) {
+  const tmdb = creditsTmdb(item, seasons.flatMap(season => season.episodes).find(episode => episode.embedUrl)?.embedUrl);
+  return [...new Set([seriesLengthKey(`media:${item.id}`), ...(tmdb ? [seriesLengthKey(`tmdb:${tmdb}`)] : [])])];
+}
 // Saved timings per catalogue key, usable before a series' episodes are loaded.
 function creditsSummary(markers: Marker[]) {
   const now = Date.now(), counts = new Map<string, Set<string>>();
   let manual = 0, automatic = 0;
-  for (const marker of markers) if (valid(marker, now)) {
+  for (const marker of markers) if (valid(marker, now) && !marker.episode_key.startsWith('length:')) {
     if (marker.source === 'admin') manual++; else automatic++;
     const episodes = counts.get(marker.episode_key) || new Set<string>();
     episodes.add(`${marker.season}/${marker.episode}`); counts.set(marker.episode_key, episodes);
@@ -212,12 +218,30 @@ export default function CreditsAdmin() {
     finally { setSaving(null); }
   }
 
+  async function saveLength(item: Series, list: Season[]) {
+    const id = `length:${item.id}`, keys = lengthKeys(item, list);
+    const current = markers.find(record => keys.includes(record.episode_key) && record.source === 'admin');
+    const text = (drafts[id] ?? (current ? formatTime(current.start_sec!) : '')).trim();
+    const seconds = text ? parseCreditsTime(text) : null;
+    if (text && (seconds === null || !validCreditsLength(seconds))) { setError('Saisis la durée du générique entre 0:10 et 5:00, par exemple 0:45.'); return; }
+    setSaving(id); setError(''); setMessage('');
+    try {
+      const { error } = text
+        ? await supabase.from('episode_credits').upsert(keys.map(key => ({ episode_key: key, season: 1, episode: 1, duration_ms: 0, start_sec: seconds, source: 'admin', checked_at: new Date().toISOString(), expires_at: null })))
+        : await supabase.from('episode_credits').delete().in('episode_key', keys).eq('source', 'admin');
+      if (error) throw error;
+      setMessage(text ? `Générique de ${text} appliqué aux épisodes de ${item.title} sans minutage.` : `Durée retirée pour ${item.title}.`);
+      setRevision(value => value + 1);
+    } catch { setError('Enregistrement impossible. Vérifie ta session administrateur.'); }
+    finally { setSaving(null); }
+  }
+
   return <main className="min-h-screen bg-[#0a0a0b] pb-16 text-white">
     <SectionNavigation admin />
     <div className="mx-auto max-w-6xl space-y-6 px-4 pt-10">
       <Link href="/admin" className="text-sm text-red-400">← Administration</Link>
       <h1 className="text-3xl font-bold">Génériques des épisodes</h1>
-      <p className="max-w-3xl text-zinc-400">Saisis le début du générique (minutes:secondes). Le bouton apparaît à ce moment, puis la suite démarre après 5 secondes. Une valeur manuelle est prioritaire. Sans minutage exploitable, la suite démarre 30 secondes avant la fin.</p>
+      <p className="max-w-3xl text-zinc-400">Saisis le début du générique (minutes:secondes). Le bouton apparaît à ce moment, puis la suite démarre après 5 secondes. Une valeur manuelle est prioritaire. Sans minutage pour un épisode, la durée de générique de la série est utilisée : celle que tu saisis pour toute la série, sinon celle mesurée sur ses autres épisodes. Sinon, la suite démarre 30 secondes avant la fin.</p>
       <p className="text-sm text-zinc-400">Scanne une série pour importer ses minutages avant les visionnages. Les durées de référence des services sont enregistrées ; le lecteur vérifie leur compatibilité avec la vidéo. Les valeurs manuelles restent prioritaires.</p>
       {error && <p role="alert" className="rounded-xl border border-red-600/40 bg-red-950/30 p-4">{error} <button className="underline" onClick={() => setRevision(value => value + 1)}>Réessayer</button></p>}
       {message && <p role="status" className="rounded-xl bg-emerald-950/50 p-4 text-emerald-200">{message}</p>}
@@ -245,12 +269,21 @@ export default function CreditsAdmin() {
             <summary className="cursor-pointer px-5 py-5 marker:text-red-400"><span className="ml-2 text-lg font-semibold">{item.title}</span><span className="ml-3 text-sm text-zinc-400">{list ? `${filled} / ${rows.length} épisodes remplis` : `${summary.count(item)} minutages enregistrés`}</span></summary>
             {expandedSeries[id] && <div className="space-y-6 border-t border-white/10 p-4 sm:p-5">
               <div className="flex flex-wrap items-center gap-4"><Link href={`/watch/${item.id}`} className="inline-block text-sm text-red-400">Ouvrir la série →</Link><button disabled={loading || !!scan} className={`${field} text-sm disabled:opacity-50`} onClick={() => void scanCatalogue(id)}>Scanner cette série</button></div>
+              {list && (() => {
+                const keys = lengthKeys(item, list), current = markers.find(record => keys.includes(record.episode_key) && record.source === 'admin');
+                const draftId = `length:${item.id}`;
+                return <form className="flex flex-wrap items-center gap-3 rounded-xl border border-red-500/20 bg-red-950/10 p-4" onSubmit={event => { event.preventDefault(); void saveLength(item, list); }}>
+                  <div className="min-w-48 flex-1"><strong className="text-sm">Générique de toute la série</strong><p className="mt-1 text-xs text-zinc-400">{current ? `Les épisodes sans minutage passent à la suite ${formatTime(current.start_sec!)} avant la fin.` : 'Durée du générique de fin (ex. 0:45), appliquée aux épisodes sans minutage.'}</p></div>
+                  <input aria-label={`Durée du générique de ${item.title}`} placeholder="0:45" className={`${field} w-28`} value={drafts[draftId] ?? (current ? formatTime(current.start_sec!) : '')} onChange={event => setDrafts(values => ({ ...values, [draftId]: event.target.value }))} />
+                  <button disabled={saving !== null || loading || !!scan} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold disabled:opacity-50">{saving === draftId ? 'Enregistrement…' : 'Enregistrer'}</button>
+                </form>;
+              })()}
               {!list ? <p className="text-sm text-zinc-400">{opening[id] ? 'Chargement des épisodes…' : 'Épisodes indisponibles.'}</p>
                 : !shown.length ? <p className="text-sm text-zinc-400">Aucun épisode pour ce filtre.</p>
                 : [...new Set(shown.map(row => row.season))].map(season => <section key={season} aria-label={`${item.title}, saison ${season}`} className="space-y-3">
                 <h2 className="text-base font-semibold text-zinc-200">Saison {season}</h2>
                 {shown.filter(row => row.season === season).map(row => <form key={row.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-black/20 p-4" onSubmit={event => { event.preventDefault(); void save(row); }}>
-                  <div className="min-w-48 flex-1"><strong className="text-sm">Épisode {row.episode} — {row.title || 'Épisode'}</strong><p className="mt-1 text-xs text-zinc-400">{row.manual ? `Manuel · ${formatTime(row.manual.start_sec!)}` : row.automatic ? `${row.automatic.source} · ${formatTime(row.automatic.start_sec!)}` : row.status === 'absent' ? 'Recherche sans minutage exploitable · secours 30 s' : row.checked ? 'À revérifier · secours 30 s' : 'Non vérifié · secours 30 s'}</p></div>
+                  <div className="min-w-48 flex-1"><strong className="text-sm">Épisode {row.episode} — {row.title || 'Épisode'}</strong><p className="mt-1 text-xs text-zinc-400">{row.manual ? `Manuel · ${formatTime(row.manual.start_sec!)}` : row.automatic ? `${row.automatic.source} · ${formatTime(row.automatic.start_sec!)}` : row.status === 'absent' ? 'Recherche sans minutage exploitable · estimation de la série ou secours 30 s' : row.checked ? 'À revérifier · estimation de la série ou secours 30 s' : 'Non vérifié · estimation de la série ou secours 30 s'}</p></div>
                   <input aria-label={`Début du générique ${row.item.title} saison ${row.season} épisode ${row.episode}`} placeholder="42:15" className={`${field} w-28`} value={drafts[row.id] ?? (row.manual ? formatTime(row.manual.start_sec!) : '')} onChange={event => setDrafts(values => ({ ...values, [row.id]: event.target.value }))} />
                   <button disabled={saving !== null || loading || !!scan} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold disabled:opacity-50">{saving === row.id ? 'Enregistrement…' : 'Enregistrer'}</button>
                 </form>)}
