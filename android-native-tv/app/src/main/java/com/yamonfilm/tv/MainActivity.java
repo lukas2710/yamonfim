@@ -84,7 +84,7 @@ public final class MainActivity extends Activity {
         layer = new FrameLayout(this);
         root.addView(layer, new FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH));
         toast = Ui.lines(Ui.text(this, 16, Ui.TEXT, Ui.W_MEDIUM), 3);
-        toast.setBackground(Ui.stroked(0xF21A1D26, 0x26FFFFFF, 1, 18));
+        toast.setBackground(Ui.stroked(0xF2141E38, 0x26FFFFFF, 1, 18));
         toast.setPadding(dp(26), dp(16), dp(26), dp(16));
         toast.setGravity(Gravity.CENTER);
         toast.setMaxWidth(dp(680));
@@ -126,13 +126,15 @@ public final class MainActivity extends Activity {
     // ------------------------------------------------------------ Barre de navigation
 
     private static final String[][] TABS = {
-            {"home", "Accueil"}, {"movies", "Films"}, {"series", "Séries"}, {"collections", "Collections"},
-            {"live", "TV en direct"}, {"history", "Historique"},
+            {"home", "Accueil"}, {"movies", "Films"}, {"series", "Séries"}, {"mangas", "Mangas"}, {"vo", "VO"},
+            {"collections", "Collections"}, {"live", "Direct"}, {"history", "Historique"},
     };
+    /** Rubriques réservées aux profils Standard (site : components/ProfileAccess.tsx). */
+    private static final java.util.Set<String> STANDARD_ONLY = new java.util.HashSet<>(java.util.Arrays.asList("live", "requests"));
 
     private void buildNav() {
         nav = new FrameLayout(this);
-        nav.setBackground(Ui.gradient(GradientDrawable.Orientation.TOP_BOTTOM, 0xF2060A15, 0xB3060A15, 0x00060A15));
+        nav.setBackground(Ui.gradient(GradientDrawable.Orientation.TOP_BOTTOM, 0xFC060A15, 0xF5060A15, 0xD9060A15, 0x00060A15));
         navRow = Ui.row(this);
         navRow.setGravity(Gravity.CENTER_VERTICAL);
         navRow.setPadding(dp(44), dp(20), dp(44), dp(10));
@@ -195,7 +197,7 @@ public final class MainActivity extends Activity {
         addNavItem("profile", avatar);
 
         nav.addView(navRow, new FrameLayout.LayoutParams(Ui.MATCH, Ui.WRAP));
-        root.addView(nav, new FrameLayout.LayoutParams(Ui.MATCH, dp(130)));
+        root.addView(nav, new FrameLayout.LayoutParams(Ui.MATCH, dp(140)));
     }
 
     private TextView tab(String label) {
@@ -206,10 +208,10 @@ public final class MainActivity extends Activity {
         t.setFocusable(true);
         t.setClickable(true);
         t.setMinHeight(dp(40));
-        t.setPadding(dp(14), 0, dp(14), 0);
+        t.setPadding(dp(12), 0, dp(12), 0);
         StateListDrawable bg = new StateListDrawable();
         bg.addState(Ui.focusedState(), Ui.round(Ui.FOCUS, 21));
-        bg.addState(Ui.activatedState(), Ui.stroked(0x33003CDA, Ui.ACCENT, 1, 10));
+        bg.addState(Ui.activatedState(), Ui.round(0x1FFFFFFF, 21));
         bg.addState(new int[]{}, new android.graphics.drawable.ColorDrawable(0));
         t.setBackground(bg);
         t.setTextColor(new ColorStateList(new int[][]{Ui.focusedState(), Ui.activatedState(), {}}, new int[]{Ui.INK, Ui.TEXT, Ui.MUTED}));
@@ -229,8 +231,13 @@ public final class MainActivity extends Activity {
             if (code == KeyEvent.KEYCODE_DPAD_DOWN) { focusContent(); return true; }
             if (code == KeyEvent.KEYCODE_DPAD_UP) return true;
             int i = navOrder.indexOf(v);
-            if (code == KeyEvent.KEYCODE_DPAD_LEFT) { if (i > 0) navOrder.get(i - 1).requestFocus(); return true; }
-            if (code == KeyEvent.KEYCODE_DPAD_RIGHT) { if (i + 1 < navOrder.size()) navOrder.get(i + 1).requestFocus(); return true; }
+            int step = code == KeyEvent.KEYCODE_DPAD_LEFT ? -1 : code == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : 0;
+            if (step != 0) {
+                // On saute les rubriques masquées (profils Kids et Junior).
+                for (int k = i + step; k >= 0 && k < navOrder.size(); k += step)
+                    if (navOrder.get(k).getVisibility() == View.VISIBLE) { navOrder.get(k).requestFocus(); break; }
+                return true;
+            }
             return false;
         });
         if (item.getLayoutParams() == null) item.setLayoutParams(Ui.lp(Ui.WRAP, Ui.WRAP));
@@ -244,6 +251,16 @@ public final class MainActivity extends Activity {
         String id = top == null ? null : top.railId();
         nav.setVisibility(id != null ? View.VISIBLE : View.GONE);
         for (Map.Entry<String, View> e : navItems.entrySet()) e.getValue().setActivated(e.getKey().equals(id));
+    }
+
+    public boolean isKidsProfile() { return !"standard".equals(App.repo().profileMode()); }
+
+    /** Profils Kids et Junior : rubriques réservées masquées ; le mode est relu (il peut changer sur le site). */
+    public void applyProfileMode() {
+        for (String id : STANDARD_ONLY) { View v = navItems.get(id); if (v != null) v.setVisibility(isKidsProfile() ? View.GONE : View.VISIBLE); }
+        App.io(null, () -> { App.repo().refreshProfileMode(); return true; }, (ok, e) -> {
+            for (String id : STANDARD_ONLY) { View v = navItems.get(id); if (v != null) v.setVisibility(isKidsProfile() ? View.GONE : View.VISIBLE); }
+        });
     }
 
     /** Avatar et badge VIP de la barre, mis à jour avec le profil et l'abonnement. */
@@ -302,9 +319,11 @@ public final class MainActivity extends Activity {
         logout.setOnClickListener(v -> { closeDialog(); Dialogs.confirm(this, "Se déconnecter ?", "Tu devras saisir à nouveau ton email et ton mot de passe sur cette TV.", "Se déconnecter", this::signOut); });
         panel.addView(change, Ui.lp(dp(360), Ui.WRAP, 0, 0, 0, dp(12)));
         panel.addView(account, Ui.lp(dp(360), Ui.WRAP, 0, 0, 0, dp(12)));
-        TextView requests = Ui.button(this, "Demander un film ou une série", R.drawable.ic_request, Ui.STYLE_NORMAL);
-        requests.setOnClickListener(v -> { closeDialog(); openRail("requests"); });
-        panel.addView(requests, Ui.lp(dp(360), Ui.WRAP, 0, 0, 0, dp(12)));
+        if (!isKidsProfile()) {
+            TextView requests = Ui.button(this, "Demander un film ou une série", R.drawable.ic_request, Ui.STYLE_NORMAL);
+            requests.setOnClickListener(v -> { closeDialog(); openRail("requests"); });
+            panel.addView(requests, Ui.lp(dp(360), Ui.WRAP, 0, 0, 0, dp(12)));
+        }
         panel.addView(logout, Ui.lp(dp(360), Ui.WRAP));
         showDialog(panel, change, null);
     }
@@ -331,13 +350,15 @@ public final class MainActivity extends Activity {
 
     /** Ouvre une rubrique, en conservant son état si elle a déjà été ouverte. */
     public void openRail(String id) {
-        if (App.repo().childProfile() && ("live".equals(id) || "requests".equals(id))) { toast("Cette rubrique est réservée aux profils Standard."); return; }
+        if (STANDARD_ONLY.contains(id) && isKidsProfile()) { toast("Cette rubrique est réservée aux profils Standard."); id = "home"; }
         Screen s = roots.get(id);
         if (s == null) {
             switch (id) {
                 case "search": s = new SearchScreen(this); break;
                 case "movies": s = new BrowseScreen(this, "movies", "Films", "movie"); break;
                 case "series": s = new BrowseScreen(this, "series", "Séries", "series"); break;
+                case "mangas": s = new BrowseScreen(this, "mangas", "Mangas", "manga"); break;
+                case "vo": s = new BrowseScreen(this, "vo", "En langue étrangère", "foreign"); break;
                 case "collections": s = new CollectionsScreen(this); break;
                 case "history": s = new HistoryScreen(this); break;
                 case "live": s = new LiveScreen(this); break;
@@ -358,8 +379,7 @@ public final class MainActivity extends Activity {
         if (first) s.view = s.create();
         if (s.view.getParent() == null) stage.addView(s.view, new FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH));
         s.view.setVisibility(View.VISIBLE);
-        s.view.setAlpha(0f);
-        s.view.animate().alpha(1f).setDuration(200).start();
+        Ui.enter(s.view);
         updateNav();
         s.onShow(first);
         final Screen target = s;
@@ -395,7 +415,7 @@ public final class MainActivity extends Activity {
         }
         roots.put(id, s);
         stack.add(s);
-        if (id.equals("home")) { refreshProfileChip(); refreshBadge(); }
+        if (id.equals("home")) { refreshProfileChip(); refreshBadge(); applyProfileMode(); }
         attach(s);
     }
 

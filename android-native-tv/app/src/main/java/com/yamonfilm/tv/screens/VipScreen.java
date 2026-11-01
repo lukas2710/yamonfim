@@ -110,7 +110,7 @@ public final class VipScreen extends Screen {
         StateListDrawable bg = new StateListDrawable();
         GradientDrawable on = Ui.round(0xFF3A2A08, 20);
         on.setStroke(dp(4), Ui.GOLD);
-        GradientDrawable off = Ui.round(star ? 0xFF231B0A : 0xFF171A22, 20);
+        GradientDrawable off = Ui.round(star ? 0xFF231B0A : 0xFF111A30, 20);
         if (star) off.setStroke(dp(2), 0x80FFB020);
         bg.addState(Ui.focusedState(), on);
         bg.addState(new int[]{}, off);
@@ -137,7 +137,7 @@ public final class VipScreen extends Screen {
     private void howToPay(String plan, String price) {
         LinearLayout p = Ui.column(main);
         p.setGravity(Gravity.CENTER_HORIZONTAL);
-        p.setBackground(Ui.round(0xFF171A22, 24));
+        p.setBackground(Ui.round(0xFF111A30, 24));
         p.setPadding(dp(40), dp(30), dp(40), dp(28));
         Ui.noClip(p);
         p.addView(Ui.icon(main, R.drawable.ic_crown, Ui.GOLD, 40));
@@ -146,7 +146,7 @@ public final class VipScreen extends Screen {
         p.addView(intro, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(8), 0, dp(14)));
         TextView steps = Ui.label(main,
                 "1.  Prends ton téléphone ou ton ordinateur\n"
-                        + "2.  Va sur yamonfi.netlify.app\n"
+                        + "2.  Va sur yamonfim.vercel.app\n"
                         + "3.  Connecte-toi avec le même compte : " + App.repo().email() + "\n"
                         + "4.  Ouvre « Abonnement » et choisis l'offre " + plan + "\n"
                         + "5.  Une fois ton accès VIP activé, relance l'application sur la TV",

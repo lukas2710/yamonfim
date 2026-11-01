@@ -4,6 +4,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -15,6 +16,7 @@ import com.yamonfilm.tv.Cards;
 import com.yamonfilm.tv.Cards.Card;
 import com.yamonfilm.tv.Cards.Shelf;
 import com.yamonfilm.tv.Dialogs;
+import com.yamonfilm.tv.Discovery;
 import com.yamonfilm.tv.Logic;
 import com.yamonfilm.tv.MainActivity;
 import com.yamonfilm.tv.Models.Collection;
@@ -41,6 +43,16 @@ public final class HomeScreen extends Screen {
     private TextView kicker, title, description, heroPlay, heroInfo;
     private LinearLayout meta;
     private Media featured;
+    /** Carrousel « À la une » (admin : site_settings home_hero) : jusqu'à 5 titres, parcourus avec gauche/droite. */
+    private final List<Media> heroItems = new ArrayList<>();
+    private final List<Integer> heroSeasons = new ArrayList<>();
+    private int heroIndex;
+    private LinearLayout heroDots;
+    private List<String> heroIds = new ArrayList<>();
+    private Map<String, org.json.JSONArray> heroSeasonsById = new HashMap<>();
+    private List<com.yamonfilm.tv.Models.Banner> banners = new ArrayList<>();
+    private Map<String, org.json.JSONArray> bannerSeasons = new HashMap<>();
+    private List<Media> daily = new ArrayList<>();
     private Cards.VScroll rows;
     private LinearLayout loading;
     private TextView loadingText, retry;
@@ -48,11 +60,15 @@ public final class HomeScreen extends Screen {
     private final LinkedHashMap<String, Shelf> shelves = new LinkedHashMap<>();
     private String signature = "";
     private List<History> history = Collections.emptyList();
+    private List<Discovery.Viewing> viewingHistory = Collections.emptyList();
+    private int historyGeneration;
     private List<Collection> collections = Collections.emptyList();
     private int heroW, heroH;
     private boolean initialFocusDone;
-    private boolean catalogueBusy;
-    private long catalogueUpdated;
+    private Discovery.Result<Media> discovery;
+    private Discovery.Rankings displayRankings = Discovery.Rankings.empty();
+    private boolean discoveryBusy, discoveryPending, heroDirty;
+    private long rankingsUpdated;
 
     public HomeScreen(MainActivity main) { super(main); }
 
@@ -62,9 +78,9 @@ public final class HomeScreen extends Screen {
         FrameLayout root = new FrameLayout(main);
         root.setBackgroundColor(Ui.BG);
         int screenW = main.getResources().getDisplayMetrics().widthPixels, screenH = main.getResources().getDisplayMetrics().heightPixels;
-        heroW = screenW; heroH = (int) (screenH * 0.72f);
+        heroW = screenW; heroH = (int) (screenH * 0.74f);
         rows = new Cards.VScroll(main, true);
-        rows.content.setPadding(0, 0, 0, dp(90));
+        rows.content.setPadding(0, 0, 0, dp(320));
         rows.setTopOffset(dp(92));
 
         // « À la une » : un seul titre mis en avant, fixe (aucun fond qui change à chaque déplacement).
@@ -81,8 +97,8 @@ public final class HomeScreen extends Screen {
         LinearLayout info = Ui.column(main);
         Ui.noClip(info);
         info.setPadding(dp(Ui.SIDE), 0, dp(Ui.SIDE), dp(26));
-        kicker = Ui.kicker(main, "À LA UNE", Ui.ACCENT);
-        title = Ui.lines(Ui.text(main, 36, Ui.TEXT, Ui.W_BOLD), 2);
+        kicker = Ui.kicker(main, "À LA UNE", Ui.ACCENT_TEXT);
+        title = Ui.lines(Ui.text(main, 40, Ui.TEXT, Ui.W_BOLD), 1);
         title.setShadowLayer(dp(14), 0, dp(2), 0x99000000);
         meta = Ui.row(main);
         description = Ui.lines(Ui.text(main, 16, 0xFFD9DCE3, Ui.W_REGULAR), 2);
@@ -91,15 +107,18 @@ public final class HomeScreen extends Screen {
         Ui.noClip(buttons);
         heroPlay = Ui.button(main, "Regarder", R.drawable.ic_play, Ui.STYLE_PRIMARY);
         heroInfo = Ui.button(main, "Plus d'infos", R.drawable.ic_info, Ui.STYLE_NORMAL);
-        heroPlay.setOnClickListener(v -> { if (featured != null) main.openMedia(featured); });
-        heroInfo.setOnClickListener(v -> { if (featured != null) main.openMedia(featured); });
+        heroPlay.setOnClickListener(v -> openHero());
+        heroInfo.setOnClickListener(v -> openHero());
         buttons.addView(heroPlay);
         buttons.addView(heroInfo, Ui.lp(Ui.WRAP, Ui.WRAP, dp(14), 0, 0, 0));
         info.addView(kicker);
-        info.addView(title, Ui.lp(Math.min(dp(660), screenW - dp(Ui.SIDE * 2)), Ui.WRAP, 0, dp(10), 0, 0));
+        info.addView(title, Ui.lp(dp(760), Ui.WRAP, 0, dp(10), 0, 0));
         info.addView(meta, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(12), 0, 0));
-        info.addView(description, Ui.lp(Math.min(dp(560), screenW - dp(Ui.SIDE * 2)), Ui.WRAP, 0, dp(12), 0, 0));
+        info.addView(description, Ui.lp(dp(620), Ui.WRAP, 0, dp(12), 0, 0));
         info.addView(buttons, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(20), 0, 0));
+        heroDots = Ui.row(main);
+        heroDots.setGravity(Gravity.CENTER_VERTICAL);
+        info.addView(heroDots, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(18), 0, 0));
         hero.addView(info, Ui.flp(Ui.MATCH, Ui.WRAP, Gravity.BOTTOM));
         hero.setVisibility(View.GONE);
         rows.content.addView(hero, new LinearLayout.LayoutParams(Ui.MATCH, heroH));
@@ -128,6 +147,8 @@ public final class HomeScreen extends Screen {
                 refreshCatalogue();
             });
             loadCollections();
+            loadHomeExtras();
+            loadRankings();
         }
         loadHistory();
         if (first && !App.repo().flag("help_home")) {
@@ -137,8 +158,7 @@ public final class HomeScreen extends Screen {
     }
 
     private void refreshCatalogue() {
-        if (catalogueBusy) return;
-        catalogueBusy = true;
+        final boolean firstCatalogue = App.repo().catalogue().isEmpty();
         io(() -> App.repo().refreshCatalogue(), (rows, e) -> {
             if (e != null) {
                 if (App.repo().catalogue().isEmpty()) {
@@ -151,17 +171,53 @@ public final class HomeScreen extends Screen {
                 return;
             }
             renderCatalogue();
+            if (firstCatalogue) loadHistory();
         });
     }
 
-    @Override protected void onRefresh() { loadHistory(); if (android.os.SystemClock.elapsedRealtime() - catalogueUpdated > 300000) { refreshCatalogue(); loadCollections(); } }
+    @Override protected void onRefresh() { loadHistory(); if (android.os.SystemClock.elapsedRealtime() - rankingsUpdated > 3600000) loadRankings(); }
+
+    private void loadRankings() {
+        rankingsUpdated = android.os.SystemClock.elapsedRealtime();
+        io(() -> App.repo().refreshHomeRankings(), (rankings, error) -> { if (rankings != null) renderCatalogue(); });
+    }
 
     private void loadHistory() {
+        final int generation = ++historyGeneration;
+        final String profileId = App.repo().profileId();
         io(() -> { App.repo().flushWrites(4000); return App.repo().history(); }, (list, e) -> {
+            if (generation != historyGeneration || !java.util.Objects.equals(profileId, App.repo().profileId())) return;
             if (e != null) { if (e instanceof com.yamonfilm.tv.Api.AuthExpired) fail(e); return; }
             history = list;
+            viewingHistory = new ArrayList<>();
+            for (History h : list) viewingHistory.add(new Discovery.Viewing(h.mediaId, h.currentTime, h.duration, Logic.parseTime(h.updatedAt)));
             renderContinue();
+            renderCatalogue();
+            io(() -> App.repo().recommendationHistory(list, profileId), (viewing, error) -> {
+                if (viewing == null || generation != historyGeneration || !java.util.Objects.equals(profileId, App.repo().profileId())) return;
+                viewingHistory = viewing; renderCatalogue();
+            });
         });
+    }
+
+    /** Carrousel, bannières et ajouts du jour : facultatifs, ils ne bloquent jamais le catalogue. */
+    private void loadHomeExtras() {
+        io(() -> {
+            List<String> ids = App.repo().heroEntries();
+            java.util.Set<String> seriesIds = new java.util.HashSet<>();
+            for (String id : ids) { String[] p = com.yamonfilm.tv.Models.Banner.parse(id); if (p[1] != null) seriesIds.add(p[0]); }
+            heroSeasonsById = App.repo().seasonsOf(seriesIds);
+            return ids;
+        }, (ids, e) -> { if (ids != null) { heroIds = ids; heroDirty = true; renderCatalogue(); } });
+        if (main.isKidsProfile()) return; // Bannières et ajouts du jour : profils Standard, comme sur le site.
+        io(() -> {
+            List<com.yamonfilm.tv.Models.Banner> list = App.repo().banners();
+            java.util.Set<String> seriesIds = new java.util.HashSet<>();
+            for (com.yamonfilm.tv.Models.Banner b : list) for (String entry : b.entries) { String[] p = com.yamonfilm.tv.Models.Banner.parse(entry); if (p[1] != null) seriesIds.add(p[0]); }
+            bannerSeasons = App.repo().seasonsOf(seriesIds);
+            return list;
+        }, (list, e) -> { if (list != null) { banners = list; renderBanners(); } });
+        io(() -> App.repo().dailyAdditions(), (list, e) -> { if (list != null) { daily = list; renderDaily(); } });
     }
 
     private void loadCollections() {
@@ -175,9 +231,31 @@ public final class HomeScreen extends Screen {
     // ------------------------------------------------------------ Rangées
 
     private void renderCatalogue() {
-        List<Media> all = App.repo().catalogue();
+        if (discoveryBusy) { discoveryPending = true; return; }
+        discoveryBusy = true;
+        List<Media> catalogue = App.repo().visibleCatalogue();
+        List<Discovery.Viewing> viewing = new ArrayList<>(viewingHistory);
+        Discovery.Rankings rankings = App.repo().homeRankings();
+        boolean child = main.isKidsProfile();
+        String profileId = App.repo().profileId();
+        io(() -> {
+            return Discovery.build(catalogue, viewing, rankings, child, System.currentTimeMillis());
+        }, (result, error) -> {
+            discoveryBusy = false;
+            if (!java.util.Objects.equals(profileId, App.repo().profileId())) return;
+            if (discoveryPending) { discoveryPending = false; renderCatalogue(); return; }
+            if (result == null) return;
+            discovery = result; displayRankings = rankings;
+            renderCatalogue(result);
+        });
+    }
+
+    private void renderCatalogue(Discovery.Result<Media> data) {
+        List<Media> all = data.home;
         StringBuilder sig = new StringBuilder().append(all.size());
-        for (Media m : all) sig.append(m.id).append(m.title.hashCode()).append(m.poster.hashCode());
+        for (Media m : all) sig.append(m.id).append(m.title.hashCode()).append(m.poster.hashCode()).append(m.genres.hashCode());
+        sig.append(displayRankings.at).append(heroIds.hashCode()).append(App.repo().completedRevision());
+        for (Media m : data.recommended) sig.append(m.id);
         String next = Integer.toHexString(sig.toString().hashCode()) + all.size();
         if (next.equals(signature)) return;
         signature = next;
@@ -188,31 +266,46 @@ public final class HomeScreen extends Screen {
             return;
         }
         loading.setVisibility(View.GONE);
-        showFeatured(all);
-        List<Media> movies = new ArrayList<>(), series = new ArrayList<>();
-        Map<String, List<Media>> genres = new HashMap<>();
+        buildHero(all, heroDirty || featured != null && !data.allowed.contains(featured.id));
+        heroDirty = false;
+        List<Media> movies = new ArrayList<>(), series = new ArrayList<>(), mangas = new ArrayList<>(), foreign = new ArrayList<>();
+        Map<String, List<Media>> genres = data.genres;
         for (Media m : all) {
-            (m.isSeries() ? series : movies).add(m);
-            for (String g : m.genres) { List<Media> l = genres.get(g); if (l == null) genres.put(g, l = new ArrayList<>()); l.add(m); }
+            if (m.in("manga")) mangas.add(m);
+            if (m.in("foreign")) foreign.add(m);
+            if (m.in("movie")) movies.add(m);
+            if (m.in("series")) series.add(m);
         }
         List<Map.Entry<String, List<Media>>> sorted = new ArrayList<>(genres.entrySet());
         sorted.sort((a, b) -> b.getValue().size() - a.getValue().size());
 
+        discoveryShelf("recommended", "Recommandé pour vous", data.recommended);
+        discoveryShelf("trend_movies", "Films en tendance cette semaine · TMDB", data.trendingMovies);
+        discoveryShelf("trend_series", "Séries en tendance cette semaine · TMDB", data.trendingSeries);
+        List<Media> topMovies = new ArrayList<>(), topSeries = new ArrayList<>();
+        for (Media m : data.rated) if (Logic.isMainstream(m.genres, m.title)) { if (m.isSeries()) topSeries.add(m); else topMovies.add(m); }
+        discoveryShelf("top_movies", "Les films les mieux notés · TMDB", topMovies);
+        discoveryShelf("top_series", "Les séries les mieux notées · TMDB", topSeries);
+
         posterShelf("new", "Nouveautés", all.subList(0, Math.min(30, all.size())), null);
         posterShelf("movies", "Films récents", movies.subList(0, Math.min(40, movies.size())), movies.size() > 40 ? "movies" : null);
         posterShelf("series", "Séries récentes", series.subList(0, Math.min(40, series.size())), series.size() > 40 ? "series" : null);
+        if (data.manga && mangas.size() >= 3) posterShelf("mangas", "Mangas", mangas.subList(0, Math.min(30, mangas.size())), mangas.size() > 30 ? "mangas" : null); else removeShelf("mangas");
+        if (foreign.size() >= 3) posterShelf("foreign", "En langue étrangère", foreign.subList(0, Math.min(30, foreign.size())), foreign.size() > 30 ? "vo" : null); else removeShelf("foreign");
         List<String> genreKeys = new ArrayList<>();
         for (int i = 0; i < sorted.size() && i < 10; i++) {
             Map.Entry<String, List<Media>> g = sorted.get(i);
-            if (g.getValue().size() < 4) continue;
+            if (g.getValue().isEmpty() || "Manga".equals(g.getKey()) || "Langue étrangère".equals(g.getKey())) continue;
             String key = "genre:" + g.getKey();
             genreKeys.add(key);
             List<Media> items = g.getValue();
-            posterShelf(key, g.getKey(), items.subList(0, Math.min(30, items.size())), items.size() > 30 ? key : null);
+            posterShelf(key, "Populaires en " + g.getKey(), items.subList(0, Math.min(30, items.size())), items.size() > 30 ? key : null);
         }
         for (String key : new ArrayList<>(shelves.keySet())) if (key.startsWith("genre:") && !genreKeys.contains(key)) removeShelf(key);
         renderContinue();
         renderCollections();
+        renderBanners();
+        renderDaily();
         List<Shelf> ordered = orderedShelves();
         for (int i = 0; i < ordered.size() && i < 4; i++) loadAround(ordered.get(i), ordered.get(i).lastIndex);
         // Premier affichage : la sélection va sur la première carte (sauf si l'utilisateur navigue déjà).
@@ -223,25 +316,192 @@ public final class HomeScreen extends Screen {
         }
     }
 
-    /** Choisit le titre « À la une » une seule fois : un récent qui a une belle image. */
-    private void showFeatured(List<Media> all) {
-        if (featured != null) return;
-        for (int i = 0; i < all.size() && i < 12; i++) {
-            Media m = all.get(i);
-            if (!m.backdrop.trim().isEmpty()) { featured = m; break; }
+    private void discoveryShelf(String key, String label, List<Media> items) {
+        if (items.isEmpty()) removeShelf(key);
+        else posterShelf(key, label, items.subList(0, Math.min(20, items.size())), null);
+    }
+
+    private boolean homeAllows(Media item) { return discovery != null && discovery.allowed.contains(item.id); }
+
+    /** Titres du carrousel : choix de l'admin (lib/home-hero.ts), complétés par les derniers ajouts. */
+    private void buildHero(List<Media> all, boolean force) {
+        if (all.isEmpty() || (!heroItems.isEmpty() && !force)) return;
+        Map<String, Media> byId = new HashMap<>();
+        for (Media m : all) byId.put(m.id, m);
+        heroItems.clear();
+        heroSeasons.clear();
+        java.util.Set<String> used = new java.util.HashSet<>();
+        for (String entry : heroIds) {
+            String[] p = com.yamonfilm.tv.Models.Banner.parse(entry);
+            Media m = byId.get(p[0]);
+            if (m == null || !used.add(p[0])) continue;
+            heroItems.add(m);
+            heroSeasons.add(seasonIndex(heroSeasonsById.get(p[0]), p[1]));
         }
-        if (featured == null) featured = all.get(0);
-        StringBuilder g = new StringBuilder();
-        for (int i = 0; i < featured.genres.size() && i < 3; i++) { if (g.length() > 0) g.append(" · "); g.append(featured.genres.get(i)); }
-        kicker.setText(featured.isSeries() ? "À LA UNE · SÉRIE" : "À LA UNE · FILM");
-        showInfo(g.toString(), featured.title, featured.description);
-        App.images().load(heroImage, Logic.tmdbSize(featured.image(), "w1280"), heroW, heroH);
+        for (Media m : all) {
+            if (heroItems.size() >= 5) break;
+            if (m.backdrop.trim().isEmpty() || !used.add(m.id)) continue;
+            heroItems.add(m);
+            heroSeasons.add(-1);
+        }
+        if (heroItems.isEmpty()) { heroItems.add(all.get(0)); heroSeasons.add(-1); }
+        heroIndex = 0;
+        showHero(0, false);
         hero.setVisibility(View.VISIBLE);
         // Dès que l'accueil est prêt, « Regarder » est sélectionné : la télécommande répond au premier appui.
         hero.post(() -> {
             View f = main.getCurrentFocus();
             if (alive() && main.top() == this && !main.dialogOpen() && (f == null || !f.isShown() || !MainActivity.isInside(f, view))) heroPlay.requestFocus();
         });
+    }
+
+    /** Index de la saison mise en avant (« id:sN ») d'après son numéro, ou -1. */
+    private static int seasonIndex(org.json.JSONArray seasons, String number) {
+        if (seasons == null || number == null) return -1;
+        int wanted = Integer.parseInt(number);
+        for (int i = 0; i < seasons.length(); i++) {
+            org.json.JSONObject o = seasons.optJSONObject(i);
+            if (o != null && o.optInt("seasonNumber", i + 1) == wanted) return i;
+        }
+        return -1;
+    }
+
+    private void showHero(int index, boolean animate) {
+        if (heroItems.isEmpty()) return;
+        heroIndex = (index % heroItems.size() + heroItems.size()) % heroItems.size();
+        featured = heroItems.get(heroIndex);
+        int seasonIdx = heroSeasons.get(heroIndex);
+        StringBuilder g = new StringBuilder();
+        if (featured.year > 0) g.append(featured.year);
+        for (int i = 0; i < featured.genres.size() && i < 3; i++) { if (g.length() > 0) g.append(" · "); g.append(featured.genres.get(i)); }
+        String universe = main.isKidsProfile() ? ("kids".equals(App.repo().profileMode()) ? "UNIVERS KIDS · " : "UNIVERS JUNIOR · ") : "";
+        String season = seasonIdx >= 0 && seasonIdx < featured.seasons.size() ? " · SAISON " + featured.seasons.get(seasonIdx).number + " · NOUVEAU" : "";
+        kicker.setText(universe + "À LA UNE · " + (featured.isSeries() ? "SÉRIE" : "FILM") + season);
+        showInfo(g.toString(), featured.title.replaceAll("\\s*\\(\\d{4}\\)\\s*$", ""), featured.description);
+        if (animate) { heroImage.setAlpha(0.35f); heroImage.animate().alpha(1f).setDuration(260).start(); }
+        App.images().load(heroImage, Logic.tmdbSize(featured.image(), "w1280"), heroW, heroH);
+        heroDots.removeAllViews();
+        if (heroItems.size() > 1) for (int i = 0; i < heroItems.size(); i++) {
+            View dot = new View(main);
+            dot.setBackground(Ui.round(i == heroIndex ? Ui.FOCUS : 0x59FFFFFF, 4));
+            heroDots.addView(dot, Ui.lp(dp(i == heroIndex ? 26 : 8), dp(8), 0, 0, dp(8), 0));
+        }
+        // Image du titre suivant préparée à l'avance : le passage est instantané.
+        Media nextItem = heroItems.get((heroIndex + 1) % heroItems.size());
+        App.images().prefetch(Logic.tmdbSize(nextItem.image(), "w1280"), heroW, heroH);
+    }
+
+    private void openHero() {
+        if (featured == null) return;
+        int seasonIdx = heroItems.isEmpty() ? -1 : heroSeasons.get(heroIndex);
+        if (seasonIdx >= 0) Actions.openMedia(main, featured, seasonIdx); else main.openMedia(featured);
+    }
+
+    // ------------------------------------------------------------ Bannières de l'admin et ajouts du jour
+
+    private void renderBanners() {
+        if (App.repo().catalogue().isEmpty() || main.isKidsProfile()) return;
+        List<String> keys = new ArrayList<>();
+        for (com.yamonfilm.tv.Models.Banner b : banners) {
+            List<View> cards = new ArrayList<>();
+            int rankNumber = 0;
+            for (String entry : b.entries) {
+                String[] p = com.yamonfilm.tv.Models.Banner.parse(entry);
+                Media m = App.repo().cached(p[0]);
+                if (m == null || !homeAllows(m)) continue;
+                int seasonIdx = seasonIndex(bannerSeasons.get(p[0]), p[1]);
+                String poster = m.poster;
+                if (seasonIdx >= 0) {
+                    org.json.JSONObject so = bannerSeasons.get(p[0]).optJSONObject(seasonIdx);
+                    String sp = so == null ? "" : so.optString("poster_path", "");
+                    if (!sp.isEmpty()) poster = sp;
+                }
+                rankNumber++;
+                cards.add(b.ranked ? rankedCard(m, rankNumber, poster, seasonIdx, p[1]) : bannerCard(m, poster, seasonIdx, p[1]));
+                if (cards.size() >= 30) break;
+            }
+            String key = "banner:" + b.id;
+            if (cards.isEmpty()) { removeShelf(key); continue; }
+            keys.add(key);
+            setShelf(key, b.title.isEmpty() ? "À découvrir" : b.title, cards);
+            Shelf shelf = shelves.get(key);
+            if (shelf != null) {
+                // Le sous-titre de la bannière s'affiche sous son titre.
+                shelf.title.setText(b.subtitle.isEmpty() ? (b.title.isEmpty() ? "À découvrir" : b.title) : (b.title + "   ·   " + b.subtitle));
+                loadAround(shelf, shelf.lastIndex);
+            }
+        }
+        for (String key : new ArrayList<>(shelves.keySet())) if (key.startsWith("banner:") && !keys.contains(key)) removeShelf(key);
+    }
+
+    private Card bannerCard(Media m, String poster, int seasonIdx, String seasonNumber) {
+        Card c = new Card(main, 130, 195, false, true);
+        c.data = m;
+        c.bound = true;
+        c.bindImage(Logic.tmdbSize(poster, "w342"), m.title);
+        if (seasonIdx >= 0) c.badge("SAISON " + seasonNumber + " · NOUVEAU", Ui.ACCENT);
+        c.setOnClickListener(v -> { if (seasonIdx >= 0) Actions.openMedia(main, m, seasonIdx); else main.openMedia(m); });
+        return c;
+    }
+
+    /** Top numéroté : un grand chiffre à gauche de l'affiche, comme sur le site. */
+    private View rankedCard(Media m, int rankNumber, String poster, int seasonIdx, String seasonNumber) {
+        FrameLayout box = new FrameLayout(main);
+        int numberW = rankNumber >= 10 ? 118 : 74;
+        box.setLayoutParams(new ViewGroup.MarginLayoutParams(dp(numberW + 118), dp(177)));
+        box.setFocusable(true);
+        box.setClickable(true);
+        Ui.noClip(box);
+        TextView number = new RankNumber(main, String.valueOf(rankNumber));
+        box.addView(number, Ui.flp(dp(numberW + 30), dp(177), Gravity.START | Gravity.BOTTOM));
+        Card c = new Card(main, 118, 177, false, false);
+        c.data = m;
+        c.bound = true;
+        c.setDuplicateParentStateEnabled(true);
+        c.bindImage(Logic.tmdbSize(poster, "w342"), m.title);
+        if (seasonIdx >= 0) c.badge("SAISON " + seasonNumber, Ui.ACCENT);
+        box.addView(c, Ui.flp(dp(118), dp(177), Gravity.END | Gravity.BOTTOM));
+        box.setOnClickListener(v -> { if (seasonIdx >= 0) Actions.openMedia(main, m, seasonIdx); else main.openMedia(m); });
+        Ui.onFocus(box, 1.07f, null);
+        box.setTag(m);
+        return box;
+    }
+
+    /** Grand chiffre au contour clair et au fond sombre (top numéroté). */
+    static final class RankNumber extends TextView {
+        RankNumber(android.content.Context c, String value) {
+            super(c);
+            setText(value);
+            setTypeface(Ui.font(Ui.W_BLACK));
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 150);
+            setIncludeFontPadding(false);
+            setGravity(Gravity.BOTTOM | Gravity.START);
+            setLetterSpacing(-0.08f);
+            setTranslationY(dp(26));
+        }
+        @Override protected void onDraw(android.graphics.Canvas canvas) {
+            android.text.TextPaint p = getPaint();
+            p.setStyle(android.graphics.Paint.Style.FILL);
+            setTextColor(0xFF060A15);
+            super.onDraw(canvas);
+            p.setStyle(android.graphics.Paint.Style.STROKE);
+            p.setStrokeWidth(dp(3));
+            setTextColor(0xCCFFFFFF);
+            super.onDraw(canvas);
+        }
+    }
+
+    private void renderDaily() {
+        if (App.repo().catalogue().isEmpty() || main.isKidsProfile() || daily.isEmpty()) { removeShelf("daily"); return; }
+        List<Media> visible = new ArrayList<>();
+        for (Media d : daily) { Media m = App.repo().cached(d.id); if (m != null && homeAllows(m)) visible.add(m); }
+        if (visible.isEmpty()) { removeShelf("daily"); return; }
+        int films = 0, seriesCount = 0;
+        for (Media m : visible) if (m.isSeries()) seriesCount++; else films++;
+        String label = "Ajoutés aujourd'hui · " + (films > 0 ? films + " film" + (films > 1 ? "s" : "") : "") + (films > 0 && seriesCount > 0 ? " et " : "") + (seriesCount > 0 ? seriesCount + " série" + (seriesCount > 1 ? "s" : "") : "");
+        posterShelf("daily", label, visible, null);
+        Shelf shelf = shelves.get("daily");
+        if (shelf != null) loadAround(shelf, shelf.lastIndex);
     }
 
     private boolean isShownFocus() { View f = main.getCurrentFocus(); return f != null && f.isShown() && f != retry; }
@@ -256,6 +516,11 @@ public final class HomeScreen extends Screen {
             Card c = new Card(main, 130, 195, false, true);
             c.data = m;
             c.fallback.setText(m.title);
+            if (key.startsWith("genre:") || key.startsWith("top_") || key.startsWith("trend_")) {
+                Discovery.Rating rating = displayRankings.rating(m);
+                if (rating != null && rating.average > 0) c.badge(String.format(java.util.Locale.FRANCE, "★ %.1f / 10", rating.average), 0xDD9D2631);
+            }
+            if (App.repo().completed(m.id)) c.badge("✓ Vu", 0xE6168A45);
             c.setOnClickListener(v -> main.openMedia(m));
             wrapFocus(c, () -> loadNear(c));
             cards.add(c);
@@ -295,7 +560,9 @@ public final class HomeScreen extends Screen {
     private void openMore(String key, String label) {
         if (key.equals("movies")) main.openRail("movies");
         else if (key.equals("series")) main.openRail("series");
-        else if (key.startsWith("genre:")) main.push(new BrowseScreen(main, null, label, "all", key.substring(6)));
+        else if (key.equals("mangas")) main.openRail("mangas");
+        else if (key.equals("vo")) main.openRail("vo");
+        else if (key.startsWith("genre:")) main.push(new BrowseScreen(main, null, label, "all", key.substring(6)).ranked(discovery == null ? Collections.emptySet() : discovery.allowed));
     }
 
     private void renderContinue() {
@@ -304,8 +571,8 @@ public final class HomeScreen extends Screen {
         for (History h : history) {
             Media m = App.repo().cached(h.mediaId);
             if (m == null || cards.size() >= 20) continue;
-            // Un film regardé à 70 % ou plus quitte « Reprendre » (même règle que le site).
-            if (!m.isSeries() && h.fraction() >= 0.7f) continue;
+            // Comme sur le site : un film à peine commencé ou déjà à son générique (92 %) ne va pas dans « Reprendre ».
+            if (!Logic.showInContinue(m.isSeries(), h.currentTime, h.duration)) continue;
             Card c = new Card(main, 260, 146, true, true);
             c.data = h;
             String sub = m.isSeries() ? "S" + h.seasonNumber + " · É" + h.episodeNumber : "FILM";
@@ -316,34 +583,36 @@ public final class HomeScreen extends Screen {
             cards.add(c);
         }
         if (cards.isEmpty()) removeShelf("continue");
-        else setShelf("continue", "Reprendre la lecture", cards);
+        else setShelf("continue", "Reprendre", cards);
     }
 
     private void renderCollections() {
         if (App.repo().catalogue().isEmpty()) return;
         List<View> cards = new ArrayList<>();
         for (Collection col : collections) {
-            List<Media> items = App.repo().collectionItems(col);
+            List<Media> items = new ArrayList<>();
+            for (Media item : App.repo().collectionItems(col)) if (homeAllows(item)) items.add(item);
             if (items.isEmpty()) continue;
             Card c = new Card(main, 260, 146, true, true);
             c.data = col;
             c.caption("COLLECTION · " + items.size() + " titre" + (items.size() > 1 ? "s" : ""), col.title);
-            String cover = App.repo().childProfile() ? "" : col.safeCover();
+            String cover = col.safeCover();
             if (cover.isEmpty()) cover = items.get(0).image();
             c.bindImage(Logic.tmdbSize(cover, "w780"), "");
             c.setOnClickListener(v -> main.push(new BrowseScreen(main, col)));
             cards.add(c);
         }
         if (cards.isEmpty()) removeShelf("collections");
-        else setShelf("collections", "Tes univers à explorer", cards);
+        else setShelf("collections", "Collections", cards);
     }
 
     private void resume(Media cachedMedia, History h) { Actions.resume(main, cachedMedia.id, h); }
 
-    private static final String[] ORDER = {"continue", "collections", "new", "movies", "series"};
+    private static final String[] ORDER = {"continue", "recommended", "daily", "trend_movies", "trend_series", "top_movies", "top_series", "banner", "collections", "new", "movies", "series", "mangas", "foreign"};
 
     private int rank(String key) {
-        for (int i = 0; i < ORDER.length; i++) if (ORDER[i].equals(key)) return i;
+        String k = key.startsWith("banner:") ? "banner" : key;
+        for (int i = 0; i < ORDER.length; i++) if (ORDER[i].equals(k)) return i;
         return ORDER.length;
     }
 
@@ -422,8 +691,8 @@ public final class HomeScreen extends Screen {
         if (MainActivity.isInside(focus, hero)) {
             if (code == KeyEvent.KEYCODE_DPAD_DOWN) { if (!list.isEmpty()) list.get(0).focusLast(); return true; }
             if (code == KeyEvent.KEYCODE_DPAD_UP) { main.focusTopBar(); return true; }
-            if (code == KeyEvent.KEYCODE_DPAD_RIGHT) { if (focus == heroPlay) heroInfo.requestFocus(); return true; }
-            if (code == KeyEvent.KEYCODE_DPAD_LEFT) { if (focus == heroInfo) heroPlay.requestFocus(); return true; }
+            if (code == KeyEvent.KEYCODE_DPAD_RIGHT) { if (focus == heroPlay) heroInfo.requestFocus(); else if (heroItems.size() > 1) showHero(heroIndex + 1, true); return true; }
+            if (code == KeyEvent.KEYCODE_DPAD_LEFT) { if (focus == heroInfo) heroPlay.requestFocus(); else if (heroItems.size() > 1) showHero(heroIndex - 1, true); return true; }
             return false;
         }
         int row = -1;

@@ -3,7 +3,8 @@
 import { canWatch, releaseYear } from '@/lib/profile-audience';
 import { getPersistentSession } from '@/lib/auth-session';
 
-import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useContext, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { completedTitles, fetchSeriesEpisodeKeys, type SeenRow, type CompletionProgress } from '@/lib/completed-titles';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { prepareWatchMedia } from '@/lib/client-media';
@@ -125,9 +126,11 @@ function cardImage(source: string | null | undefined, width = 'w342') {
   return (source || '').replace(/^(https:\/\/image\.tmdb\.org\/t\/p\/)(?:original|w\d+)\//, `$1${width}/`);
 }
 
+const CompletionContext = createContext<ReadonlySet<string>>(new Set());
 function PosterCard({
   item, locked, onOpen, onPrepare, className = '', badge,
 }: { item: MediaItem; locked: boolean; onOpen: () => void; onPrepare?: () => void; className?: string; badge?: string }) {
+  const completed = useContext(CompletionContext).has(String(item.id));
   return (
     <div
       {...activateProps(onOpen)}
@@ -163,6 +166,7 @@ function PosterCard({
       )}
 
       {badge && <span className="absolute left-1.5 top-1.5 z-[3] max-w-[calc(100%-0.75rem)] truncate whitespace-nowrap rounded-md bg-red-600 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-white shadow-lg shadow-black/40 sm:left-2 sm:top-2 sm:px-2 sm:py-1 sm:text-[10px]">{badge}</span>}
+      {completed && <span className="absolute right-1.5 top-1.5 z-[4] rounded-md bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white shadow-lg" aria-label="Titre vu entièrement">✓ Vu</span>}
       {locked && <LockedPosterOverlay />}
     </div>
   );
@@ -215,6 +219,17 @@ export default function Home() {
   const [activeProfile, setActiveProfile] = useState<any>(null);
   const [continueWatchingList, setContinueWatchingList] = useState<MediaItem[]>([]);
   const [recommendationHistory, setRecommendationHistory] = useState<RecommendationHistory[]>([]);
+  const [completionData, setCompletionData] = useState<{ seen: SeenRow[]; history: CompletionProgress[] }>({ seen: [], history: [] });
+  const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const controller = new AbortController();
+    const seenIds = new Set(completionData.seen.map(row => String(row.media_id)));
+    const series = mediaList.filter(item => item.type === 'series' && seenIds.has(String(item.id))).map(item => String(item.id));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Completion data is independent of the main catalogue's loading state.
+    setCompletedIds(completedTitles(mediaList, completionData.seen, completionData.history, {}));
+    if (series.length) void fetchSeriesEpisodeKeys(series, controller.signal).then(keys => { if (!controller.signal.aborted) setCompletedIds(completedTitles(mediaList, completionData.seen, completionData.history, keys)); }).catch(() => {});
+    return () => controller.abort();
+  }, [mediaList, completionData]);
   const [rankings, setRankings] = useState<HomeRankings | null>(rankingBootstrap);
   const [browseSort, setBrowseSort] = useState<'recent' | 'rating'>('recent');
   useEffect(() => {
@@ -347,6 +362,7 @@ export default function Home() {
         }).then(setHero).catch(() => { /* The latest additions remain a valid carousel. */ });
         const historyTask = Promise.all([catalogueTask, watchedTask, progressTask]).then(([mediaData, watchedRes, progressRes]) => {
           const progress = progressRes.data || [];
+          setCompletionData({ seen: watchedRes.data || [], history: progress });
           const recorded = new Set(progress.map(row => String(row.media_id)));
           setRecommendationHistory([...progress, ...(watchedRes.data || []).filter(row => !recorded.has(String(row.media_id))).map(row => ({ media_id: row.media_id, current_time: 600, updated_at: row.watched_at }))]);
           const byId = new Map(mediaData.filter(item => canWatch(item, currentProfile.profile_mode || 'standard')).map(item => [String(item.id), item]));
@@ -591,7 +607,7 @@ export default function Home() {
   const releaseYears = [...new Set(mediaList.filter(item => inCategory(item, selectedType)).map(releaseYear).filter((year): year is number => year !== null))].sort((a, b) => b - a);
 
   return (
-    <main className="yf-page yf-home min-h-screen max-w-[100vw] overflow-x-hidden bg-[#0a0a0b] pb-28 font-sans text-white antialiased selection:bg-red-600 selection:text-white sm:pb-16">
+    <CompletionContext.Provider value={completedIds}><main className="yf-page yf-home min-h-screen max-w-[100vw] overflow-x-hidden bg-[#0a0a0b] pb-28 font-sans text-white antialiased selection:bg-red-600 selection:text-white sm:pb-16">
 
       {showVipModal && <QuotaUnlockModal onClose={() => setShowVipModal(false)} />}
 
@@ -1186,6 +1202,6 @@ export default function Home() {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-    </main>
+    </main></CompletionContext.Provider>
   );
 }

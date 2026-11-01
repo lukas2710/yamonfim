@@ -10,6 +10,8 @@ import android.widget.TextView;
 import com.yamonfilm.tv.App;
 import com.yamonfilm.tv.Cards;
 import com.yamonfilm.tv.Dialogs;
+import com.yamonfilm.tv.Discovery;
+import com.yamonfilm.tv.Logic;
 import com.yamonfilm.tv.MainActivity;
 import com.yamonfilm.tv.Models.Collection;
 import com.yamonfilm.tv.Models.Media;
@@ -31,8 +33,12 @@ public final class BrowseScreen extends Screen {
     private Cards.MediaAdapter adapter;
     private GridView grid;
     private TextView count, selected, empty;
-    private Cards.Shelf chips;
+    private Cards.Shelf chips, years;
+    private int year = -1;
     private int knownSize = -1;
+    private java.util.Set<String> rankedAllowed;
+
+    public BrowseScreen ranked(java.util.Set<String> allowed) { rankedAllowed = new java.util.HashSet<>(allowed); return this; }
 
     public BrowseScreen(MainActivity main, String rail, String label, String type) { this(main, rail, label, type, null); }
 
@@ -71,6 +77,11 @@ public final class BrowseScreen extends Screen {
             chips.title.setVisibility(View.GONE);
             chips.setPadding(0, 0, 0, 0);
             col.addView(chips, Ui.lp(Ui.MATCH, Ui.WRAP, 0, dp(10), 0, 0));
+            // Filtre par année, comme dans les rubriques du site.
+            years = new Cards.Shelf(main, "");
+            years.title.setVisibility(View.GONE);
+            years.setPadding(0, 0, 0, 0);
+            col.addView(years, Ui.lp(Ui.MATCH, Ui.WRAP, 0, 0, 0, 0));
         }
         int widthDp = (int) (main.getResources().getDisplayMetrics().widthPixels / main.getResources().getDisplayMetrics().density);
         int columns = Math.max(3, (widthDp - 2 * Ui.SIDE) / (Cards.POSTER_W + 22));
@@ -95,17 +106,19 @@ public final class BrowseScreen extends Screen {
     }
 
     private void describe(Media m) {
-        StringBuilder sb = new StringBuilder(m.title);
+        StringBuilder sb = new StringBuilder(m.title.replaceAll("\\s*\\(\\d{4}\\)\\s*$", ""));
         sb.append(m.isSeries() ? "  ·  Série" : "  ·  Film");
+        if (m.year > 0) sb.append("  ·  ").append(m.year);
         if (!m.genres.isEmpty()) sb.append("  ·  ").append(m.genres.get(0));
         selected.setText(sb);
     }
 
     @Override protected void onShow(boolean first) {
-        List<Media> all = App.repo().catalogue();
+        List<Media> all = App.repo().visibleCatalogue();
         if (first || all.size() != knownSize) {
             knownSize = all.size();
             buildChips(all);
+            buildYears(all);
             apply();
         }
     }
@@ -113,7 +126,10 @@ public final class BrowseScreen extends Screen {
     private void buildChips(List<Media> all) {
         if (chips == null) return;
         TreeSet<String> genres = new TreeSet<>();
-        for (Media m : all) if (type.equals("all") || m.type.equals(type)) genres.addAll(m.genres);
+        for (Media m : all) if (m.in(type)) genres.addAll(m.genres);
+        // La rubrique elle-même n'est pas un filtre utile (Manga dans Mangas, Langue étrangère dans VO).
+        genres.remove(Logic.MANGA_GENRE);
+        genres.remove(Logic.FOREIGN_GENRE);
         chips.scroll.items.removeAllViews();
         List<String> values = new ArrayList<>();
         values.add(null);
@@ -131,13 +147,40 @@ public final class BrowseScreen extends Screen {
         }
     }
 
+    private void buildYears(List<Media> all) {
+        if (years == null) return;
+        java.util.TreeSet<Integer> set = new java.util.TreeSet<>(java.util.Collections.reverseOrder());
+        for (Media m : all) if (m.in(type) && m.year > 0) set.add(m.year);
+        years.scroll.items.removeAllViews();
+        years.setVisibility(set.size() < 2 ? View.GONE : View.VISIBLE);
+        List<Integer> values = new ArrayList<>();
+        values.add(-1);
+        values.addAll(set);
+        for (Integer y : values) {
+            TextView chip = Ui.chip(main, y < 0 ? "Toutes les années" : String.valueOf(y));
+            chip.setActivated(y == year);
+            chip.setOnClickListener(v -> {
+                year = y;
+                for (int i = 0; i < years.count(); i++) years.item(i).setActivated(years.item(i) == v);
+                apply();
+            });
+            chip.setLayoutParams(new LinearLayout.LayoutParams(Ui.WRAP, Ui.WRAP));
+            years.add(chip, 10);
+        }
+    }
+
     private void apply() {
         List<Media> items;
         if (collection != null) items = App.repo().collectionItems(collection);
         else {
             items = new ArrayList<>();
-            for (Media m : App.repo().catalogue())
-                if ((type.equals("all") || m.type.equals(type)) && (genre == null || m.genres.contains(genre))) items.add(m);
+            for (Media m : App.repo().visibleCatalogue())
+                if (m.in(type) && (genre == null || m.genres.contains(genre)) && (year < 0 || m.year == year)) items.add(m);
+        }
+        if (rankedAllowed != null) {
+            List<Media> permitted = new ArrayList<>();
+            for (Media item : items) if (rankedAllowed.contains(item.id)) permitted.add(item);
+            items = Discovery.bestRated(permitted, App.repo().homeRankings());
         }
         adapter.set(items);
         grid.setSelection(0);

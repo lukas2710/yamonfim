@@ -72,52 +72,6 @@ public final class Api {
     public Session session() { return session; }
     public boolean signedIn() { return session != null; }
 
-    /** The site's authenticated, duration-validated HLS resolver. No new quota reservation. */
-    private String cachedSource = "", cachedToken = "";
-    private JSONObject cachedPlayback;
-    private long cachedUntil;
-
-    public synchronized void invalidatePlayback() { cachedPlayback = null; cachedUntil = 0; }
-
-    public JSONObject playback(String source) throws IOException {
-        return playback(source, new java.util.HashSet<>());
-    }
-
-    public JSONObject playback(String source, java.util.Set<String> excluded) throws IOException {
-        final String token = requireSession().accessToken;
-        synchronized (this) {
-            if (excluded.isEmpty() && cachedPlayback != null && source.equals(cachedSource) && token.equals(cachedToken) && android.os.SystemClock.elapsedRealtime() < cachedUntil) {
-                try { return new JSONObject(cachedPlayback.toString()); } catch (Exception ignored) { }
-            }
-        }
-        JSONObject body = new JSONObject();
-        try { body.put("url", source); body.put("excluded", new JSONArray(excluded)); } catch (Exception ignored) { }
-        Map<String, String> headers = new LinkedHashMap<>();
-        headers.put("Authorization", "Bearer " + requireSession().accessToken);
-        Result result = http("POST", SITE + "api/playback", body.toString(), headers, 62000);
-        if (result.status == 401) throw new AuthExpired();
-        JSONObject data = parseObject(result.body);
-        if (result.status != 200 || data == null) throw new IOException("Le flux vidéo est indisponible. Réessaie dans un instant.");
-        try {
-            java.net.URI resolved = java.net.URI.create(SITE).resolve(data.optString("url", ""));
-            if (!"https".equals(resolved.getScheme()) || !"yamonfi.netlify.app".equals(resolved.getHost()) ||
-                !"/api/proxy/stream.m3u8".equals(resolved.getPath()) || resolved.getUserInfo() != null || resolved.getPort() != -1)
-                throw new IOException("Adresse du flux invalide.");
-            data.put("url", Logic.setParam(resolved.toString(), "profile", "android-tv"));
-            if (excluded.isEmpty()) synchronized (this) { cachedSource = source; cachedToken = token; cachedPlayback = new JSONObject(data.toString()); cachedUntil = android.os.SystemClock.elapsedRealtime() + 45000; }
-            return data;
-        } catch (Exception error) { throw new IOException("Adresse du flux invalide."); }
-    }
-
-    public JSONObject episodeCredits(String url, long durationMs) throws IOException {
-        Logic.PlayerSource source = Logic.playerSource(url);
-        if (source == null || source.season < 1 || source.episode < 1 || durationMs < 300000) return null;
-        String query = "tmdb=" + enc(source.id) + "&season=" + source.season + "&episode=" + source.episode + "&duration=" + (durationMs / 1000.0);
-        Result result = http("GET", SITE + "api/episode-credits?" + query, null, null, 12000);
-        JSONObject body = parseObject(result.body);
-        return result.status == 200 && body != null ? body.optJSONObject("marker") : null;
-    }
-
     // ---------------------------------------------------------------- HTTP
 
     public static Result http(String method, String url, String body, Map<String, String> headers, int readTimeout) throws IOException {
@@ -222,7 +176,7 @@ public final class Api {
         if (s != null) {
             Map<String, String> h = anonHeaders();
             h.put("Authorization", "Bearer " + s.accessToken);
-            try { http("POST", SUPABASE_URL + "/auth/v1/logout?scope=local", "{}", h, 8000); } catch (IOException ignored) { }
+            try { http("POST", SUPABASE_URL + "/auth/v1/logout", "{}", h, 8000); } catch (IOException ignored) { }
         }
     }
 

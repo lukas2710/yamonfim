@@ -34,7 +34,9 @@ public final class SearchScreen extends Screen {
     private GridView grid;
     private Cards.MediaAdapter adapter;
     private int generation, columns;
-    private int selectedYear;
+    // La recherche locale ne doit pas attendre les téléchargements du catalogue.
+    private final java.util.concurrent.ExecutorService searchWorker = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private java.util.concurrent.Future<?> pendingSearch;
     private final Runnable runSearch = this::search;
 
     public SearchScreen(MainActivity main) { super(main); }
@@ -60,24 +62,12 @@ public final class SearchScreen extends Screen {
         left.addView(fieldBox, Ui.lp(dp(330), dp(58), 0, 0, 0, dp(18)));
         keyboard = new Keyboard(main, text -> render());
         left.addView(keyboard);
-        TextView yearButton = Ui.button(main, "Année : toutes", 0, Ui.STYLE_NORMAL);
-        yearButton.setOnClickListener(v -> {
-            java.util.TreeSet<Integer> years = new java.util.TreeSet<>(java.util.Collections.reverseOrder());
-            for (Media m : App.repo().catalogue()) if (m.releaseYear > 0) years.add(m.releaseYear);
-            java.util.List<Integer> options = new ArrayList<>(); options.add(0); options.addAll(years);
-            String[] labels = new String[options.size()]; for (int i=0; i<options.size(); i++) labels[i] = options.get(i) == 0 ? "Toutes les années" : String.valueOf(options.get(i));
-            new android.app.AlertDialog.Builder(main).setTitle("Année de sortie").setItems(labels, (dialog, index) -> { selectedYear = options.get(index); yearButton.setText("Année : " + labels[index]); search(); }).show();
-        });
-        LinearLayout actions = Ui.row(main);
-        Ui.noClip(actions);
-        actions.addView(yearButton);
         boolean voice = main.voiceAvailable();
         if (voice) {
             TextView voiceButton = Ui.button(main, "Dicter", R.drawable.ic_mic, Ui.STYLE_NORMAL);
             voiceButton.setOnClickListener(v -> startVoice());
-            actions.addView(voiceButton, Ui.lp(Ui.WRAP, Ui.WRAP, dp(10), 0, 0, 0));
+            left.addView(voiceButton, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(12), 0, 0));
         }
-        left.addView(actions, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(12), 0, 0));
         TextView hint = Ui.lines(Ui.label(main, voice ? "Astuce : « Dicter » ou la touche micro de la télécommande, puis dis le titre. Les chiffres de la télécommande fonctionnent aussi." : "Les touches chiffres de la télécommande fonctionnent aussi.", 12, Ui.DIM, Ui.W_REGULAR), 3);
         left.addView(hint, Ui.lp(dp(330), Ui.WRAP, 0, dp(14), 0, 0));
         row.addView(left, Ui.lp(dp(350), Ui.MATCH));
@@ -122,6 +112,9 @@ public final class SearchScreen extends Screen {
         String q = keyboard.text();
         field.setText(q.isEmpty() ? "Titre, genre…" : q + "▏");
         field.setTextColor(q.isEmpty() ? Ui.DIM : Ui.TEXT);
+        generation++;
+        if (pendingSearch != null) pendingSearch.cancel(true);
+        if (info != null) info.setText(q.trim().isEmpty() ? "Suggestions" : "Recherche de « " + q.trim() + " »…");
         App.MAIN.removeCallbacks(runSearch);
         App.MAIN.postDelayed(runSearch, q.isEmpty() ? 0 : 140);
     }
@@ -129,27 +122,35 @@ public final class SearchScreen extends Screen {
     private void search() {
         final String q = keyboard.text();
         final int gen = ++generation;
-        final List<Media> all = App.repo().catalogue();
-        final int year = selectedYear;
-        App.io(this, () -> {
+        final List<Media> all = App.repo().visibleCatalogue();
+        if (pendingSearch != null) pendingSearch.cancel(true);
+        pendingSearch = searchWorker.submit(() -> {
+            try {
             List<Media> out = new ArrayList<>();
-            if (q.trim().isEmpty()) { for (int i = 0; i < all.size() && out.size() < 40; i++) if (year == 0 || all.get(i).releaseYear == year) out.add(all.get(i)); return out; }
+            if (q.trim().isEmpty()) { for (int i = 0; i < all.size() && i < 40; i++) out.add(all.get(i)); }
+            else {
             // Meilleurs résultats d'abord (titre exact, début du titre…) ; à égalité, l'ordre du catalogue.
             Logic.SearchMatcher matcher = new Logic.SearchMatcher(q);
             final java.util.Map<Media, Integer> scores = new java.util.IdentityHashMap<>();
             for (Media m : all) {
-                if (year != 0 && m.releaseYear != year) continue;
+                if (Thread.currentThread().isInterrupted()) return;
                 int score = matcher.score(m.index());
                 if (score > 0) { scores.put(m, score); out.add(m); }
             }
             java.util.Collections.sort(out, (a, b) -> Integer.compare(scores.get(b), scores.get(a)));
-            return out;
-        }, (list, e) -> {
-            if (gen != generation || list == null) return;
+            }
+            App.MAIN.post(() -> {
+            if (!alive() || gen != generation) return;
             boolean gridFocused = grid.hasFocus();
-            adapter.set(list);
-            if (list.isEmpty() && gridFocused) keyboard.firstKey().requestFocus();
+            adapter.set(out);
+            if (out.isEmpty() && gridFocused) keyboard.firstKey().requestFocus();
             updateInfo();
+            });
+            } catch (Exception error) {
+                App.MAIN.post(() -> {
+                    if (alive() && gen == generation) info.setText("Recherche impossible. Efface puis réessaie.");
+                });
+            }
         });
     }
 
@@ -164,7 +165,7 @@ public final class SearchScreen extends Screen {
 
     private void updateInfo() {
         String q = keyboard.text().trim();
-        boolean nothing = !q.isEmpty() && adapter.getCount() == 0 && !App.repo().catalogue().isEmpty() && !App.repo().childProfile();
+        boolean nothing = !q.isEmpty() && adapter.getCount() == 0 && !App.repo().catalogue().isEmpty() && "standard".equals(App.repo().profileMode());
         if (requestButton.hasFocus() && !nothing) keyboard.firstKey().requestFocus();
         requestButton.setVisibility(nothing ? View.VISIBLE : View.GONE);
         if (App.repo().catalogue().isEmpty()) info.setText("Le catalogue est en cours de chargement…");
@@ -174,6 +175,8 @@ public final class SearchScreen extends Screen {
     }
 
     @Override protected void onShow(boolean first) { if (!first) search(); }
+
+    @Override protected void onRefresh() { render(); }
 
     @Override protected boolean onKey(KeyEvent e) {
         int code = e.getKeyCode();
@@ -204,5 +207,10 @@ public final class SearchScreen extends Screen {
 
     @Override protected View defaultFocus() { return keyboard.firstKey(); }
 
-    @Override protected void onDestroy() { App.MAIN.removeCallbacks(runSearch); }
+    @Override protected void onDestroy() {
+        generation++;
+        App.MAIN.removeCallbacks(runSearch);
+        if (pendingSearch != null) pendingSearch.cancel(true);
+        searchWorker.shutdownNow();
+    }
 }

@@ -53,7 +53,7 @@ public final class ProfilesScreen extends Screen {
 
     @Override protected View create() {
         FrameLayout root = new FrameLayout(main);
-        root.setBackground(Ui.gradient(GradientDrawable.Orientation.TOP_BOTTOM, 0xFF141722, 0xFF060A15));
+        root.setBackground(Ui.gradient(GradientDrawable.Orientation.TOP_BOTTOM, 0xFF0F1830, 0xFF060A15));
         LinearLayout col = Ui.column(main);
         col.setGravity(Gravity.CENTER_HORIZONTAL);
         Ui.noClip(col);
@@ -101,7 +101,7 @@ public final class ProfilesScreen extends Screen {
         tiles.removeAllViews();
         View focus = null;
         for (Profile p : profiles) {
-            View tile = tile(main, p.name, p.imageAvatar() ? p.avatar : null, p.initial(), 0);
+            View tile = tile(main, p.name + (p.modeLabel().isEmpty() ? "" : "  ·  " + p.modeLabel()), p.imageAvatar() ? p.avatar : null, p.initial(), 0);
             tile.setTag(p.id);
             tile.setOnClickListener(v -> choose(p));
             tiles.addView(tile);
@@ -146,7 +146,7 @@ public final class ProfilesScreen extends Screen {
         tile.setPadding(dp(18), 0, dp(18), 0);
         Ui.noClip(tile);
         FrameLayout avatar = new FrameLayout(c);
-        avatar.setBackground(Ui.gradient(GradientDrawable.Orientation.TL_BR, 0xFF2A2F3D, 0xFF181B24));
+        avatar.setBackground(Ui.gradient(GradientDrawable.Orientation.TL_BR, 0xFF23304F, 0xFF111A30));
         StateListDrawable ring = new StateListDrawable();
         ring.addState(Ui.focusedState(), Ui.ring(Ui.FOCUS, 4, 30));
         ring.addState(new int[]{}, Ui.ring(0x1AFFFFFF, 1, 30));
@@ -160,7 +160,7 @@ public final class ProfilesScreen extends Screen {
             TextView letter = Ui.label(c, initial, 58, Ui.TEXT, Ui.W_BOLD);
             letter.setGravity(Gravity.CENTER);
             avatar.addView(letter, Ui.flp(Ui.MATCH, Ui.MATCH, Gravity.CENTER));
-            letter.setBackground(Ui.gradient(GradientDrawable.Orientation.TL_BR, 0xFFFF3B47, 0xFFB2060F));
+            letter.setBackground(Ui.gradient(GradientDrawable.Orientation.TL_BR, 0xFF3D74FF, 0xFF002A9C));
             if (image != null) {
                 ImageView img = new ImageView(c);
                 img.setScaleType(ImageView.ScaleType.CENTER_CROP);

@@ -27,7 +27,7 @@ public final class LoginScreen extends Screen {
 
     @Override protected View create() {
         FrameLayout root = new FrameLayout(main);
-        root.setBackground(Ui.gradient(GradientDrawable.Orientation.TL_BR, 0xFF102759, 0xFF0D0E14, 0xFF060A15));
+        root.setBackground(Ui.gradient(GradientDrawable.Orientation.TL_BR, 0xFF051545, 0xFF08102A, 0xFF060A15));
         LinearLayout row = Ui.row(main);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(80), dp(40), dp(80), dp(40));
@@ -51,7 +51,7 @@ public final class LoginScreen extends Screen {
         row.addView(brand, new LinearLayout.LayoutParams(0, Ui.WRAP, 1f));
 
         LinearLayout form = Ui.column(main);
-        form.setBackground(Ui.stroked(0xE6111319, 0x1FFFFFFF, 1, 28));
+        form.setBackground(Ui.stroked(0xE60C1428, 0x1FFFFFFF, 1, 28));
         form.setPadding(dp(40), dp(36), dp(40), dp(32));
         form.setElevation(dp(20));
         Ui.noClip(form);

@@ -57,7 +57,7 @@ public final class RequestsScreen extends Screen {
         types.addView(seriesChip, Ui.lp(Ui.WRAP, Ui.WRAP, dp(10), 0, 0, 0));
         left.addView(types);
         field = Ui.lines(Ui.text(main, 20, Ui.TEXT, true), 1);
-        field.setBackground(Ui.round(0xFF1C1F28, 14));
+        field.setBackground(Ui.round(0xFF16203A, 14));
         field.setPadding(dp(18), dp(12), dp(18), dp(12));
         left.addView(field, Ui.lp(dp(330), Ui.WRAP, 0, dp(12), 0, dp(12)));
         keyboard = new Keyboard(main, text -> render());
@@ -137,14 +137,14 @@ public final class RequestsScreen extends Screen {
         item.setClickable(true);
         item.setPadding(dp(10), dp(10), dp(16), dp(10));
         android.graphics.drawable.StateListDrawable bg = new android.graphics.drawable.StateListDrawable();
-        android.graphics.drawable.GradientDrawable on = Ui.round(0xFF262A35, 14);
+        android.graphics.drawable.GradientDrawable on = Ui.round(0xFF1F2A44, 14);
         on.setStroke(dp(3), Ui.FOCUS);
         bg.addState(Ui.focusedState(), on);
-        bg.addState(new int[]{}, Ui.round(0xFF15171E, 14));
+        bg.addState(new int[]{}, Ui.round(0xFF0F172B, 14));
         item.setBackground(bg);
         ImageView img = new ImageView(main);
         img.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        img.setBackground(Ui.round(0xFF22252F, 8));
+        img.setBackground(Ui.round(0xFF1B2640, 8));
         Ui.clipRound(img, 8);
         item.addView(img, Ui.lp(dp(54), dp(80)));
         App.images().load(img, com.yamonfilm.tv.Logic.tmdbSize(poster, "w185"), dp(54), dp(80));

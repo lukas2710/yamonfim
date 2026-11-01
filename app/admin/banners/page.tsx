@@ -4,6 +4,7 @@ import { clearClientResources } from '@/lib/resource-cache';
 
 import { fetchCatalogueCards } from '@/lib/client-catalogue';
 import { createSearchMatcher } from '@/lib/search';
+import { useProgressiveList } from '@/lib/use-progressive-list';
 
 import SectionNavigation from '@/components/SectionNavigation';
 import PageHero from '@/components/PageHero';
@@ -195,6 +196,7 @@ export default function AdminBannersPage() {
     const matches = createSearchMatcher(search);
     return mediaList.filter(item => matches(item.title));
   }, [mediaList, search]);
+  const pickerWindow = useProgressiveList(filteredMedia.length, search);
   if (loadingAuth) {
     return <main className={`yf-page yf-banners ${styles.page}`}><div className={styles.loading}>Vérification de votre accès administrateur…</div></main>;
   }
@@ -229,13 +231,14 @@ export default function AdminBannersPage() {
               <div className={styles.selectionHeading}><h3>Votre casting</h3><span>{selectedMediaIds.length} sélectionné{selectedMediaIds.length > 1 ? 's' : ''}</span></div>
               <input aria-label="Rechercher un film ou une série" type="search" placeholder="Rechercher un film, une série…" value={search} onChange={e => setSearch(e.target.value)} />
               <div className={styles.mediaList}>
-                {filteredMedia.map(m => {
+                {filteredMedia.slice(0, pickerWindow.limit).map(m => {
                   const selected = isSelected(String(m.id));
                   return <button type="button" key={m.id} aria-pressed={selected} onClick={() => handleMediaToggle(String(m.id))} className={`${styles.media} ${selected ? styles.selected : ''}`}>
                     <div className={styles.poster}>{m.poster && <img decoding="async" src={m.poster} alt="" />}</div><span className={styles.mediaName}><strong>{m.title}</strong><small>{m.type === 'movie' ? 'FILM' : 'SÉRIE'}</small></span><span className={styles.check}>{selected ? '✓' : '+'}</span>
                   </button>;
                 })}
                 {filteredMedia.length === 0 && <p className={styles.empty}>{search ? 'Aucun titre ne correspond à votre recherche.' : 'Votre catalogue est encore vide.'}</p>}
+                <div ref={pickerWindow.sentinel} aria-hidden="true" style={{ height: 1 }} />
               </div>
               {selectedSeries.length > 0 && <div className={styles.seasons}>
                 <p>Pour une série, choisis la série complète ou mets en avant une saison : sa carte affichera l’affiche de la saison et l’étiquette « Nouveau », et ouvrira la série sur cette saison.</p>

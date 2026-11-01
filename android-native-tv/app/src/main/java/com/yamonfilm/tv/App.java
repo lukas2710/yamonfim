@@ -17,6 +17,7 @@ public final class App extends Application {
         t.setPriority(Thread.NORM_PRIORITY - 1);
         return t;
     });
+    private static final ExecutorService DETAILS = java.util.concurrent.Executors.newFixedThreadPool(2, r -> new Thread(r, "yamonfilm-details"));
 
     private Repo repo;
     private Images images;
@@ -36,7 +37,17 @@ public final class App extends Application {
 
     /** Lance un travail réseau ; le résultat revient sur le fil d'interface si `alive` est encore vrai. */
     public static <T> void io(final Alive alive, final Work<T> work, final Done<T> done) {
-        IO.execute(() -> {
+        execute(IO, alive, work, done);
+    }
+
+    /** Les fiches ne patientent pas derrière les actualisations de l'accueil. */
+    public static <T> void detail(final Alive alive, final Work<T> work, final Done<T> done) {
+        execute(DETAILS, alive, work, done);
+    }
+
+    private static <T> void execute(ExecutorService executor, final Alive alive, final Work<T> work, final Done<T> done) {
+        executor.execute(() -> {
+            if (alive != null && !alive.alive()) return;
             T value = null; Exception error = null;
             try { value = work.run(); } catch (Exception e) { error = e; }
             final T v = value; final Exception err = error;

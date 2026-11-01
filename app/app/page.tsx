@@ -6,8 +6,8 @@ export const metadata: Metadata = {
   description: 'Installe YAMONFILM sur ta télévision Android TV, Google TV, Fire TV ou décodeur Bbox, et sur ton iPhone ou Android.',
 };
 
-const APK = '/yamonfilm-tv.apk';
-const VERSION = '2.6.2';
+const APK = '/yamonfilm-tv.apk?v=2.7.0';
+const VERSION = '2.7.0';
 
 const GUIDES = [
   {

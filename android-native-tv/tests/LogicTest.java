@@ -16,6 +16,17 @@ public final class LogicTest {
 
     public static void main(String[] args) throws Exception {
         // lib/search.test.mjs
+        // Profils Kids / Junior : seulement les vrais titres pour enfants.
+        java.util.List<String> nobody = java.util.Arrays.asList("Action", "Thriller", "Crime");
+        check(!Logic.canWatch("kids", nobody, "kids"), "kids : thriller classé kids refusé");
+        check(!Logic.canWatch("kids", java.util.Arrays.asList("Science-Fiction", "Action", "Aventure"), "kids"), "kids : film d'action refusé");
+        check(Logic.canWatch("kids", java.util.Arrays.asList("Animation", "Comédie", "Familial", "Kids"), "kids"), "kids : Bluey accepté");
+        check(Logic.canWatch("kids", java.util.Arrays.asList("Familial"), "kids"), "kids : familial classé kids accepté");
+        check(!Logic.canWatch("junior", java.util.Arrays.asList("Horreur", "Comédie"), "junior"), "junior : Chucky refusé");
+        check(!Logic.canWatch("standard", java.util.Arrays.asList("Animation", "Familial", "Horreur"), "kids"), "kids : Scooby horreur refusé");
+        check(Logic.canWatch("standard", java.util.Arrays.asList("Comédie", "Familial"), "junior"), "junior : familial accepté");
+        check(!Logic.canWatch("standard", java.util.Arrays.asList("Comédie", "Familial"), "kids"), "kids : sitcom familiale refusée");
+        check(Logic.canWatch("standard", nobody, "standard"), "standard : tout le catalogue");
         check(new Logic.SearchMatcher("  le seigneur DES anneaux ").matches("Le Seigneur des Anneaux : Les Deux Tours"), "accents et casse");
         check(new Logic.SearchMatcher("l ete").matches("L’été"), "apostrophe");
         check(new Logic.SearchMatcher("oeuvre").matches("L’Œuvre"), "ligature oe");
@@ -108,41 +119,6 @@ public final class LogicTest {
         check(Logic.vipExpiration("2026-01-31T10:00:00+00:00", "3m") > 0 && Logic.vipExpiration("x", "3m") == -1, "fin VIP");
         check(Logic.tmdbSize("https://image.tmdb.org/t/p/original/a.jpg", "w342").equals("https://image.tmdb.org/t/p/w342/a.jpg"), "taille TMDB");
 
-        check(Logic.isMoviezPlayer("https://api.moviez.ac/serie/2004/1/1"), "Moviez utilise le nouveau résolveur HLS");
-        check(!Logic.isMoviezPlayer("https://api.moviez.ac.evil.test/1"), "hôte Moviez exact");
-        Logic.AutoNext next = new Logic.AutoNext();
-        check(!next.update(2964000, 3000000, true, true) && next.remaining == -1, "avant le décompte");
-        for (int n=5;n>=1;n--) check(!next.update(3000000-n*1000, 3000000, true, true) && next.remaining == n, "décompte " + n);
-        check(!next.update(2970000, 3000000, true, true), "ne coupe pas les trente dernières secondes");
-        check(next.update(3000000, 3000000, true, true), "suite à la fin");
-        next.reset(); next.marker(2800000,3000000);
-        check(!next.update(2800000,3000000,true,true) && next.remaining == 5, "décompte au générique");
-        check(next.update(2805000,3000000,true,true), "suite après le décompte du générique");
-        check(!next.update(2805000,3020000,true,true), "autre version vidéo rejetée");
-        check(!next.update(3000000,3000000,false,true), "pause respectée");
-        next.cancel(); check(!next.update(3000000,3000000,true,true), "annulation respectée");
-        next.reset(); check(!next.update(3000000,3000000,true,false), "dernier épisode");
-        check(Logic.isResolvedPlayer("/api/catalogue-player?tmdb=1396&type=tv&season=1&episode=2"), "catalogue résolu sans page 404");
-        check(!Logic.isResolvedPlayer("https://yamonfi.netlify.app.evil.test/api/catalogue-player?tmdb=1396&type=movie"), "hôte catalogue exact");
-        check(Logic.seekTarget(5000, -10000, 60000) == 0, "retour limité au début");
-        check(Logic.seekTarget(55000, 30000, 60000) == 59000, "avance limitée à la fin");
-        check(Logic.seekTarget(0, 10000, 500) == 0, "durée très courte");
-        check(Logic.seekTarget(10000, 10000, 0) == 20000, "durée encore inconnue");
-        check(Logic.seekStep(0) == 10000 && Logic.seekStep(5) == 10000, "appui court précis");
-        check(Logic.seekStep(6) == 30000 && Logic.seekStep(16) == 60000, "appui prolongé accéléré");
-        check(Logic.canWatch("kids", "kids"), "Kids autorise Kids");
-        check(!Logic.canWatch("junior", "kids"), "Kids exclut Junior");
-        check(Logic.canWatch("kids", "junior") && Logic.canWatch("junior", "junior"), "Junior inclut les deux publics");
-        check(!Logic.canWatch("standard", "junior"), "Junior exclut Standard");
-        check(Logic.releaseYear("Un film (2024)") == 2024 && Logic.releaseYear("2001 : odyssée") == 0, "année de sortie sans confusion avec le titre");
-        next.reset(); next.ended(true); check(next.active(), "fin même sur épisode court");
-        com.yamonfilm.tv.Models.Media series = new com.yamonfilm.tv.Models.Media();
-        com.yamonfilm.tv.Models.Season first = new com.yamonfilm.tv.Models.Season(), empty = new com.yamonfilm.tv.Models.Season(), second = new com.yamonfilm.tv.Models.Season();
-        first.episodes.add(new com.yamonfilm.tv.Models.Episode()); second.episodes.add(new com.yamonfilm.tv.Models.Episode());
-        series.seasons = java.util.Arrays.asList(first, empty, second);
-        int[] continuation = series.next(0,0);
-        check(continuation[0] == 2 && continuation[1] == 0, "saison suivante en ignorant une saison vide");
-        check(series.next(2,0) == null, "arrêt au dernier épisode de la série");
         System.out.println(passed + " vérifications réussies.");
     }
 }

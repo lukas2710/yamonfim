@@ -2,7 +2,8 @@
 
 import { clearClientResources } from '@/lib/resource-cache';
 
-import { fetchCatalogueRows } from '@/lib/catalogue';
+import { fetchCatalogueCards } from '@/lib/client-catalogue';
+import { useProgressiveList } from '@/lib/use-progressive-list';
 import { createSearchMatcher, searchQueryVariants } from '@/lib/search';
 
 import SectionNavigation from '@/components/SectionNavigation';
@@ -111,6 +112,7 @@ export default function AdminPage() {
   const [loadingAuth, setLoadingAuth] = useState(true);
 
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
+  const catalogueEdits = useRef(new Map<string, MediaItem | null>());
   const [editingId, setEditingId] = useState<any>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -160,7 +162,13 @@ export default function AdminPage() {
 
   async function fetchMedia() {
     clearClientResources();
-    try { setMediaList(await fetchCatalogueRows<MediaItem>(supabase, '*')); }
+    const publish = (rows: MediaItem[]) => {
+      const ids = new Set(rows.map(row => String(row.id)));
+      const merged = rows.flatMap(row => { const id = String(row.id); return catalogueEdits.current.has(id) ? catalogueEdits.current.get(id) ? [catalogueEdits.current.get(id)!] : [] : [row]; });
+      for (const [id, item] of catalogueEdits.current) if (item && !ids.has(id)) merged.unshift(item);
+      setMediaList(merged);
+    };
+    try { publish(await fetchCatalogueCards<MediaItem>(supabase, publish)); }
     catch { setErrorMsg('Le catalogue n’a pas pu être chargé entièrement. Réessaie avant de modifier ou ajouter un titre.'); }
   }
 
@@ -442,7 +450,12 @@ export default function AdminPage() {
     setLoading(false);
   };
 
-  const handleEdit = (item: MediaItem) => {
+  const handleEdit = async (item: MediaItem) => {
+    setErrorMsg('');
+    const { data, error } = await supabase.from('media').select('*').eq('id', item.id).single();
+    if (error || !data) { setErrorMsg('La fiche ne peut pas être chargée. Réessaie.'); return; }
+    item = data as MediaItem;
+    setMediaList(rows => rows.map(row => String(row.id) === String(item.id) ? item : row));
     setEditingId(item.id);
     setSelectedTmdbId(item.tmdb_id || '');
     setTitle(item.title || '');
@@ -487,6 +500,7 @@ export default function AdminPage() {
       setErrorMsg(`Erreur suppression : ${error.message}`);
     } else {
       setMessage('Média supprimé.');
+      catalogueEdits.current.set(String(id), null);
       if (editingId === id) handleCancel();
       fetchMedia();
     }
@@ -582,6 +596,7 @@ export default function AdminPage() {
         setErrorMsg(duplicateErrorMessage(error, `Erreur modification : ${error.message}`));
       } else {
         setMessage(`« ${title} » a été mis à jour.${await afterSave(editingId)}`);
+        catalogueEdits.current.set(String(editingId), { ...payload, id: editingId } as MediaItem);
         handleCancel();
         fetchMedia();
       }
@@ -599,6 +614,7 @@ export default function AdminPage() {
         }
 
         setMessage(`« ${title} » a été ajouté au catalogue.${inserted ? await afterSave(inserted.id) : ''}`);
+        if (inserted) catalogueEdits.current.set(String(inserted.id), { ...payload, id: inserted.id } as MediaItem);
         handleCancel();
         fetchMedia();
       }
@@ -616,6 +632,7 @@ export default function AdminPage() {
     const matches = createSearchMatcher(libraryQuery);
     return mediaList.filter(m => (libraryType === 'all' || m.type === libraryType) && matches(m.title, ...(m.genres || [])));
   }, [mediaList, libraryQuery, libraryType]);
+  const libraryWindow = useProgressiveList(filteredLibrary.length, `${libraryQuery}/${libraryType}`);
 
   const counts = useMemo(() => ({
     all: mediaList.length,
@@ -1066,7 +1083,7 @@ export default function AdminPage() {
                   <p className="text-sm text-zinc-500">Aucun média trouvé.</p>
                 </div>
               ) : (
-                filteredLibrary.map(item => {
+                filteredLibrary.slice(0, libraryWindow.limit).map(item => {
                   const isCurrent = isEditing && editingId === item.id;
                   const eps = episodeCount(item.seasons);
                   return (
@@ -1134,6 +1151,7 @@ export default function AdminPage() {
                   );
                 })
               )}
+              <div ref={libraryWindow.sentinel} aria-hidden="true" style={{ height: 1 }} />
             </div>
           </section>
         </div>

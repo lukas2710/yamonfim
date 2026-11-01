@@ -4,8 +4,9 @@ import { getPersistentSession } from '@/lib/auth-session';
 
 import { clearClientResources } from '@/lib/resource-cache';
 
-import { fetchCatalogueRows } from '@/lib/catalogue';
+import { fetchCatalogueCards } from '@/lib/client-catalogue';
 import { createSearchMatcher } from '@/lib/search';
+import { useProgressiveList } from '@/lib/use-progressive-list';
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import Link from 'next/link';
@@ -47,7 +48,7 @@ export default function AdminCollectionsPage() {
         if (!alive) return;
         setAuthorized(true);
         const [media, groups] = await Promise.all([
-          fetchCatalogueRows<CollectionMedia>(supabase, 'id,title,type,poster,backdrop'),
+          fetchCatalogueCards<CollectionMedia>(supabase, setCatalogue),
           supabase.from('media_collections').select('*').order('position').order('created_at'),
         ]);
         if (!alive) return;
@@ -109,6 +110,7 @@ export default function AdminCollectionsPage() {
     const matches = createSearchMatcher(search);
     return catalogue.filter(item => matches(item.title));
   }, [catalogue, search]);
+  const pickerWindow = useProgressiveList(filtered.length, search);
   const cover = safeCollectionImage(draft.cover_url) || selected[0]?.backdrop || selected[0]?.poster;
   if (!authorized) return <main className="yf-page min-h-screen bg-[#0a0a0b] p-10 text-zinc-400" role="status">Vérification de l’accès administrateur…</main>;
 
@@ -128,7 +130,7 @@ export default function AdminCollectionsPage() {
             <div className="yf-collection-options"><label>Ordre sur l’accueil<input type="number" min={0} max={9999} required value={draft.position} onChange={event => setDraft({ ...draft, position: Number(event.target.value) })} /></label><label className="yf-collection-check"><input type="checkbox" checked={draft.active} onChange={event => setDraft({ ...draft, active: event.target.checked })} /> Visible sur l’accueil</label></div>
             <div className="yf-collection-selection"><h3>Titres sélectionnés <span>{selected.length}/200</span></h3><p>Utilise les flèches pour choisir leur ordre dans la collection.</p>{!selected.length && <p className="yf-collection-empty">Choisis tes premiers titres dans le catalogue ci-dessous.</p>}<ol>{selected.map((item, index) => <li key={item.id}><span className="yf-collection-order">{index + 1}</span><strong>{item.title}</strong><button type="button" aria-label={`Monter ${item.title}`} disabled={index === 0} onClick={() => move(index, -1)}>↑</button><button type="button" aria-label={`Descendre ${item.title}`} disabled={index === selected.length - 1} onClick={() => move(index, 1)}>↓</button><button type="button" aria-label={`Retirer ${item.title} de la collection`} onClick={() => toggle(String(item.id))}>×</button></li>)}</ol></div>
             <label>Rechercher dans le catalogue<input type="search" placeholder="Fast, Star Wars, Harry Potter…" value={search} onChange={event => setSearch(event.target.value)} /></label>
-            <div className="yf-collection-picker" aria-label="Titres disponibles">{filtered.map(item => <label key={item.id} className="yf-collection-pick"><input type="checkbox" checked={draft.media_ids.includes(String(item.id))} disabled={!draft.media_ids.includes(String(item.id)) && selected.length >= 200} onChange={() => toggle(String(item.id))} />{item.poster && <img decoding="async" src={item.poster} alt="" loading="lazy" />}<span><strong>{item.title}</strong><small>{item.type === 'series' ? 'Série' : 'Film'}</small></span></label>)}{!filtered.length && <p className="yf-collection-empty">Aucun titre trouvé. Ajoute d’abord le contenu dans le catalogue admin.</p>}</div>
+            <div className="yf-collection-picker" aria-label="Titres disponibles">{filtered.slice(0, pickerWindow.limit).map(item => <label key={item.id} className="yf-collection-pick"><input type="checkbox" checked={draft.media_ids.includes(String(item.id))} disabled={!draft.media_ids.includes(String(item.id)) && selected.length >= 200} onChange={() => toggle(String(item.id))} />{item.poster && <img decoding="async" src={item.poster} alt="" loading="lazy" />}<span><strong>{item.title}</strong><small>{item.type === 'series' ? 'Série' : 'Film'}</small></span></label>)}<div ref={pickerWindow.sentinel} aria-hidden="true" style={{ height: 1 }} />{!filtered.length && <p className="yf-collection-empty">Aucun titre trouvé. Ajoute d’abord le contenu dans le catalogue admin.</p>}</div>
             <button className="yf-collection-submit" type="submit">{busy ? 'Enregistrement…' : editing ? 'Enregistrer les modifications' : draft.active ? 'Publier la collection' : 'Enregistrer le brouillon'}</button>
           </fieldset>
         </form>

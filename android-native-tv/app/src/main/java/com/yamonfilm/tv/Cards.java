@@ -45,7 +45,7 @@ public final class Cards {
             this.landscape = landscape;
             imgW = dp(widthDp); imgH = dp(heightDp);
             setLayoutParams(new ViewGroup.MarginLayoutParams(imgW, imgH));
-            setBackground(Ui.gradient(android.graphics.drawable.GradientDrawable.Orientation.TL_BR, 0xFF172443, 0xFF0B1224));
+            setBackground(Ui.gradient(android.graphics.drawable.GradientDrawable.Orientation.TL_BR, 0xFF17213C, 0xFF0D1529));
             setForeground(Ui.focusRing(14));
             Ui.clipRound(this, 14);
             setFocusable(focusable);
@@ -57,7 +57,7 @@ public final class Cards {
             image = new ImageView(c);
             image.setScaleType(ImageView.ScaleType.CENTER_CROP);
             addView(image, Ui.flp(Ui.MATCH, Ui.MATCH, 0));
-            if (focusable) Ui.onFocus(this, landscape ? 1.035f : 1.045f, null);
+            if (focusable) Ui.onFocus(this, landscape ? 1.08f : 1.1f, null);
         }
 
         private void ensureCaption() {
@@ -68,7 +68,7 @@ public final class Cards {
             addView(shade, Ui.flp(Ui.MATCH, imgH * 2 / 3, Gravity.BOTTOM));
             LinearLayout box = Ui.column(c);
             box.setPadding(dp(14), 0, dp(14), dp(13));
-            subtitle = Ui.lines(Ui.text(c, 11, 0xFF8AAFFF, Ui.W_SEMIBOLD), 1);
+            subtitle = Ui.lines(Ui.text(c, 11, 0xFF7FA6FF, Ui.W_SEMIBOLD), 1);
             subtitle.setLetterSpacing(0.12f);
             title = Ui.lines(Ui.text(c, 15, Ui.TEXT, Ui.W_SEMIBOLD), 2);
             box.addView(subtitle);
@@ -138,8 +138,8 @@ public final class Cards {
             boolean changed = selected != isSelected();
             super.setSelected(selected);
             if (changed && !isFocusable()) {
-                float s = selected ? (landscape ? 1.035f : 1.045f) : 1f;
-                animate().scaleX(s).scaleY(s).translationZ(selected ? dp(10) : 0).setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).setDuration(180).start();
+                float s = selected ? (landscape ? 1.07f : 1.1f) : 1f;
+                Ui.focusMotion(this, selected, s);
             }
         }
     }
@@ -293,6 +293,7 @@ public final class Cards {
             card.setLayoutParams(new GridView.LayoutParams(card.imgW, card.imgH));
             Media m = items.get(position);
             card.bindMedia(m);
+            card.badge(App.repo().completed(m.id) ? "✓ Vu" : null, 0xE6168A45);
             return card;
         }
     }

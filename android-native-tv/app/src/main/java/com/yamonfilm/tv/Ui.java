@@ -28,14 +28,16 @@ public final class Ui {
 
     // Couleurs
     public static final int BG = 0xFF060A15;
-    public static final int SURFACE = 0xFF10192D;
-    public static final int SURFACE2 = 0xFF192743;
+    public static final int SURFACE = 0xFF0C1428;
+    public static final int SURFACE2 = 0xFF141E38;
     public static final int GLASS = 0x1FFFFFFF;
     public static final int STROKE = 0x26FFFFFF;
     public static final int TEXT = 0xFFF6F7F9;
-    public static final int MUTED = 0xFFB7B7BF;
+    public static final int MUTED = 0xFFA9AFBD;
     public static final int DIM = 0xFF6E7485;
     public static final int ACCENT = 0xFF003CDA;
+    /** Bleu clair des petits titres, comme sur le site (#87A5FF) : lisible sur le fond marine. */
+    public static final int ACCENT_TEXT = 0xFF87A5FF;
     public static final int GOLD = 0xFFF5B83D;
     public static final int GREEN = 0xFF2BD576;
     public static final int FOCUS = 0xFFFFFFFF;
@@ -193,11 +195,33 @@ public final class Ui {
 
     private static final DecelerateInterpolator EASE = new DecelerateInterpolator(1.6f);
 
+    public static void focusMotion(View view, boolean selected, float scale) {
+        view.animate().cancel();
+        if (!android.animation.ValueAnimator.areAnimatorsEnabled()) {
+            view.setScaleX(selected ? scale : 1f);
+            view.setScaleY(selected ? scale : 1f);
+            view.setTranslationZ(selected ? dp(10) : 0);
+            return;
+        }
+        view.animate().scaleX(selected ? scale : 1f).scaleY(selected ? scale : 1f)
+                .translationZ(selected ? dp(10) : 0).setInterpolator(EASE)
+                .setDuration(selected ? 135 : 110).start();
+    }
+
+    public static void enter(View view) {
+        view.animate().cancel();
+        view.setAlpha(1f);
+        view.setTranslationY(0f);
+        if (!android.animation.ValueAnimator.areAnimatorsEnabled()) return;
+        view.setAlpha(0f);
+        view.setTranslationY(dp(14));
+        view.animate().alpha(1f).translationY(0f).setDuration(190).setInterpolator(EASE).start();
+    }
+
     /** Effet de sélection : zoom fluide et élévation, plus action facultative à la prise de focus. */
     public static void onFocus(final View v, final float scale, final Runnable focused) {
         v.setOnFocusChangeListener((view, has) -> {
-            view.animate().scaleX(has ? scale : 1f).scaleY(has ? scale : 1f).translationZ(has ? dp(4) : 0)
-                    .setInterpolator(EASE).setDuration(120).start();
+            focusMotion(view, has, scale);
             if (has && focused != null) focused.run();
         });
     }
@@ -218,8 +242,8 @@ public final class Ui {
         int normalBg = style == STYLE_PRIMARY ? ACCENT : style == STYLE_GOLD ? GOLD : style == STYLE_GHOST ? 0x14FFFFFF : 0x29FFFFFF;
         int normalText = style == STYLE_GOLD ? 0xFF1A1206 : TEXT;
         StateListDrawable bg = new StateListDrawable();
-        bg.addState(FOCUSED, round(FOCUS, 10));
-        bg.addState(EMPTY, "Regarder".equals(label) ? watchBackground() : style == STYLE_GHOST ? stroked(normalBg, 0x33FFFFFF, 1.5f, 10) : round(normalBg, 10));
+        bg.addState(FOCUSED, round(FOCUS, 26));
+        bg.addState(EMPTY, style == STYLE_GHOST ? stroked(normalBg, 0x33FFFFFF, 1.5f, 26) : round(normalBg, 26));
         b.setBackground(bg);
         ColorStateList colors = new ColorStateList(new int[][]{FOCUSED, EMPTY}, new int[]{INK, normalText});
         b.setTextColor(colors);
@@ -231,29 +255,8 @@ public final class Ui {
             b.setCompoundDrawableTintList(colors);
         }
         b.setElevation(0);
-        onFocus(b, 1.035f, null);
+        onFocus(b, 1.07f, null);
         return b;
-    }
-
-    private static Drawable watchBackground() {
-        return new android.graphics.drawable.Drawable() {
-            final android.graphics.Paint p = new android.graphics.Paint(3);
-            @Override public void draw(android.graphics.Canvas canvas) {
-                android.graphics.Rect b = getBounds();
-                android.graphics.Path clip = new android.graphics.Path();
-                clip.addRoundRect(new android.graphics.RectF(b), dp(10), dp(10), android.graphics.Path.Direction.CW);
-                int save = canvas.save(); canvas.clipPath(clip);
-                p.setColor(ACCENT); canvas.drawRect(b, p);
-                android.graphics.Path tip = new android.graphics.Path();
-                tip.moveTo(b.left + b.width() * .94f, b.top);
-                tip.lineTo(b.right, b.top); tip.lineTo(b.right, b.bottom);
-                tip.lineTo(b.left + b.width() * .86f, b.bottom); tip.close();
-                p.setColor(0xFFF02D3F); canvas.drawPath(tip, p); canvas.restoreToCount(save);
-            }
-            @Override public void setAlpha(int alpha) { p.setAlpha(alpha); }
-            @Override public void setColorFilter(android.graphics.ColorFilter filter) { p.setColorFilter(filter); }
-            @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
-        };
     }
 
     /** Bouton rond à icône seule (recherche, retour…). */
@@ -335,7 +338,7 @@ public final class Ui {
     /** En-tête de rubrique : intitulé, grand titre, sous-titre facultatif. */
     public static LinearLayout header(Context c, String kicker, String title, String subtitle) {
         LinearLayout h = column(c);
-        if (kicker != null) h.addView(kicker(c, kicker, ACCENT), lp(WRAP, WRAP, 0, 0, 0, dp(8)));
+        if (kicker != null) h.addView(kicker(c, kicker, ACCENT_TEXT), lp(WRAP, WRAP, 0, 0, 0, dp(8)));
         TextView t = label(c, title, 36, TEXT, W_BOLD);
         h.addView(t);
         if (subtitle != null) {
@@ -364,7 +367,7 @@ public final class Ui {
 
     /** Fond d'écran commun : noir profond avec une lueur discrète. */
     public static Drawable screenBackground() {
-        GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{0xFF101D3B, 0xFF060A15, 0xFF060A15});
+        GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{0xFF0D1529, 0xFF060A15, 0xFF060A15});
         return g;
     }
 }

@@ -50,7 +50,7 @@ public final class AccountScreen extends Screen {
         TextView who = Ui.lines(Ui.label(main, (p != null ? p.name + "  ·  " : "") + App.repo().email(), 16, Ui.MUTED, false), 1);
         left.addView(who, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(8), 0, dp(20)));
         LinearLayout status = Ui.column(main);
-        status.setBackground(Ui.round(0xFF171A22, 18));
+        status.setBackground(Ui.round(0xFF111A30, 18));
         status.setPadding(dp(24), dp(20), dp(24), dp(20));
         Ui.noClip(status);
         statusTitle = Ui.label(main, "Vérification de ton accès…", 22, Ui.TEXT, true);
@@ -94,7 +94,7 @@ public final class AccountScreen extends Screen {
         how.setLineSpacing(0, 1.3f);
         vipBox.addView(how, Ui.lp(dp(380), Ui.WRAP, 0, dp(20), 0, 0));
         TextView steps = Ui.label(main,
-                "1. Sur ton téléphone ou ton ordinateur, va sur yamonfi.netlify.app\n"
+                "1. Sur ton téléphone ou ton ordinateur, va sur yamonfim.vercel.app\n"
                         + "2. Connecte-toi avec le même compte : " + App.repo().email() + "\n"
                         + "3. Ouvre « Abonnement » et choisis ton offre\n"
                         + "4. Une fois ton accès VIP activé, appuie sur « Actualiser mon accès » ici",

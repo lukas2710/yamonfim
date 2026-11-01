@@ -40,6 +40,9 @@ public final class DetailScreen extends Screen {
     private Set<String> watched = new HashSet<>();
     private int season, episode;
     private boolean loaded;
+    private boolean loading;
+    private boolean watchedLoaded;
+    private int loadGeneration;
 
     private ImageView backdrop;
     private TextView kicker, title, progressText, description, episodeLabel;
@@ -52,7 +55,12 @@ public final class DetailScreen extends Screen {
     private View loadingSpinner;
     private TextView loadingText;
 
-    public DetailScreen(MainActivity main, Media card) { super(main); media = card; }
+    private final int startSeason;
+
+    public DetailScreen(MainActivity main, Media card) { this(main, card, -1); }
+
+    /** `startSeason` : saison mise en avant à afficher en premier, ou -1. */
+    public DetailScreen(MainActivity main, Media card, int startSeason) { super(main); media = card; this.startSeason = startSeason; }
 
     @Override protected View create() {
         FrameLayout root = new FrameLayout(main);
@@ -73,8 +81,8 @@ public final class DetailScreen extends Screen {
         scroll = new Cards.VScroll(main, false);
         LinearLayout c = scroll.content;
         c.setPadding(dp(Ui.SIDE), dp(54), dp(Ui.SIDE), dp(70));
-        kicker = Ui.kicker(main, "", Ui.ACCENT);
-        title = Ui.lines(Ui.text(main, 40, Ui.TEXT, Ui.W_BOLD), 2);
+        kicker = Ui.kicker(main, "", Ui.ACCENT_TEXT);
+        title = Ui.lines(Ui.text(main, 46, Ui.TEXT, Ui.W_BOLD), 2);
         title.setShadowLayer(dp(14), 0, dp(2), 0x99000000);
         meta = Ui.row(main);
         progressText = Ui.lines(Ui.text(main, 14, Ui.GREEN, Ui.W_SEMIBOLD), 1);
@@ -82,14 +90,14 @@ public final class DetailScreen extends Screen {
         description.setLineSpacing(0, 1.32f);
         episodeLabel = Ui.lines(Ui.text(main, 15, Ui.MUTED, Ui.W_MEDIUM), 1);
         c.addView(kicker);
-        c.addView(title, Ui.lp(Math.min(dp(660), w - dp(Ui.SIDE * 2)), Ui.WRAP, 0, dp(10), 0, 0));
+        c.addView(title, Ui.lp(dp(720), Ui.WRAP, 0, dp(10), 0, 0));
         LinearLayout metaRow = Ui.row(main);
         metaRow.setGravity(Gravity.CENTER_VERTICAL);
         metaRow.addView(meta);
         metaRow.addView(progressText, Ui.lp(Ui.WRAP, Ui.WRAP, dp(8), 0, 0, 0));
         c.addView(metaRow, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(16), 0, 0));
-        c.addView(description, Ui.lp(Math.min(dp(580), w - dp(Ui.SIDE * 2)), Ui.WRAP, 0, dp(16), 0, 0));
-        c.addView(episodeLabel, Ui.lp(Math.min(dp(580), w - dp(Ui.SIDE * 2)), Ui.WRAP, 0, dp(14), 0, 0));
+        c.addView(description, Ui.lp(dp(640), Ui.WRAP, 0, dp(16), 0, 0));
+        c.addView(episodeLabel, Ui.lp(dp(640), Ui.WRAP, 0, dp(14), 0, 0));
         buttons = Ui.row(main);
         Ui.noClip(buttons);
         buttons.setPadding(0, dp(6), 0, dp(6));
@@ -105,7 +113,7 @@ public final class DetailScreen extends Screen {
         c.addView(buttons, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(22), 0, 0));
         loadingRow = Ui.row(main);
         loadingRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        loadingRow.setBackground(Ui.stroked(0x991A1D26, 0x1FFFFFFF, 1, 18));
+        loadingRow.setBackground(Ui.stroked(0x99141E38, 0x1FFFFFFF, 1, 18));
         loadingRow.setPadding(dp(16), dp(12), dp(22), dp(12));
         loadingSpinner = new MainActivity.Spinner(main);
         loadingRow.addView(loadingSpinner, Ui.lp(dp(32), dp(32)));
@@ -131,24 +139,30 @@ public final class DetailScreen extends Screen {
     @Override protected void onRefresh() { if (loaded) load(false); }
 
     private void load(boolean first) {
+        if (loading) return;
+        loading = true;
+        final int generation = ++loadGeneration;
         final String id = media.id;
-        final boolean needFull = first || !media.full;
+        final boolean needFull = !media.full;
         if (!loaded) {
             loadingRow.setVisibility(View.VISIBLE);
             loadingSpinner.setVisibility(View.VISIBLE);
             loadingText.setText(media.isSeries() ? "Chargement des saisons et épisodes…" : "Chargement de la fiche…");
         }
-        io(() -> {
-            App.repo().flushWrites(4000); // la lecture qui vient de se terminer est d'abord enregistrée
-            // Les trois lectures partent en même temps pour réduire l'attente.
+        App.detail(this, () -> {
+            // Au retour du lecteur, attendre sa sauvegarde ; aucune attente à l'ouverture.
+            if (!first) App.repo().flushWrites(4000);
             java.util.concurrent.FutureTask<History> h = new java.util.concurrent.FutureTask<>(() -> App.repo().history(id));
-            java.util.concurrent.FutureTask<Set<String>> k = new java.util.concurrent.FutureTask<>(() -> App.repo().watchedKeys(id));
             new Thread(h, "detail-history").start();
-            new Thread(k, "detail-watched").start();
-            Media full = needFull ? App.repo().media(id) : media;
-            try { return new Object[]{full, h.get(), k.get()}; }
+            try {
+                Media full = needFull ? App.repo().media(id) : media;
+                return new Object[]{full, h.get()};
+            }
             catch (java.util.concurrent.ExecutionException ex) { throw ex.getCause() instanceof Exception ? (Exception) ex.getCause() : ex; }
+            finally { if (!h.isDone()) h.cancel(true); }
         }, (r, e) -> {
+            if (generation != loadGeneration) return;
+            loading = false;
             if (e != null) {
                 fail(e);
                 if (!loaded) {
@@ -161,19 +175,22 @@ public final class DetailScreen extends Screen {
             loadingRow.setVisibility(View.GONE);
             Media full = (Media) r[0];
             History h = (History) r[1];
-            @SuppressWarnings("unchecked") Set<String> keys = (Set<String>) r[2];
             boolean firstLoad = !loaded;
             History previous = history;
             media = full;
             history = h;
-            watched = keys;
             loaded = true;
             // La sélection suit la reprise au premier affichage, ou si la reprise a changé
             // (épisode lu ici ou sur un autre appareil) et que l'on n'est pas en train de choisir un épisode.
             boolean moved = h != null && (previous == null || previous.seasonIdx != h.seasonIdx || previous.episodeIdx != h.episodeIdx);
             boolean browsing = MainActivity.isInside(main.getCurrentFocus(), episodes) || MainActivity.isInside(main.getCurrentFocus(), seasons);
             if (firstLoad || (moved && !browsing)) {
-                if (h != null && media.hasEpisodes() && media.episode(h.seasonIdx, h.episodeIdx) != null) { season = h.seasonIdx; episode = h.episodeIdx; }
+                if (firstLoad && startSeason >= 0 && startSeason < media.seasons.size()) {
+                    // Saison mise en avant : on l'ouvre, sur l'épisode en cours s'il en fait partie.
+                    season = startSeason;
+                    episode = h != null && h.seasonIdx == startSeason && media.episode(h.seasonIdx, h.episodeIdx) != null ? h.episodeIdx : 0;
+                }
+                else if (h != null && media.hasEpisodes() && media.episode(h.seasonIdx, h.episodeIdx) != null) { season = h.seasonIdx; episode = h.episodeIdx; }
                 else if (firstLoad) { season = 0; episode = 0; }
             }
             renderHeader();
@@ -186,6 +203,17 @@ public final class DetailScreen extends Screen {
                     episodes.post(() -> { if (alive() && main.top() == this && !main.dialogOpen()) episodes.focusLast(); });
                 } else play.requestFocus();
             }
+            // Le statut « vu » décore la fiche sans retarder son ouverture ni la reprise.
+            io(() -> App.repo().watchedKeys(id), (keys, error) -> {
+                if (generation != loadGeneration) return;
+                if (error instanceof com.yamonfilm.tv.Api.AuthExpired) { fail(error); return; }
+                if (error != null || keys == null) return;
+                watched = keys;
+                watchedLoaded = true;
+                renderHeader();
+                renderSeasons();
+                renderEpisodes(false);
+            });
         });
     }
 
@@ -196,6 +224,7 @@ public final class DetailScreen extends Screen {
     private boolean resumeSelected() { return history != null && history.seasonIdx == season && history.episodeIdx == episode; }
 
     private void renderHeader() {
+        watchedButton.setEnabled(watchedLoaded);
         boolean series = isSeries();
         StringBuilder k = new StringBuilder(media.isSeries() ? "SÉRIE" : "FILM");
         if (series) k.append(" · ").append(media.seasons.size()).append(media.seasons.size() > 1 ? " SAISONS" : " SAISON");

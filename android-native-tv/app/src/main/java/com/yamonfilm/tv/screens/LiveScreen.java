@@ -131,7 +131,7 @@ public final class LiveScreen extends Screen {
                 card = new Cards.Card(main, 152, 112, true, false);
                 card.image.setScaleType(ImageView.ScaleType.FIT_CENTER);
                 card.image.setPadding(dp(22), dp(14), dp(22), dp(34));
-                card.setBackground(Ui.round(0xFF1E222C, 10));
+                card.setBackground(Ui.round(0xFF18223B, 10));
             }
             card.setLayoutParams(new GridView.LayoutParams(dp(152), dp(112)));
             Channel c = shown.get(position);

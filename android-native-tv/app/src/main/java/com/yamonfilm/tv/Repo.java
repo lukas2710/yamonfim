@@ -36,14 +36,23 @@ public final class Repo {
     public final Api api;
     private final SharedPreferences prefs;
     private final File cacheFile;
+    private final File rankingsFile;
+    private final Context appContext;
+    private volatile Discovery.Rankings rankings = Discovery.Rankings.empty();
+    private volatile Set<String> completed = Collections.emptySet();
+    private volatile String completedProfile;
+    public boolean completed(String id) { return java.util.Objects.equals(profileId(), completedProfile) && completed.contains(id); }
+    public int completedRevision() { return completed.hashCode(); }
     private volatile List<Media> catalogue = Collections.emptyList();
     private volatile Map<String, Media> byId = Collections.emptyMap();
     private volatile Profile profile;
 
     public Repo(Context context) {
+        appContext = context.getApplicationContext();
         api = new Api(context);
         prefs = context.getSharedPreferences("app", Context.MODE_PRIVATE);
         cacheFile = new File(context.getFilesDir(), "catalogue.json");
+        rankingsFile = new File(context.getFilesDir(), "home-rankings.json");
         String stored = prefs.getString("profile", null);
         if (stored != null) { JSONObject o = Api.parseObject(stored); if (o != null) profile = Profile.from(o); }
     }
@@ -57,6 +66,7 @@ public final class Repo {
     public String profileId() { Profile p = profile; return p == null ? null : p.id; }
 
     public void setProfile(Profile p) {
+        completed = Collections.emptySet(); completedProfile = null;
         profile = p;
         if (p == null) prefs.edit().remove("profile").apply();
         else prefs.edit().putString("profile", p.toJson().toString()).apply();
@@ -71,13 +81,15 @@ public final class Repo {
 
     public static final String CARD_COLUMNS = "id,title,type,poster,backdrop,description,genres,tmdb_id,audience,release_year";
 
-    public boolean childProfile() { return profile != null && !"standard".equals(profile.mode); }
-    public boolean allowed(Media media) { return media != null && Logic.canWatch(media.audience, profile == null ? "standard" : profile.mode); }
-    public List<Media> catalogue() { List<Media> visible = new ArrayList<>(); for (Media m : catalogue) if (allowed(m)) visible.add(m); return visible; }
-    public Media cached(String id) { Media m = byId.get(id); return allowed(m) ? m : null; }
+    public List<Media> catalogue() { return catalogue; }
+    public Media cached(String id) {
+        Media m = byId.get(id);
+        return m != null && Logic.canWatch(m.audience, m.genres, profileMode()) ? m : null;
+    }
 
     /** Catalogue enregistré lors de la dernière ouverture : affichage immédiat. */
     public boolean loadCachedCatalogue() {
+        loadCachedRankings();
         if (!cacheFile.exists()) return false;
         try (FileInputStream in = new FileInputStream(cacheFile)) {
             JSONArray rows = Api.parseArray(Api.readAll(in));
@@ -86,15 +98,16 @@ public final class Repo {
         } catch (Exception e) { return false; }
     }
 
-    private void refreshActiveProfile() throws IOException {
-        Profile current = profile;
-        if (current == null) return;
-        JSONArray rows = api.select("user_profiles", new Q().select("*").eq("id", current.id).eq("user_id", requireUser()));
-        if (rows.length() == 0) { setProfile(null); throw new IOException("Choisis un profil pour continuer."); }
-        if (profile != null && current.id.equals(profile.id)) setProfile(Profile.from(rows.optJSONObject(0)));
-    }
     public List<Media> refreshCatalogue() throws IOException {
-        refreshActiveProfile();
+        // Same public card snapshot as the site: one cached download instead of
+        // a hundred Supabase page requests. Existing pagination remains a fallback.
+        try {
+            Api.Result response = Api.http("GET", Api.SITE + "api/catalogue", null, null, 15000);
+            if (response.status == 200 && response.body.trim().startsWith("[")) {
+                List<Media> rows = parse(Api.parseArray(response.body));
+                publish(rows); saveCatalogue(rows); return rows;
+            }
+        } catch (IOException ignored) { }
         List<Media> rows = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         int total = Integer.MAX_VALUE, offset = 0;
@@ -112,10 +125,57 @@ public final class Repo {
             if (total == Integer.MAX_VALUE && data.length() < 250) break;
         }
         publish(rows);
+        saveCatalogue(rows);
+        return rows;
+    }
+
+    private void saveCatalogue(List<Media> rows) {
         JSONArray out = new JSONArray();
         for (Media m : rows) out.put(m.toCardJson());
         try (FileOutputStream f = new FileOutputStream(cacheFile)) { f.write(out.toString().getBytes(StandardCharsets.UTF_8)); } catch (IOException ignored) { }
-        return rows;
+    }
+
+    public Discovery.Rankings homeRankings() { return rankings; }
+
+    private void loadCachedRankings() {
+        try { useRankings(parseRankings(Api.parseObject(Api.readAll(appContext.getResources().openRawResource(R.raw.home_rankings))))); } catch (Exception ignored) { }
+        if (rankingsFile.exists()) try (FileInputStream in = new FileInputStream(rankingsFile)) {
+            Discovery.Rankings cached = parseRankings(Api.parseObject(Api.readAll(in)));
+            useRankings(cached);
+        } catch (Exception ignored) { }
+    }
+
+    public Discovery.Rankings refreshHomeRankings() throws IOException {
+        Api.Result response = Api.http("GET", Api.SITE + "api/home-rankings", null, null, 12000);
+        if (response.status != 200) throw new IOException("Classements temporairement indisponibles");
+        Discovery.Rankings next = parseRankings(Api.parseObject(response.body));
+        if (useRankings(next)) {
+            try (FileOutputStream out = new FileOutputStream(rankingsFile)) { out.write(response.body.getBytes(StandardCharsets.UTF_8)); } catch (IOException ignored) { }
+        }
+        return rankings;
+    }
+
+    private synchronized boolean useRankings(Discovery.Rankings next) {
+        if (next.at < rankings.at) return false;
+        rankings = next; return true;
+    }
+
+    private static Discovery.Rankings parseRankings(JSONObject json) throws IOException {
+        if (json == null || json.optJSONObject("ratings") == null || json.optJSONObject("trending") == null || json.optLong("at", 0) <= 0) throw new IOException("Classements invalides");
+        Map<String, Discovery.Rating> scores = new HashMap<>(); JSONObject data = json.optJSONObject("ratings");
+        java.util.Iterator<String> keys = data.keys();
+        while (keys.hasNext()) {
+            String key = keys.next(); JSONObject score = data.optJSONObject(key); if (score == null) continue;
+            double rating = score.optDouble("rating", 0); int votes = score.optInt("votes", 0);
+            if (Double.isNaN(rating) || Double.isInfinite(rating) || rating < 0 || rating > 10 || votes < 0) continue;
+            scores.put(key, new Discovery.Rating(rating, votes, score.optBoolean("anime", false)));
+        }
+        JSONObject trending = json.optJSONObject("trending");
+        return new Discovery.Rankings(json.optLong("at"), scores, rankingIds(trending.optJSONArray("movie")), rankingIds(trending.optJSONArray("series")));
+    }
+
+    private static List<String> rankingIds(JSONArray ids) {
+        List<String> out = new ArrayList<>(); if (ids != null) for (int i = 0; i < ids.length(); i++) { String id = ids.optString(i, ""); if (!id.isEmpty()) out.add(id); } return out;
     }
 
     private static List<Media> parse(JSONArray rows) {
@@ -132,12 +192,9 @@ public final class Repo {
     }
 
     public Media media(String id) throws IOException {
-        refreshActiveProfile();
         JSONArray rows = api.select("media", new Q().select("*").eq("id", id));
         if (rows.length() == 0) throw new IOException("Ce contenu n'existe pas ou n'est plus disponible.");
-        Media media = Media.from(rows.optJSONObject(0));
-        if (!allowed(media)) throw new IOException("Ce contenu est indisponible pour ce profil.");
-        return media;
+        return Media.from(rows.optJSONObject(0));
     }
 
     // ------------------------------------------------------------ Abonnement / quota (lib/subscription.ts)
@@ -183,18 +240,40 @@ public final class Repo {
             return Logic.reserveViewing(() -> {
                 Subscription s = subscription();
                 return new int[]{s.vip ? 1 : 0, s.count};
-            }, expected -> {
-                JSONObject values = new JSONObject();
-                values.put("watch_count", expected + 1);
-                Q q = new Q().eq("id", uid).not("is_vip", "is", "true");
-                q = expected == 0 ? q.or("watch_count.eq.0,watch_count.is.null") : q.eq("watch_count", expected);
-                return api.update("profiles", q.select("id"), values).length() > 0;
-            });
+            }, expected -> incrementWatchCount(uid, expected));
         } catch (IOException e) {
             throw e;
         } catch (Exception e) {
             throw new IOException(e.getMessage() == null ? "Le visionnage n'a pas pu être enregistré. Réessaie." : e.getMessage());
         }
+    }
+
+    /**
+     * Compte une vision comme le site (lib/subscription.ts) : fonction serveur
+     * increment_my_watch_count ; mise à jour directe seulement si la fonction n'existe pas.
+     */
+    public boolean incrementWatchCount(String uid, int expected) throws IOException {
+        try {
+            JSONObject args = new JSONObject();
+            try { args.put("expected", expected); } catch (Exception ignored) { }
+            Object result = api.rpc("increment_my_watch_count", args);
+            return Boolean.TRUE.equals(result) || "true".equals(String.valueOf(result));
+        } catch (Api.ApiException e) {
+            if (e instanceof Api.AuthExpired) throw e;
+            if (!"PGRST202".equals(e.code) && !"42883".equals(e.code)) throw new IOException("Le visionnage n'a pas pu être enregistré. Réessaie.");
+        }
+        JSONObject values = new JSONObject();
+        try { values.put("watch_count", expected + 1); } catch (Exception ignored) { }
+        Q q = new Q().eq("id", uid).not("is_vip", "is", "true");
+        q = expected == 0 ? q.or("watch_count.eq.0,watch_count.is.null") : q.eq("watch_count", expected);
+        return api.update("profiles", q.select("id"), values).length() > 0;
+    }
+
+    /** Vérification avant lancement : le quota gratuit est-il déjà atteint ? (null = VIP ou admin) */
+    public Subscription accessBeforePlay() throws IOException {
+        if (isAdmin()) return null;
+        Subscription s = subscription();
+        return s.vip ? null : s;
     }
 
     private String requireUser() throws IOException {
@@ -211,22 +290,46 @@ public final class Repo {
         return list;
     }
 
-    public JSONArray profileAvatars() throws IOException {
-        return api.select("profile_avatars", new Q().select("name,category,image_url").order("category.asc,name.asc"));
-    }
+    public void saveProfile(String id, String name, String avatar) throws IOException { saveProfile(id, name, avatar, null); }
 
     public void saveProfile(String id, String name, String avatar, String mode) throws IOException {
         String uid = requireUser();
         JSONObject values = new JSONObject();
-        try { values.put("name", name.trim()); values.put("avatar_url", avatar); values.put("profile_mode", mode); } catch (Exception ignored) { }
+        try {
+            values.put("name", name.trim()); values.put("avatar_url", avatar);
+            if (mode != null) values.put("profile_mode", mode);
+        } catch (Exception ignored) { }
         if (id == null) {
             try { values.put("user_id", uid); } catch (Exception ignored) { }
             api.insert("user_profiles", new JSONArray().put(values), null, false);
         } else {
             api.update("user_profiles", new Q().eq("id", id).eq("user_id", uid), values);
             Profile p = profile;
-            if (p != null && id.equals(p.id)) { Profile n = new Profile(); n.id = id; n.name = name.trim(); n.avatar = avatar; n.mode = mode; setProfile(n); }
+            if (p != null && id.equals(p.id)) { Profile n = new Profile(); n.id = id; n.name = name.trim(); n.avatar = avatar; n.mode = mode != null ? mode : p.mode; setProfile(n); }
         }
+    }
+
+    /** Relit le mode du profil actif (il peut être changé depuis le site). */
+    public void refreshProfileMode() throws IOException {
+        Profile p = profile;
+        if (p == null) return;
+        JSONArray rows = api.select("user_profiles", new Q().select("profile_mode").eq("id", p.id).eq("user_id", requireUser()));
+        JSONObject o = rows.optJSONObject(0);
+        if (o == null) return;
+        String mode = Models.str(o, "profile_mode");
+        if (!mode.isEmpty() && !mode.equals(p.mode)) { Profile n = new Profile(); n.id = p.id; n.name = p.name; n.avatar = p.avatar; n.mode = mode; setProfile(n); }
+    }
+
+    /** Mode du profil actif : standard, kids ou junior. */
+    public String profileMode() { Profile p = profile; return p == null || p.mode == null || p.mode.isEmpty() ? "standard" : p.mode; }
+
+    /** Catalogue visible pour le profil actif (lib/profile-audience.ts). */
+    public List<Media> visibleCatalogue() {
+        String mode = profileMode();
+        if ("standard".equals(mode)) return catalogue;
+        List<Media> list = new ArrayList<>();
+        for (Media m : catalogue) if (Logic.canWatch(m.audience, m.genres, mode)) list.add(m);
+        return list;
     }
 
     public void deleteProfile(String id) throws IOException {
@@ -273,6 +376,34 @@ public final class Repo {
         List<History> list = new ArrayList<>();
         for (int i = 0; i < rows.length(); i++) { JSONObject o = rows.optJSONObject(i); if (o != null) list.add(History.from(o)); }
         return list;
+    }
+
+    /** Same legacy fallback as the site, isolated to the requested active profile. */
+    public List<Discovery.Viewing> recommendationHistory(List<History> history, String profileId) throws IOException {
+        List<Discovery.Viewing> out = new ArrayList<>(); Set<String> recorded = new HashSet<>();
+        for (History h : history) { recorded.add(h.mediaId); out.add(new Discovery.Viewing(h.mediaId, h.currentTime, h.duration, Logic.parseTime(h.updatedAt))); }
+        if (profileId == null) return out;
+        JSONArray rows = api.select("user_watched", new Q().select("media_id,ep_key,watched_at").eq("user_id", requireUser()).eq("profile_id", profileId).order("watched_at.desc").limit(1000));
+        Map<String, Map<String, Long>> seen = new HashMap<>();
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject row = rows.optJSONObject(i); if (row == null) continue;
+            String id = Models.str(row, "media_id");
+            Map<String, Long> keys = seen.get(id); if (keys == null) seen.put(id, keys = new HashMap<>());
+            keys.put(Models.str(row, "ep_key"), Logic.parseTime(Models.str(row, "watched_at")));
+            if (recorded.add(id)) out.add(new Discovery.Viewing(id, 600, 0, Logic.parseTime(Models.str(row, "watched_at"))));
+        }
+        List<Media> titles = new ArrayList<>(); List<String> series = new ArrayList<>();
+        for (String id : seen.keySet()) { Media item = cached(id); if (item != null) { titles.add(item); if (item.isSeries()) series.add(id); } }
+        for (History h : history) if (!seen.containsKey(h.mediaId)) { Media item = cached(h.mediaId); if (item != null) titles.add(item); }
+        Map<String, List<String>> required = new HashMap<>();
+        for (int offset = 0; offset < series.size(); offset += 10) try {
+            Api.Result response = Api.http("GET", Api.SITE + "api/catalogue-episodes?ids=" + Api.enc(String.join(",", series.subList(offset, Math.min(offset + 10, series.size())))), null, null, 10000);
+            JSONObject metadata = response.status == 200 ? Api.parseObject(response.body) : null;
+            if (metadata != null) { java.util.Iterator<String> ids = metadata.keys(); while (ids.hasNext()) { String id = ids.next(); required.put(id, rankingIds(metadata.optJSONArray(id))); } }
+        } catch (IOException ignored) { }
+        List<Discovery.Viewing> actual = new ArrayList<>(); for (History h : history) actual.add(new Discovery.Viewing(h.mediaId, h.currentTime, h.duration, Logic.parseTime(h.updatedAt)));
+        if (java.util.Objects.equals(profileId, profileId())) { completed = Collections.unmodifiableSet(Completion.titles(titles, seen, actual, required)); completedProfile = profileId; }
+        return out;
     }
 
     public History history(String mediaId) throws IOException {
@@ -369,8 +500,167 @@ public final class Repo {
     public List<Media> collectionItems(Collection c) {
         List<Media> items = new ArrayList<>();
         Map<String, Media> index = byId;
-        for (String id : c.mediaIds) { Media m = index.get(id); if (allowed(m)) items.add(m); }
+        String mode = profileMode();
+        for (String id : c.mediaIds) { Media m = index.get(id); if (m != null && Logic.canWatch(m.audience, m.genres, mode)) items.add(m); }
         return items;
+    }
+
+    // ------------------------------------------------------------ Accueil : carrousel, bannières, ajouts du jour
+
+    /** Titres du carrousel choisis dans l'admin (site_settings « home_hero »), comme lib/home-hero.ts. */
+    public List<String> heroEntries() throws IOException {
+        JSONArray rows = api.select("site_settings", new Q().select("value").eq("key", "home_hero").limit(1));
+        JSONObject row = rows.optJSONObject(0);
+        JSONObject value = row == null ? null : row.optJSONObject("value");
+        if (value == null && row != null) value = Api.parseObject(row.optString("value", ""));
+        String mode = value == null ? "latest" : value.optString("mode", "latest");
+        List<String> ids = new ArrayList<>();
+        if ("custom".equals(mode)) {
+            JSONArray list = value.optJSONArray("media_ids");
+            if (list != null) for (int i = 0; i < list.length() && ids.size() < 5; i++) { String v = list.optString(i, ""); if (!v.isEmpty()) ids.add(v); }
+        } else if ("top".equals(mode)) {
+            int days = value.optInt("days", 30);
+            JSONObject args = new JSONObject();
+            try { args.put("days", days); args.put("max_items", 5); } catch (Exception ignored) { }
+            Object top = api.rpc("top_watched_media", args);
+            if (top instanceof JSONArray) for (int i = 0; i < ((JSONArray) top).length(); i++) {
+                JSONObject o = ((JSONArray) top).optJSONObject(i);
+                if (o != null) ids.add(Models.str(o, "media_id"));
+            }
+        }
+        return ids;
+    }
+
+    /** Bannières actives de l'admin (titre, sous-titre, titres, saisons mises en avant, top numéroté). */
+    public List<Models.Banner> banners() throws IOException {
+        JSONArray rows = api.select("banners", new Q().select("*").eq("active", "true").order("created_at.desc"));
+        List<Models.Banner> list = new ArrayList<>();
+        for (int i = 0; i < rows.length(); i++) { JSONObject o = rows.optJSONObject(i); if (o != null) list.add(Models.Banner.from(o)); }
+        return list;
+    }
+
+    /** Saisons des séries mises en avant par saison (« id:sN »), pour leur affiche et leur ouverture. */
+    public Map<String, JSONArray> seasonsOf(java.util.Collection<String> ids) throws IOException {
+        Map<String, JSONArray> map = new HashMap<>();
+        if (ids.isEmpty()) return map;
+        JSONArray rows = api.select("media", new Q().select("id,seasons").in("id", ids));
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject o = rows.optJSONObject(i);
+            if (o != null && o.optJSONArray("seasons") != null) map.put(Models.str(o, "id"), o.optJSONArray("seasons"));
+        }
+        return map;
+    }
+
+    /** Titres ajoutés aujourd'hui (minuit, heure de Paris), comme lib/daily-additions.ts. */
+    public List<Media> dailyAdditions() throws IOException {
+        String today = java.time.LocalDate.now(Logic.PARIS).atStartOfDay(Logic.PARIS).toInstant().toString();
+        JSONArray rows = api.select("media", new Q().select(CARD_COLUMNS).raw("created_at", "gte." + today).order("created_at.desc,id.desc").limit(60));
+        return parse(rows);
+    }
+
+    // ------------------------------------------------------------ Avatars (lib/avatars.ts)
+
+    /** Avatars ajoutés par l'admin, regroupés par catégorie après ceux d'origine. */
+    public Map<String, List<String[]>> avatarCategories() {
+        Map<String, List<String[]>> groups = new java.util.LinkedHashMap<>();
+        for (String[][] group : Logic.DEFAULT_AVATARS) {
+            List<String[]> list = new ArrayList<>();
+            for (int i = 1; i < group.length; i++) list.add(group[i]);
+            groups.put(group[0][0], list);
+        }
+        try {
+            JSONArray rows = api.select("profile_avatars", new Q().select("id,name,category,image_url").order("category.asc,name.asc"));
+            for (int i = 0; i < rows.length(); i++) {
+                JSONObject o = rows.optJSONObject(i);
+                if (o == null) continue;
+                String cat = Models.str(o, "category"), url = Models.str(o, "image_url");
+                if (url.isEmpty()) continue;
+                List<String[]> list = groups.get(cat);
+                if (list == null) groups.put(cat, list = new ArrayList<>());
+                list.add(new String[]{Models.str(o, "name"), url});
+            }
+        } catch (Exception ignored) {
+            // Bibliothèque non installée : les avatars d'origine restent disponibles.
+        }
+        return groups;
+    }
+
+    // ------------------------------------------------------------ Lecture (app/api/playback, app/api/episode-credits)
+
+    /** Réponse de /api/playback : flux HLS (via le proxy du site), pistes audio, sources possibles. */
+    public static final class Stream {
+        public String url, embed, provider; public int height;
+        public final List<String[]> audioTracks = new ArrayList<>(); // {id, name, lang}
+        public final List<String[]> alternatives = new ArrayList<>(); // {embed, provider, height}
+        public final List<String> attempted = new ArrayList<>();
+        public boolean hasMore;
+        public String error;
+    }
+
+    /**
+     * Demande au site un flux lisible pour une source (Moviez, catalogue-player, EmbedOrigin).
+     * `excluded` : sources déjà essayées ; `selected` : source choisie à la main.
+     */
+    public Stream playback(String source, List<String> excluded, String selected) throws IOException {
+        Api.Session s = api.requireSession();
+        JSONObject body = new JSONObject();
+        try {
+            body.put("url", source);
+            body.put("excluded", new JSONArray(excluded == null ? new ArrayList<String>() : excluded));
+            if (selected != null && !selected.isEmpty()) body.put("selected", selected);
+        } catch (Exception ignored) { }
+        Map<String, String> h = new LinkedHashMap<>();
+        h.put("Authorization", "Bearer " + s.accessToken);
+        Api.Result r = Api.http("POST", Api.SITE + "api/playback", body.toString(), h, 60000);
+        JSONObject data = Api.parseObject(r.body);
+        Stream st = new Stream();
+        if (data == null) { st.error = "Le flux vidéo est indisponible. Réessaie dans un instant."; return st; }
+        if (r.status == 401) throw new Api.AuthExpired();
+        JSONArray attempted = data.optJSONArray("attempted");
+        if (attempted != null) for (int i = 0; i < attempted.length(); i++) { String v = attempted.optString(i, ""); if (!v.isEmpty()) st.attempted.add(v); }
+        st.hasMore = data.optBoolean("hasMore", false);
+        if (r.status >= 400 || data.optString("url", "").isEmpty()) {
+            st.error = data.optString("error", "Le flux vidéo est indisponible ou ne correspond pas au contenu.");
+            return st;
+        }
+        String url = data.optString("url");
+        st.url = url.startsWith("http") ? url : Api.SITE + (url.startsWith("/") ? url.substring(1) : url);
+        st.embed = data.optString("embed", "");
+        st.provider = data.optString("provider", "");
+        JSONObject q = data.optJSONObject("quality");
+        st.height = q == null ? 0 : q.optInt("height", 0);
+        JSONArray tracks = data.optJSONArray("audioTracks");
+        if (tracks != null) for (int i = 0; i < tracks.length(); i++) {
+            JSONObject t = tracks.optJSONObject(i);
+            if (t != null) st.audioTracks.add(new String[]{String.valueOf(t.optInt("id", i)), t.optString("name", ""), t.optString("lang", "")});
+        }
+        JSONArray alts = data.optJSONArray("alternatives");
+        if (alts != null) for (int i = 0; i < alts.length(); i++) {
+            JSONObject a = alts.optJSONObject(i);
+            if (a == null || a.optString("embed", "").isEmpty()) continue;
+            JSONObject aq = a.optJSONObject("quality");
+            st.alternatives.add(new String[]{a.optString("embed"), a.optString("provider", ""), String.valueOf(aq == null ? 0 : aq.optInt("height", 0))});
+        }
+        return st;
+    }
+
+    /** Début du générique de fin d'un épisode (secondes), ou -1. Ne bloque jamais la lecture. */
+    public double creditsStart(Media media, int season, int episode, double duration) {
+        try {
+            Models.Season se = media.seasons.get(season);
+            Models.Episode ep = se.episodes.get(episode);
+            StringBuilder q = new StringBuilder("api/episode-credits?media=").append(Api.enc(media.id));
+            String tmdb = Logic.normalizeTmdbId(media.tmdbId);
+            if (!tmdb.isEmpty()) q.append("&tmdb=").append(tmdb);
+            q.append("&season=").append(se.number > 0 ? se.number : season + 1).append("&episode=").append(ep.number > 0 ? ep.number : episode + 1)
+                    .append("&duration=").append(Math.round(duration));
+            Api.Result r = Api.http("GET", Api.SITE + q, null, null, 20000);
+            JSONObject data = Api.parseObject(r.body);
+            JSONObject marker = data == null ? null : data.optJSONObject("marker");
+            if (marker == null) return -1;
+            double start = marker.optDouble("start", -1);
+            return start >= 0 && start < duration ? start : -1;
+        } catch (Exception e) { return -1; }
     }
 
     // ------------------------------------------------------------ Présence (components/PresenceTracker.tsx)

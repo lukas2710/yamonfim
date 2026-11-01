@@ -19,19 +19,7 @@ import java.util.regex.Pattern;
 
 /** Règles métier du site, portées à l'identique (sans dépendance Android pour les tests). */
 public final class Logic {
-    public static long seekStep(int repeat) { return repeat < 6 ? 10000L : repeat < 16 ? 30000L : 60000L; }
-    public static long seekTarget(long base, long delta, long duration) {
-        long target = base + delta;
-        return Math.max(0, duration > 0 ? Math.min(Math.max(0, duration - 1000), target) : target);
-    }
     private Logic() { }
-    public static boolean canWatch(String audience, String mode) {
-        return "standard".equals(mode) || "kids".equals(audience) || ("junior".equals(mode) && "junior".equals(audience));
-    }
-    public static int releaseYear(String title) {
-        Matcher m = Pattern.compile("\\((18[0-9]{2}|19[0-9]{2}|20[0-9]{2}|2100)\\)\\s*$").matcher(title == null ? "" : title);
-        return m.find() ? Integer.parseInt(m.group(1)) : 0;
-    }
 
     public static final int FREE_WATCH_LIMIT = 5;
     public static final long SEEN_DELAY_MS = 5000;
@@ -73,10 +61,16 @@ public final class Logic {
 
     private static int allowedEdits(String needle) { return needle.length() >= 8 ? 2 : needle.length() >= 5 ? 1 : 0; }
 
+    private static boolean isDigits(String value) {
+        if (value.isEmpty()) return false;
+        for (int i = 0; i < value.length(); i++) if (value.charAt(i) < '0' || value.charAt(i) > '9') return false;
+        return true;
+    }
+
     /** Qualité d'un mot, en demi-points : 8 identique, 6 début, 4 à l'intérieur, 3 ou 2 pour une ou deux fautes, 0 aucun. */
     static int wordMatch(String needle, String word, boolean loose) {
         if (word.equals(needle)) return 8;
-        if (needle.matches("\\d+")) return 0;
+        if (isDigits(needle)) return 0;
         if (word.startsWith(needle)) return 6;
         if (!loose) return 0;
         if (needle.length() >= 3 && word.contains(needle)) return 4;
@@ -145,7 +139,7 @@ public final class Logic {
                 if (m > 0) { inTitle += m; everywhere += m; continue; }
                 titleOnly = false;
                 // Le résumé est long : seuls les mots entiers ou leurs débuts comptent, jamais les fautes.
-                int e = needle.length() >= 3 || needle.matches("\\d+") ? bestMatch(needle, item.extraWords, false) : 0;
+                int e = needle.length() >= 3 || isDigits(needle) ? bestMatch(needle, item.extraWords, false) : 0;
                 if (e == 0) return 0;
                 everywhere += e;
             }
@@ -278,67 +272,6 @@ public final class Logic {
 
     public static boolean isCompleted(double currentTime, double duration) { return duration > 0 && currentTime / duration >= .95; }
 
-    public static boolean isMoviezPlayer(String value) {
-        try { URI uri = URI.create(value); return "https".equals(uri.getScheme()) && "api.moviez.ac".equalsIgnoreCase(uri.getHost()); }
-        catch (Exception ignored) { return false; }
-    }
-
-    public static final class PlayerSource {
-        public final String id; public final int season, episode;
-        PlayerSource(String id, int season, int episode) { this.id = id; this.season = season; this.episode = episode; }
-    }
-
-    /** New catalogue references are identities, not web pages to load. */
-    public static PlayerSource playerSource(String value) {
-        try {
-            URI uri = URI.create(SITE_BASE).resolve(cleanEmbed(value));
-            if (!"https".equals(uri.getScheme()) || uri.getUserInfo() != null || uri.getPort() != -1) return null;
-            if ("api.moviez.ac".equalsIgnoreCase(uri.getHost())) {
-                Matcher series = Pattern.compile("^/serie/([1-9][0-9]{0,9})/([1-9][0-9]{0,3})/([1-9][0-9]{0,4})/?$").matcher(uri.getPath());
-                if (series.matches()) return new PlayerSource(series.group(1), Integer.parseInt(series.group(2)), Integer.parseInt(series.group(3)));
-                Matcher movie = Pattern.compile("^/([1-9][0-9]{0,9})/?$").matcher(uri.getPath());
-                if (movie.matches()) return new PlayerSource(movie.group(1), 0, 0);
-            }
-            if ("yamonfi.netlify.app".equalsIgnoreCase(uri.getHost()) && "/api/catalogue-player".equals(uri.getPath())) {
-                java.util.Map<String,String> params = new java.util.HashMap<>();
-                if (uri.getRawQuery() != null) for (String part : uri.getRawQuery().split("&")) { String[] pair = part.split("=", 2); if (pair.length == 2) params.put(pair[0], java.net.URLDecoder.decode(pair[1], "UTF-8")); }
-                String id = params.get("tmdb"), type = params.get("type");
-                if (id == null || !id.matches("[1-9][0-9]{0,9}")) return null;
-                if ("movie".equals(type)) return new PlayerSource(id, 0, 0);
-                if ("tv".equals(type)) {
-                    int s = Integer.parseInt(params.containsKey("season") ? params.get("season") : "1"), e = Integer.parseInt(params.containsKey("episode") ? params.get("episode") : "1");
-                    if (s > 0 && s <= 1000 && e > 0 && e <= 10000) return new PlayerSource(id, s, e);
-                }
-            }
-        } catch (Exception ignored) { }
-        return null;
-    }
-
-    public static boolean isResolvedPlayer(String value) {
-        if (playerSource(value) != null) return true;
-        try { URI uri = URI.create(value); return "https".equals(uri.getScheme()) && "embedorigin.cc".equalsIgnoreCase(uri.getHost()) && uri.getPort() == -1 && uri.getUserInfo() == null && uri.getPath().matches("/e/[a-z0-9]{12}/?"); }
-        catch (Exception ignored) { return false; }
-    }
-
-    public static final class AutoNext {
-        private boolean cancelled;
-        private long creditsStart = -1, creditsDuration = -1;
-        public int remaining = -1;
-        public void reset() { cancelled = false; remaining = -1; creditsStart = creditsDuration = -1; }
-        public boolean active() { return remaining >= 0; }
-        public void marker(long startMs, long durationMs) { creditsStart = startMs; creditsDuration = durationMs; }
-        public boolean update(long positionMs, long durationMs, boolean playing, boolean hasNext) {
-            if (cancelled || !hasNext || durationMs < 60000 || positionMs < 0 || positionMs > durationMs) { remaining = -1; return false; }
-            boolean validMarker = creditsStart >= 0 && creditsStart < durationMs && Math.abs(creditsDuration - durationMs) <= 2000;
-            long target = validMarker ? Math.min(creditsStart + 5000, durationMs) : durationMs;
-            long left = target - positionMs;
-            remaining = left > 0 && left <= 5000 ? (int) ((left + 999) / 1000) : left <= 0 ? 0 : -1;
-            return playing && left <= 0;
-        }
-        public void ended(boolean hasNext) { if (!cancelled && hasNext) remaining = 0; }
-        public void cancel() { cancelled = true; remaining = -1; }
-    }
-
     public static String epKey(int s, int e) { return "s" + s + "_e" + e; }
 
     private static final Pattern TMDB_SIZE = Pattern.compile("^(https://image\\.tmdb\\.org/t/p/)(?:original|w\\d+)/");
@@ -373,6 +306,142 @@ public final class Logic {
         String title = normalizeContentTitle(titleA);
         return !title.isEmpty() && title.equals(normalizeContentTitle(titleB));
     }
+
+    // ------------------------------------------------------------ Profils Kids / Junior (lib/profile-audience.ts)
+
+    /** Un profil Kids voit les titres « kids » ; Junior voit aussi les titres « junior ». */
+    public static boolean canWatch(String audience, String mode) { return canWatch(audience, null, mode); }
+
+    /** Genres jamais montrés aux profils Kids et Junior, quelle que soit la classification. */
+    private static final java.util.Set<String> ADULT_GENRES = new java.util.HashSet<>(java.util.Arrays.asList(
+            "Horreur", "Thriller", "Crime", "Guerre", "War & Politics", "Reality", "Téléréalité", "Talk", "News",
+            "Documentaire", "Romance", "Soap", "Musique", "Western", "Histoire"));
+
+    /**
+     * Profils Kids et Junior : la classification du site (lib/profile-audience.ts) ne suffit pas, car le
+     * classement automatique marque « Tout public » des films d'action ou des thrillers. Sur la TV, on ne
+     * garde que les vrais titres pour enfants : genre Kids, Animation + Familial, ou Familial classé Kids ; Junior y ajoute les
+     * titres familiaux. Un genre adulte (horreur, thriller, crime…) exclut toujours le titre.
+     */
+    public static boolean canWatch(String audience, List<String> genres, String mode) {
+        if (mode == null || mode.isEmpty() || "standard".equals(mode)) return true;
+        if (genres == null || genres.isEmpty()) return false;
+        for (String g : genres) if (ADULT_GENRES.contains(g)) return false;
+        boolean kidsGenre = genres.contains("Kids");
+        boolean family = genres.contains("Familial");
+        boolean animation = genres.contains("Animation");
+        boolean manga = genres.contains(MANGA_GENRE);
+        // Un titre familial classé Kids par l'admin (ex. un spectacle Bluey) reste visible.
+        if (kidsGenre || (family && animation && !manga) || (family && "kids".equals(audience))) return true;
+        // Junior : en plus, les titres familiaux, sauf drames et séries en langue étrangère.
+        return "junior".equals(mode) && family && !manga && !genres.contains("Drame") && !genres.contains(FOREIGN_GENRE);
+    }
+
+    private static final Pattern TITLE_YEAR = Pattern.compile("\\((18\\d{2}|19\\d{2}|20\\d{2}|2100)\\)\\s*$");
+
+    /** Année de sortie : colonne release_year, sinon l'année entre parenthèses à la fin du titre. */
+    public static int releaseYear(int stored, String title) {
+        if (stored >= 1888 && stored <= 2100) return stored;
+        Matcher m = TITLE_YEAR.matcher(title == null ? "" : title);
+        return m.find() ? Integer.parseInt(m.group(1)) : -1;
+    }
+
+    // ------------------------------------------------------------ Rubriques Mangas / VO (lib/catalogue-categories.ts)
+
+    public static final String MANGA_GENRE = "Manga";
+    public static final String FOREIGN_GENRE = "Langue étrangère";
+    private static final Pattern FOREIGN_SCRIPT = Pattern.compile("[\\p{L}&&[^\\p{IsLatin}]]");
+
+    /** Une lettre d'une autre écriture que la nôtre (kana, hangul, han, cyrillique, arabe…). */
+    public static boolean hasForeignScript(String title) { return title != null && FOREIGN_SCRIPT.matcher(title).find(); }
+    public static boolean isManga(List<String> genres) { return genres != null && genres.contains(MANGA_GENRE); }
+    public static boolean isForeign(List<String> genres, String title) { return (genres != null && genres.contains(FOREIGN_GENRE)) || hasForeignScript(title); }
+    /** Films et Séries gardent seulement les titres qui n'ont pas leur propre rubrique. */
+    public static boolean isMainstream(List<String> genres, String title) { return !isManga(genres) && !isForeign(genres, title); }
+
+    /** category : all, movie, series, manga, foreign. */
+    public static boolean inCategory(String type, List<String> genres, String title, String category) {
+        if ("manga".equals(category)) return isManga(genres);
+        if ("foreign".equals(category)) return isForeign(genres, title);
+        if ("movie".equals(category) || "series".equals(category)) return category.equals(type) && isMainstream(genres, title);
+        return true;
+    }
+
+    // ------------------------------------------------------------ Reprise (lib/watch-progress.ts)
+
+    /** Secondes rejouées à la reprise, pour retrouver le fil. */
+    public static final int RESUME_REWIND = 5;
+    public static long resumeStart(long time) { return time > 30 ? time - RESUME_REWIND : 0; }
+    /** Un film quitte « Reprendre » à son générique (92 %). */
+    public static boolean isMostlyWatched(double time, double duration) { return duration > 0 && time / duration >= 0.92; }
+    /** Un épisode quitté dans ses deux dernières minutes (ou à 95 %) est considéré comme vu. */
+    public static boolean episodeFinished(double time, double duration) { return duration > 0 && (time / duration >= .95 || (duration >= 600 && duration - time <= 120)); }
+    /** Un film à peine commencé ou déjà au générique ne va pas dans « Reprendre ». */
+    public static boolean showInContinue(boolean series, double time, double duration) { return series || (time >= 60 && !isMostlyWatched(time, duration)); }
+
+    // ------------------------------------------------------------ Lecture native (lib/catalogue-source.ts)
+
+    /** Sources que le site sait transformer en flux vidéo (Moviez, catalogue-player, EmbedOrigin, vidéo directe). */
+    public static boolean isNativePlayback(String value) {
+        if (value == null || value.isEmpty()) return false;
+        if (isDirectVideo(value)) return true;
+        try {
+            URI url = URI.create(SITE_BASE).resolve(value.trim().replace(" ", "%20"));
+            String host = url.getHost() == null ? "" : url.getHost().toLowerCase(Locale.ROOT);
+            String path = url.getPath() == null ? "" : url.getPath();
+            if (host.equals("api.moviez.ac")) return true;
+            if (path.equals("/api/catalogue-player")) return true;
+            return host.equals("embedorigin.cc") && path.matches("^/e/[a-z0-9]{12}/?$");
+        } catch (Exception e) { return false; }
+    }
+
+    /** Langue normalisée d'une piste audio (fra → fr, eng → en…). */
+    public static String audioLanguage(String value) {
+        String l = value == null ? "" : value.trim().toLowerCase(Locale.ROOT).split("[-_]")[0];
+        switch (l) {
+            case "fra": case "fre": return "fr";
+            case "eng": return "en";
+            case "deu": case "ger": return "de";
+            case "spa": return "es";
+            case "ita": return "it";
+            case "jpn": return "ja";
+            default: return l;
+        }
+    }
+
+    public static String audioLabel(String name, String lang, int index) {
+        if (name != null && !name.isEmpty()) return name;
+        switch (audioLanguage(lang)) {
+            case "fr": return "Français";
+            case "en": return "Anglais";
+            case "ja": return "Japonais";
+            case "es": return "Espagnol";
+            case "de": return "Allemand";
+            case "it": return "Italien";
+            case "ko": return "Coréen";
+            default: return "Piste " + (index + 1);
+        }
+    }
+
+    // ------------------------------------------------------------ Avatars d'origine (lib/avatars.ts)
+
+    public static final String[][][] DEFAULT_AVATARS = {
+            {{"Disney & Princesses"},
+                    {"Raiponce", "https://static.wikia.nocookie.net/heros/images/4/42/Raiponce_Infobox.jpg/revision/latest?cb=20200723185055&path-prefix=fr"},
+                    {"Mickey", "https://avatarfiles.alphacoders.com/214/214614.jpg"},
+                    {"Reine des Neiges", "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRz5Y10-MulAuvwLsp9t3wrzWVcXY5o2vfv3gnwPB2sJkKn0hBlTWzAo0-9&s=10"},
+                    {"Le Roi Lion", "https://journaldemickey.com/wp-content/uploads/2024/06/roi-lion-personnages.jpg"}},
+            {{"Super-Héros & Comics"},
+                    {"Spider-Man", "https://avatarfiles.alphacoders.com/375/thumb-350-375896.webp"},
+                    {"Batman", "https://image.api.playstation.com/cdn/UP1018/CUSA00133_00/Dz5i57ktol8qBJsWEVdjNy8wj3Tc5fF0Y2MyX0Poi4lAniOaUpfjH5IU2vVejxey.png"},
+                    {"Joker", "https://img.magnific.com/free-vector/scary-clown-head-with-blue-hair-vector_43623-1371.jpg?semt=ais_hybrid&w=740&q=80"},
+                    {"Marvel", "https://avatarfiles.alphacoders.com/604/60402.jpg"}},
+            {{"Gaming & Séries"},
+                    {"Mario", "https://pbs.twimg.com/profile_images/1929549617441521664/dn4udfbC_400x400.jpg"},
+                    {"Stranger Things", "https://cf-images.assettype.com/cinemaexpress%2F2026-01-01%2Fbr0w32gz%2FST5-1.jpg?w=480&auto=format%2Ccompress"},
+                    {"Anime", "https://www.projectxparis.com/cdn/shop/articles/344_75d7d802-3d2c-42ca-b360-afcc41033d8d.jpg?v=1759397750"},
+                    {"Gaming Neon", "https://cdn.dribbble.com/userupload/5333469/file/original-d913e65193d78f79999f30fce27114c8.png?resize=752x&vertical=center"}},
+    };
 
     // ------------------------------------------------------------ Divers
 

@@ -1,23 +1,19 @@
 package com.yamonfilm.tv.screens;
 
-import android.graphics.Outline;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.StateListDrawable;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
-import android.view.ViewOutlineProvider;
 import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.ScrollView;
-import org.json.JSONArray;
-import org.json.JSONObject;
 
 import com.yamonfilm.tv.App;
+import com.yamonfilm.tv.Cards;
 import com.yamonfilm.tv.Dialogs;
 import com.yamonfilm.tv.MainActivity;
 import com.yamonfilm.tv.Models.Profile;
@@ -27,50 +23,65 @@ import com.yamonfilm.tv.Ui;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static com.yamonfilm.tv.Ui.dp;
 
-/** Création ou modification d'un profil. */
+/** Création ou modification d'un profil : nom, mode (Standard, Kids, Junior) et avatar. */
 public final class ProfileEditScreen extends Screen {
     private final Profile editing;
     private EditText name;
-    private String avatar;
-    private String mode = "standard";
+    private String avatar, mode;
     private final List<View> avatarViews = new ArrayList<>();
+    private final List<TextView> modeChips = new ArrayList<>();
+    private LinearLayout avatarsBox;
+    private TextView preview;
     private boolean saving;
-    private LinearLayout grid;
-    private int avatarSize;
-    private int columns;
+
+    private static final String[][] MODES = {
+            {"standard", "Standard", "Tout le catalogue"},
+            {"kids", "Kids", "Petits enfants"},
+            {"junior", "Junior", "Enfants plus grands"},
+    };
 
     public ProfileEditScreen(MainActivity main, Profile editing) {
         super(main);
         this.editing = editing;
-        if (editing != null) mode = editing.mode;
         avatar = editing != null && editing.avatar != null && !editing.avatar.isEmpty() ? editing.avatar : ProfilesScreen.AVATARS[0][1];
+        mode = editing != null && editing.mode != null ? editing.mode : "standard";
     }
 
     @Override protected View create() {
         FrameLayout root = new FrameLayout(main);
-        root.setBackgroundColor(Ui.BG);
-        LinearLayout col = Ui.column(main);
-        col.setPadding(dp(40), dp(24), dp(40), dp(30));
-        int available = main.getResources().getDisplayMetrics().widthPixels - dp(100);
-        columns = Math.max(2, Math.min(8, available / dp(120)));
-        avatarSize = Math.min(dp(96), (available - columns * dp(18)) / columns);
-        Ui.noClip(col);
-        col.addView(Ui.label(main, editing == null ? "Nouveau profil" : "Modifier le profil", 32, Ui.TEXT, true));
+        root.setBackground(Ui.gradient(GradientDrawable.Orientation.TOP_BOTTOM, 0xFF0F1830, 0xFF060A15));
+        Cards.VScroll scroll = new Cards.VScroll(main, false);
+        LinearLayout col = scroll.content;
+        col.setPadding(dp(80), dp(44), dp(80), dp(60));
+        col.addView(Ui.kicker(main, editing == null ? "NOUVEAU PROFIL" : "MODIFIER LE PROFIL", Ui.ACCENT_TEXT));
+        LinearLayout top = Ui.row(main);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        Ui.noClip(top);
+        preview = new TextView(main);
+        LinearLayout fields = Ui.column(main);
+        Ui.noClip(fields);
         name = Ui.input(main, "Nom du profil", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
         name.setImeOptions(EditorInfo.IME_ACTION_DONE);
         if (editing != null) name.setText(editing.name);
-        col.addView(name, Ui.lp(dp(460), Ui.WRAP, 0, dp(22), 0, 0));
-        TextView modeButton = Ui.button(main, "Profil : " + mode, 0, Ui.STYLE_NORMAL);
-        modeButton.setOnClickListener(v -> { mode = "standard".equals(mode) ? "kids" : "kids".equals(mode) ? "junior" : "standard"; modeButton.setText("Profil : " + mode); });
-        col.addView(modeButton, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(18), 0, 0));
-        col.addView(Ui.label(main, "Choisis un avatar", 18, Ui.MUTED, true), Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(26), 0, dp(10)));
-        grid = Ui.column(main);
-        Ui.noClip(grid);
-        renderAvatars(new JSONArray());
-        col.addView(grid);
+        fields.addView(name, Ui.lp(dp(460), Ui.WRAP));
+        // Mode du profil : comme sur le site, Kids et Junior ne voient que les titres adaptés.
+        LinearLayout modes = Ui.row(main);
+        Ui.noClip(modes);
+        for (String[] m : MODES) {
+            TextView chip = Ui.chip(main, m[1] + "  ·  " + m[2]);
+            chip.setActivated(m[0].equals(mode));
+            chip.setOnClickListener(v -> { mode = m[0]; for (TextView c : modeChips) c.setActivated(c == v); });
+            modes.addView(chip, Ui.lp(Ui.WRAP, Ui.WRAP, 0, 0, dp(10), 0));
+            modeChips.add(chip);
+        }
+        fields.addView(modes, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(16), 0, 0));
+        top.addView(fields);
+        col.addView(top, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(18), 0, 0));
+
         LinearLayout buttons = Ui.row(main);
         Ui.noClip(buttons);
         TextView save = Ui.button(main, "Enregistrer", R.drawable.ic_check, Ui.STYLE_PRIMARY);
@@ -85,77 +96,72 @@ public final class ProfileEditScreen extends Screen {
                     io(() -> { App.repo().deleteProfile(editing.id); return true; }, (ok, e) -> { if (e != null) fail(e); else { main.toast("Profil supprimé"); main.pop(); } })));
             buttons.addView(delete, Ui.lp(Ui.WRAP, Ui.WRAP, dp(14), 0, 0, 0));
         }
-        col.addView(buttons, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(18), 0, 0));
-        ScrollView scroll = new ScrollView(main);
-        scroll.setFillViewport(true);
-        scroll.setClipToPadding(false);
-        scroll.addView(col);
-        root.addView(scroll);
-        io(() -> App.repo().profileAvatars(), (rows, error) -> {
-            if (error != null) { main.toast("Nouveaux avatars indisponibles. Les avatars habituels restent disponibles."); return; }
-            renderAvatars(rows);
-        });
+        col.addView(buttons, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(22), 0, 0));
+
+        col.addView(Ui.label(main, "Choisis un avatar", 22, Ui.TEXT, Ui.W_SEMIBOLD), Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(30), 0, dp(4)));
+        avatarsBox = Ui.column(main);
+        Ui.noClip(avatarsBox);
+        col.addView(avatarsBox);
+        root.addView(scroll, new FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH));
+        // Avatars d'origine tout de suite, puis ceux de la bibliothèque du site.
+        renderAvatars(defaultAvatars());
+        io(() -> App.repo().avatarCategories(), (groups, e) -> { if (groups != null) renderAvatars(groups); });
         return root;
     }
 
-    private void renderAvatars(JSONArray rows) {
-        grid.removeAllViews();
-        avatarViews.clear();
-        java.util.LinkedHashMap<String, List<String[]>> groups = new java.util.LinkedHashMap<>();
-        List<String[]> defaults = new ArrayList<>();
-        for (String[] item : ProfilesScreen.AVATARS) defaults.add(item);
-        groups.put("Les classiques", defaults);
-        for (int i = 0; i < rows.length(); i++) {
-            JSONObject row = rows.optJSONObject(i);
-            if (row == null || !row.optString("image_url").startsWith("https://")) continue;
-            String category = row.optString("category", "Autres");
-            if (!groups.containsKey(category)) groups.put(category, new ArrayList<>());
-            groups.get(category).add(new String[]{row.optString("name"), row.optString("image_url")});
+    private static Map<String, List<String[]>> defaultAvatars() {
+        Map<String, List<String[]>> groups = new java.util.LinkedHashMap<>();
+        for (String[][] group : com.yamonfilm.tv.Logic.DEFAULT_AVATARS) {
+            List<String[]> list = new ArrayList<>();
+            for (int i = 1; i < group.length; i++) list.add(group[i]);
+            groups.put(group[0][0], list);
         }
-        for (java.util.Map.Entry<String, List<String[]>> group : groups.entrySet()) {
-            grid.addView(Ui.label(main, group.getKey(), 16, Ui.TEXT, true), Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(12), 0, dp(12)));
-            List<String[]> entries = group.getValue();
-            LinearLayout line = null;
-            for (int i = 0; i < entries.size(); i++) {
-                if (i % columns == 0) { line = Ui.row(main); Ui.noClip(line); grid.addView(line, Ui.lp(Ui.WRAP, Ui.WRAP, 0, 0, 0, dp(14))); }
-                final String url = entries.get(i)[1];
-                FrameLayout a = new FrameLayout(main);
-                a.setFocusable(true);
-                a.setClickable(true);
-                a.setTag(url);
-                a.setContentDescription(entries.get(i)[0]);
-                a.setBackground(Ui.round(0xFF2A2E39, 50));
-                StateListDrawable ring = new StateListDrawable();
-                ring.addState(Ui.focusedState(), oval(Ui.FOCUS));
-                ring.addState(Ui.activatedState(), oval(Ui.GOLD));
-                ring.addState(new int[]{}, new android.graphics.drawable.ColorDrawable(0));
-                a.setForeground(ring);
-                a.setOutlineProvider(new ViewOutlineProvider() { @Override public void getOutline(View v, Outline o) { o.setOval(0, 0, v.getWidth(), v.getHeight()); } });
-                a.setClipToOutline(true);
-                ImageView img = new ImageView(main);
-                img.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                a.addView(img, Ui.flp(Ui.MATCH, Ui.MATCH, 0));
-                App.images().load(img, url, avatarSize, avatarSize);
-                a.setActivated(url.equals(avatar));
-                a.setOnClickListener(v -> { avatar = url; for (View o : avatarViews) o.setActivated(url.equals(o.getTag())); });
-                Ui.onFocus(a, 1.1f, null);
-                LinearLayout tile = Ui.column(main);
-                tile.addView(a, Ui.lp(avatarSize, avatarSize));
-                TextView caption = Ui.label(main, entries.get(i)[0], 12, Ui.MUTED, false);
-                caption.setMaxLines(2);
-                caption.setGravity(Gravity.CENTER);
-                tile.addView(caption, Ui.lp(avatarSize, Ui.WRAP, 0, dp(6), 0, 0));
-                line.addView(tile, Ui.lp(avatarSize, Ui.WRAP, 0, 0, dp(18), 0));
-                avatarViews.add(a);
-            }
-        }
+        return groups;
     }
 
-    private static GradientDrawable oval(int color) {
-        GradientDrawable g = new GradientDrawable();
-        g.setShape(GradientDrawable.OVAL);
-        g.setStroke(dp(4), color);
-        return g;
+    /** Avatars par catégorie, en rangées défilantes. */
+    private void renderAvatars(Map<String, List<String[]>> groups) {
+        boolean hadFocus = MainActivity.isInside(main.getCurrentFocus(), avatarsBox);
+        avatarsBox.removeAllViews();
+        avatarViews.clear();
+        View selected = null;
+        for (Map.Entry<String, List<String[]>> g : groups.entrySet()) {
+            if (g.getValue().isEmpty()) continue;
+            Cards.Shelf shelf = new Cards.Shelf(main, g.getKey());
+            shelf.title.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 16);
+            shelf.title.setTextColor(Ui.MUTED);
+            for (String[] a : g.getValue()) {
+                View v = avatarTile(a[1]);
+                shelf.add(v, 18);
+                if (a[1].equals(avatar)) selected = v;
+            }
+            avatarsBox.addView(shelf, Ui.lp(Ui.MATCH, Ui.WRAP, 0, dp(10), 0, 0));
+        }
+        if (hadFocus) (selected != null ? selected : avatarViews.isEmpty() ? name : avatarViews.get(0)).requestFocus();
+    }
+
+    private View avatarTile(String url) {
+        FrameLayout a = new FrameLayout(main);
+        a.setLayoutParams(new android.view.ViewGroup.MarginLayoutParams(dp(96), dp(96)));
+        a.setFocusable(true);
+        a.setClickable(true);
+        a.setTag(url);
+        a.setBackground(Ui.gradient(GradientDrawable.Orientation.TL_BR, 0xFF23304F, 0xFF111A30));
+        StateListDrawable ring = new StateListDrawable();
+        ring.addState(Ui.focusedState(), Ui.ring(Ui.FOCUS, 4, 24));
+        ring.addState(Ui.activatedState(), Ui.ring(Ui.GOLD, 4, 24));
+        ring.addState(new int[]{}, new android.graphics.drawable.ColorDrawable(0));
+        a.setForeground(ring);
+        Ui.clipRound(a, 24);
+        ImageView img = new ImageView(main);
+        img.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        a.addView(img, Ui.flp(Ui.MATCH, Ui.MATCH, 0));
+        App.images().load(img, url, dp(96), dp(96));
+        a.setActivated(url.equals(avatar));
+        a.setOnClickListener(v -> { avatar = url; for (View o : avatarViews) o.setActivated(url.equals(o.getTag())); });
+        Ui.onFocus(a, 1.12f, null);
+        avatarViews.add(a);
+        return a;
     }
 
     private void save() {
@@ -163,8 +169,8 @@ public final class ProfileEditScreen extends Screen {
         if (value.isEmpty()) { main.toast("Donne un nom à ce profil."); name.requestFocus(); return; }
         if (saving) return;
         saving = true;
-        final String chosen = avatar;
-        io(() -> { App.repo().saveProfile(editing == null ? null : editing.id, value, chosen, mode); return true; }, (ok, e) -> {
+        final String chosen = avatar, chosenMode = mode;
+        io(() -> { App.repo().saveProfile(editing == null ? null : editing.id, value, chosen, chosenMode); return true; }, (ok, e) -> {
             saving = false;
             if (e != null) { fail(e); return; }
             main.toast(editing == null ? "Profil créé" : "Profil enregistré");

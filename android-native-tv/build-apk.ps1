@@ -2,7 +2,7 @@
 # Compile, teste, signe et vérifie l'APK YAMONFILM pour Android TV.
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
-$version = '2.5.0'
+$version = '2.7.0'
 if ($PrepareTools) { & (Join-Path $root 'prepare-tools.ps1') }
 
 # Outils : ceux de ce dossier, sinon ceux déjà téléchargés pour le site (lecture seule).
@@ -43,7 +43,7 @@ $src = Join-Path $root 'app/src/main'
 $aapt = Join-Path $bt 'aapt2.exe'
 Write-Host '1/6 Ressources'
 Run $aapt @('compile', '--dir', (Join-Path $src 'res'), '-o', (Join-Path $build 'resources.zip'))
-Run $aapt @('link', '-o', (Join-Path $build 'unsigned.apk'), '--manifest', (Join-Path $src 'AndroidManifest.xml'), '-I', $androidJar, '--java', $gen, '--min-sdk-version', '26', '--target-sdk-version', '35', '--version-code', '16', '--version-name', $version, (Join-Path $build 'resources.zip'))
+Run $aapt @('link', '-o', (Join-Path $build 'unsigned.apk'), '--manifest', (Join-Path $src 'AndroidManifest.xml'), '-I', $androidJar, '--java', $gen, '--min-sdk-version', '26', '--target-sdk-version', '35', '--version-code', '20', '--version-name', $version, (Join-Path $build 'resources.zip'))
 
 Write-Host '2/6 Compilation Java'
 $sources = @(Get-ChildItem -LiteralPath (Join-Path $src 'java') -Recurse -Filter '*.java' | ForEach-Object FullName)
@@ -51,8 +51,9 @@ $sources += @(Get-ChildItem -LiteralPath $gen -Recurse -Filter '*.java' | ForEac
 Run (Join-Path $jdk 'javac.exe') (@('-encoding', 'UTF-8', '-source', '8', '-target', '8', '-Xlint:-options', '-nowarn', '-classpath', $androidJar, '-d', $classes) + $sources)
 
 Write-Host '3/6 Tests'
-Run (Join-Path $jdk 'javac.exe') @('-encoding', 'UTF-8', '-classpath', $classes, '-d', $testClasses, (Join-Path $root 'tests/LogicTest.java'))
+Run (Join-Path $jdk 'javac.exe') @('-encoding', 'UTF-8', '-classpath', $classes, '-d', $testClasses, (Join-Path $root 'tests/LogicTest.java'), (Join-Path $root 'tests/DiscoveryTest.java'))
 Run (Join-Path $jdk 'java.exe') @('-Dfile.encoding=UTF-8', '-cp', "$classes;$testClasses", 'LogicTest')
+Run (Join-Path $jdk 'java.exe') @('-Dfile.encoding=UTF-8', '-cp', "$classes;$testClasses", 'DiscoveryTest')
 
 Write-Host '4/6 Conversion DEX'
 Run (Join-Path $jdk 'jar.exe') @("-J-Djava.io.tmpdir=$tmp", '--create', '--file', (Join-Path $build 'classes.jar'), '-C', $classes, '.')
