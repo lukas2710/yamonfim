@@ -225,7 +225,7 @@ public final class PlayerActivity extends Activity implements App.Alive {
         App.io(this, () -> App.repo().playback(src, skip, chosen), (st, e) -> {
             if (gen != generation) return;
             if (e instanceof Api.AuthExpired) { showError("Ta session a expiré. Reconnecte-toi dans l'application.", false); return; }
-            if (e != null) { failover(resumeMs, App.message(e)); return; }
+            if (e != null) { showError(App.message(e), false); return; }
             if (st.error != null) {
                 // Le site indique les sources essayées : on les écarte et on continue la recherche.
                 int before = excluded.size();

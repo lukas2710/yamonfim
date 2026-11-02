@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     try { source = isSupportedEmbed(body?.url) ? body.url as string : catalogueSource(body?.url); }
     catch { return NextResponse.json({ error: 'Lecteur non pris en charge.' }, { status: 400, headers }); }
     const excluded = Array.isArray(body?.excluded) ? body.excluded.filter((value: unknown) => typeof value === 'string' && value.length <= 4096).slice(0, MAX_SOURCE_EMBEDS) : [];
-    const signal = AbortSignal.any([request.signal, AbortSignal.timeout(55000)]);
+    const signal = AbortSignal.any([request.signal, AbortSignal.timeout(30000)]);
     if (typeof body?.selected === 'string' && body.selected) {
       const collected = typeof source === 'string' ? null : source.embeds?.length ? source : await discoverCatalogueSource(source, signal);
       const allowed = collected ? [primaryEmbed(collected), ...(collected.extras || []), ...(collected.embeds || [])] : [source];

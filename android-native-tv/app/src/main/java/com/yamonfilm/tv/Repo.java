@@ -631,7 +631,7 @@ public final class Repo {
         } catch (Exception ignored) { }
         Map<String, String> h = new LinkedHashMap<>();
         h.put("Authorization", "Bearer " + s.accessToken);
-        Api.Result r = Api.http("POST", Api.SITE + "api/playback", body.toString(), h, 60000);
+        Api.Result r = Api.http("POST", Api.SITE + "api/playback", body.toString(), h, 35000);
         JSONObject data = Api.parseObject(r.body);
         Stream st = new Stream();
         if (data == null) { st.error = "Le flux vidéo est indisponible. Réessaie dans un instant."; return st; }
