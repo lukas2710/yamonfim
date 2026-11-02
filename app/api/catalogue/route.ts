@@ -11,14 +11,15 @@ const CDN_CACHE = 'public, s-maxage=300, stale-while-revalidate=86400';
 // « durable » shares one copy across Netlify edge nodes: visitors get it at once
 // while a stale copy is refreshed in the background.
 const NETLIFY_CACHE = 'public, durable, s-maxage=300, stale-while-revalidate=86400';
-// The scheduled refresh runs every five minutes; past a day, rebuild here.
-const SNAPSHOT_MAX_AGE = 86400000;
+// The scheduled refresh runs every five minutes. Keep serving the last known
+// good snapshot when Supabase is slow or unavailable; never block visitors on
+// rebuilding a catalogue with thousands of rows.
 let memory: { rows: unknown[]; expires: number } | null = null;
 let pending: Promise<unknown[]> | null = null;
 
 async function catalogue() {
   const snapshot = await readCatalogueSnapshot();
-  if (snapshot && Date.now() - snapshot.at < SNAPSHOT_MAX_AGE) return snapshot.rows;
+  if (snapshot) return snapshot.rows;
   const rows = await buildCatalogue();
   await writeCatalogueSnapshot(rows);
   return rows;

@@ -21,26 +21,16 @@ export function fetchCatalogueCards<T extends { id: string | number }>(client: S
   }).then(rows => { onPage?.(rows); return rows; });
 }
 
-// How long visitors wait for the CDN copy before reading Supabase page by page.
-const CDN_WAIT_MS = 2500;
-
-// Public cards are shared across visitor and admin screens; admin selectors add
-// recent live rows and editing opens the full live record. When the cached copy
-// is slow (cold cache), the first titles come from Supabase at once instead.
+// Public cards are shared across visitor and admin screens. Keep one request
+// path for the full catalogue: falling back to paginating all media from every
+// browser multiplied database sorting work during slow cache responses.
 export function fetchPublicCatalogueCards<T extends { id: string | number }>(client: SupabaseClient, onPage?: (rows: T[]) => void) {
-  return readClientResource<T[]>('catalogue:public', () => new Promise<T[]>((resolve, reject) => {
-    let settled = false, fallback = false, publicFailed = false, directFailed = false;
-    let directError: unknown;
-    const finish = (rows: T[]) => { if (!settled) { settled = true; clearTimeout(timer); resolve(rows); } };
-    const direct = () => {
-      if (fallback) return;
-      fallback = true;
-      fetchCards<T>(client, rows => { if (!settled) onPage?.(rows); }).then(finish, error => { directFailed = true; directError = error; if (!settled && publicFailed) { settled = true; clearTimeout(timer); reject(error); } });
-    };
-    const failPublic = () => { publicFailed = true; if (directFailed && !settled) { settled = true; clearTimeout(timer); reject(directError); } else direct(); };
-    const timer = setTimeout(direct, CDN_WAIT_MS);
-    fetch('/api/catalogue', { signal: AbortSignal.timeout(20000) })
-      .then(response => response.ok ? response.json() : null)
-      .then((rows: unknown) => { if (Array.isArray(rows) && !settled) { onPage?.(rows as T[]); finish(rows as T[]); } else failPublic(); }, failPublic);
-  })).then(rows => { onPage?.(rows); return rows; });
+  return readClientResource<T[]>('catalogue:public', async () => {
+    const response = await fetch('/api/catalogue', { signal: AbortSignal.timeout(20000) });
+    if (!response.ok) throw new Error(`Le catalogue ne peut pas être chargé (${response.status}). Réessaie.`);
+    const rows: unknown = await response.json();
+    if (!Array.isArray(rows)) throw new Error('Réponse catalogue invalide. Réessaie.');
+    onPage?.(rows as T[]);
+    return rows as T[];
+  }).then(rows => { onPage?.(rows); return rows; });
 }
