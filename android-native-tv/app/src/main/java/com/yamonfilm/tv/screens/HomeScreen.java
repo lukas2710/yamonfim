@@ -30,9 +30,11 @@ import com.yamonfilm.tv.Ui;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static com.yamonfilm.tv.Ui.dp;
 
@@ -68,6 +70,7 @@ public final class HomeScreen extends Screen {
     private Discovery.Result<Media> discovery;
     private Discovery.Rankings displayRankings = Discovery.Rankings.empty();
     private boolean discoveryBusy, discoveryPending, heroDirty;
+    private boolean catalogueLoading = true;
     private long rankingsUpdated;
 
     public HomeScreen(MainActivity main) { super(main); }
@@ -142,6 +145,7 @@ public final class HomeScreen extends Screen {
 
     @Override protected void onShow(boolean first) {
         if (first) {
+            catalogueLoading = true;
             io(() -> App.repo().loadCachedCatalogue(), (cached, e) -> {
                 if (Boolean.TRUE.equals(cached)) renderCatalogue();
                 refreshCatalogue();
@@ -159,7 +163,13 @@ public final class HomeScreen extends Screen {
 
     private void refreshCatalogue() {
         final boolean firstCatalogue = App.repo().catalogue().isEmpty();
-        io(() -> App.repo().refreshCatalogue(), (rows, e) -> {
+        catalogueLoading = true;
+        io(() -> App.repo().refreshCatalogue(() -> App.MAIN.post(() -> {
+            if (!alive()) return;
+            catalogueLoading = false;
+            renderCatalogue();
+        })), (rows, e) -> {
+            catalogueLoading = false;
             if (e != null) {
                 if (App.repo().catalogue().isEmpty()) {
                     spinner.setVisibility(View.GONE);
@@ -231,6 +241,7 @@ public final class HomeScreen extends Screen {
     // ------------------------------------------------------------ Rangées
 
     private void renderCatalogue() {
+        if (App.repo().catalogue().isEmpty() && catalogueLoading) return;
         if (discoveryBusy) { discoveryPending = true; return; }
         discoveryBusy = true;
         List<Media> catalogue = App.repo().visibleCatalogue();
@@ -262,7 +273,7 @@ public final class HomeScreen extends Screen {
         if (all.isEmpty()) {
             loading.setVisibility(View.VISIBLE);
             spinner.setVisibility(View.GONE);
-            loadingText.setText("Aucun titre n'est encore disponible.");
+            loadingText.setText(catalogueLoading ? "Chargement du catalogue…" : "Aucun titre n'est encore disponible.");
             return;
         }
         loading.setVisibility(View.GONE);
@@ -569,9 +580,12 @@ public final class HomeScreen extends Screen {
     private void renderContinue() {
         if (App.repo().catalogue().isEmpty()) return;
         List<View> cards = new ArrayList<>();
+        Set<String> included = new HashSet<>();
         for (History h : history) {
             Media m = App.repo().cached(h.mediaId);
-            if (m == null || cards.size() >= 20) continue;
+            // L'historique peut garder une ligne par épisode : la ligne la plus récente
+            // représente la série entière dans « Reprendre ».
+            if (m == null || cards.size() >= 20 || !included.add(m.id)) continue;
             // Un épisode terminé reste une reprise valide : la fiche avance alors au suivant.
             // Seule une série entièrement vue sort de cette rangée.
             if (m.isSeries() ? App.repo().completed(m.id) : App.repo().seenPosition(m.id, false, h.seasonIdx, h.episodeIdx)) continue;

@@ -25,13 +25,22 @@ async function catalogue() {
   return rows;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     if (!memory || memory.expires <= Date.now()) {
       pending ??= catalogue().finally(() => { pending = null; });
       memory = { rows: await pending, expires: Date.now() + 300000 };
     }
-    return NextResponse.json(memory.rows, { headers: { 'Cache-Control': 'public, max-age=60', 'CDN-Cache-Control': CDN_CACHE, 'Netlify-CDN-Cache-Control': NETLIFY_CACHE } });
+    const url = new URL(request.url);
+    const paged = url.searchParams.has('limit') || url.searchParams.has('offset');
+    const limit = paged ? Math.max(1, Math.min(2000, Number(url.searchParams.get('limit')) || 1000)) : memory.rows.length;
+    const offset = paged ? Math.max(0, Number(url.searchParams.get('offset')) || 0) : 0;
+    const rows = memory.rows.slice(offset, offset + limit);
+    const end = rows.length ? offset + rows.length - 1 : offset;
+    return NextResponse.json(rows, { headers: {
+      'Cache-Control': 'public, max-age=60', 'CDN-Cache-Control': CDN_CACHE, 'Netlify-CDN-Cache-Control': NETLIFY_CACHE,
+      'Content-Range': `items ${offset}-${end}/${memory.rows.length}`,
+    } });
   } catch {
     return NextResponse.json({ error: 'Le catalogue ne peut pas être chargé. Réessaie dans un instant.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
   }

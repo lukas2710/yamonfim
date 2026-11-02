@@ -127,23 +127,48 @@ public final class Repo {
         } catch (Exception e) { return false; }
     }
 
-    public List<Media> refreshCatalogue() throws IOException {
-        // Same public card snapshot as the site: one cached download instead of
-        // a hundred Supabase page requests. Existing pagination remains a fallback.
-        Api.Result response = Api.http("GET", Api.SITE + "api/catalogue", null, null, 45000);
-        if (response.status == 200) {
+    public List<Media> refreshCatalogue() throws IOException { return refreshCatalogue(null); }
+
+    /** Load a small first batch for the home screen, then the remaining cached pages. */
+    public List<Media> refreshCatalogue(Runnable firstPageReady) throws IOException {
+        final int pageSize = 2000;
+        Api.Result response = null;
+        IOException routeError = null;
+        try { response = Api.http("GET", Api.SITE + "api/catalogue?limit=" + pageSize + "&offset=0", null, null, 15000); }
+        catch (IOException e) { routeError = e; }
+        if (routeError != null && routeError.getMessage() != null && routeError.getMessage().contains("trop de temps")) throw routeError;
+        if (response != null && response.status == 200) {
             if (!response.body.trim().startsWith("[")) throw new IOException("Réponse du catalogue invalide. Réessaie.");
-            List<Media> rows = parse(Api.parseArray(response.body));
-            publish(rows); saveCatalogue(rows); return rows;
+            List<Media> rows = new ArrayList<>(parse(Api.parseArray(response.body)));
+            int total = response.total();
+            if (rows.isEmpty() && total > 0) throw new IOException("Le catalogue ne peut pas être chargé complètement. Réessaie.");
+            publish(rows);
+            saveCatalogue(rows);
+            if (firstPageReady != null) firstPageReady.run();
+            int offset = rows.size();
+            while (total >= 0 ? offset < total : rows.size() % pageSize == 0 && !rows.isEmpty()) {
+                Api.Result page = Api.http("GET", Api.SITE + "api/catalogue?limit=" + pageSize + "&offset=" + offset, null, null, 15000);
+                if (page.status != 200 || !page.body.trim().startsWith("[")) throw new IOException("Le catalogue continue de charger ; réessaie dans un instant.");
+                List<Media> next = parse(Api.parseArray(page.body));
+                if (next.isEmpty()) break;
+                rows.addAll(next);
+                offset += next.size();
+                publish(new ArrayList<>(rows));
+                if (total < 0 && next.size() < pageSize) break;
+            }
+            saveCatalogue(rows);
+            return rows;
         }
-        // This route is shipped with the site. Avoid hundreds of slow Supabase
-        // page requests when the catalogue service is unavailable.
-        if (response.status != 404 && response.status != 405) throw new IOException("Le catalogue ne peut pas être chargé (" + response.status + "). Réessaie.");
+        if (response != null && response.status < 500 && response.status != 404 && response.status != 405)
+            throw new IOException("Le catalogue ne peut pas être chargé (" + response.status + "). Réessaie.");
+
+        // On a gardé le cache local affiché. Si le point public est indisponible,
+        // récupère les cartes directement depuis Supabase avec des pages efficaces.
         List<Media> rows = new ArrayList<>();
         Set<String> seen = new HashSet<>();
-        int total = Integer.MAX_VALUE, offset = 0;
+        int total = Integer.MAX_VALUE, offset = 0, pageSizeFallback = 1000;
         while (offset < total) {
-            Q q = new Q().select(CARD_COLUMNS).order("created_at.desc,id.desc").offset(offset).limit(250);
+            Q q = new Q().select(CARD_COLUMNS).order("created_at.desc,id.desc").offset(offset).limit(pageSizeFallback);
             Api.Result r = offset == 0 ? api.selectCounted("media", q) : null;
             JSONArray data = r != null ? Api.parseArray(r.body) : api.select("media", q);
             if (r != null && r.total() >= 0) total = r.total();
@@ -153,7 +178,9 @@ public final class Repo {
             }
             offset += data.length();
             for (Media m : parse(data)) if (seen.add(m.id)) rows.add(m);
-            if (total == Integer.MAX_VALUE && data.length() < 250) break;
+            publish(new ArrayList<>(rows));
+            if (offset == data.length() && !rows.isEmpty() && firstPageReady != null) firstPageReady.run();
+            if (total == Integer.MAX_VALUE && data.length() < pageSizeFallback) break;
         }
         publish(rows);
         saveCatalogue(rows);
