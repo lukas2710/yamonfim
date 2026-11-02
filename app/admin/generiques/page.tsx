@@ -13,6 +13,9 @@ type Series = { id: string; title: string; tmdb_id?: string | number };
 type Season = { seasonNumber: number; episodes: { number: number; title?: string; embedUrl?: string }[] };
 type Marker = { episode_key: string; season: number; episode: number; duration_ms: number; start_sec: number | null; source: string; expires_at: string | null };
 type Scan = { done: number; found: number; failed: number; current: string; seriesDone: number; seriesTotal: number };
+const CREDIT_COLUMNS = 'episode_key,season,episode,duration_ms,start_sec,source,expires_at';
+const CREDIT_PAGE_SIZE = 1000;
+const SERIES_PAGE_SIZE = 1000;
 const identity = (key: string, season: number, episode: number) => `${key}/${season}/${episode}`;
 const formatTime = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 const field = 'rounded-lg border border-white/15 bg-zinc-900 px-3 py-2 text-white';
@@ -50,6 +53,73 @@ function creditsSummary(markers: Marker[]) {
   return { manual, automatic, hasAutomatic: (item: Series) => automaticKeys.has(`media:${item.id}`) || !!item.tmdb_id && automaticKeys.has(`tmdb:${item.tmdb_id}`), count: (item: Series) => new Set([...(counts.get(`media:${item.id}`) || []), ...(item.tmdb_id ? counts.get(`tmdb:${item.tmdb_id}`) || [] : [])]).size };
 }
 
+async function fetchCreditMarkers() {
+  const readPage = (from: number) => supabase.from('episode_credits').select(CREDIT_COLUMNS, from === 0 ? { count: 'exact' } : undefined)
+    .order('episode_key').order('season').order('episode').order('duration_ms').range(from, from + CREDIT_PAGE_SIZE - 1);
+  const first = await readPage(0);
+  if (first.error) throw new Error('La table des génériques est indisponible. Applique la migration Supabase 20261027_episode_credits.sql.');
+  const pages: Marker[][] = [(first.data || []) as Marker[]];
+  const total = first.count ?? (pages[0].length < CREDIT_PAGE_SIZE ? pages[0].length : null);
+  if (total === null) {
+    for (let offset = pages[0].length; pages[0].length; ) {
+      const { data, error } = await readPage(offset);
+      if (error) throw new Error('La table des génériques est indisponible. Applique la migration Supabase 20261027_episode_credits.sql.');
+      if (!data?.length) break;
+      pages.push(data as Marker[]); offset += data.length;
+      if (data.length < CREDIT_PAGE_SIZE) break;
+    }
+    return pages.flat();
+  }
+  const offsets: number[] = [];
+  for (let offset = CREDIT_PAGE_SIZE; offset < total; offset += CREDIT_PAGE_SIZE) offsets.push(offset);
+  const remaining: Marker[][] = new Array(offsets.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(6, offsets.length) }, async () => {
+    while (next < offsets.length) {
+      const index = next++;
+      const { data, error } = await readPage(offsets[index]);
+      if (error) throw new Error('La table des génériques est indisponible. Applique la migration Supabase 20261027_episode_credits.sql.');
+      if (!data?.length) throw new Error('Le chargement des minutages est incomplet. Actualise la page.');
+      remaining[index] = data as Marker[];
+    }
+  }));
+  return [...pages[0], ...remaining.flat()];
+}
+
+async function fetchSeriesList() {
+  const readPage = (from: number) => supabase.from('media').select('id,title,tmdb_id', from === 0 ? { count: 'exact' } : undefined)
+    .eq('type', 'series').order('id').range(from, from + SERIES_PAGE_SIZE - 1);
+  const first = await readPage(0);
+  if (first.error) throw new Error('La liste des séries ne peut pas être chargée. Réessaie dans un instant.');
+  const firstRows = (first.data || []) as Series[];
+  const total = first.count ?? (firstRows.length < SERIES_PAGE_SIZE ? firstRows.length : null);
+  if (total === null) {
+    const all = [...firstRows];
+    for (let offset = firstRows.length; firstRows.length; ) {
+      const { data, error } = await readPage(offset);
+      if (error) throw new Error('La liste des séries ne peut pas être chargée. Réessaie dans un instant.');
+      if (!data?.length) break;
+      all.push(...data as Series[]); offset += data.length;
+      if (data.length < SERIES_PAGE_SIZE) break;
+    }
+    return all;
+  }
+  const offsets: number[] = [];
+  for (let offset = SERIES_PAGE_SIZE; offset < total; offset += SERIES_PAGE_SIZE) offsets.push(offset);
+  const remaining: Series[][] = new Array(offsets.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(6, offsets.length) }, async () => {
+    while (next < offsets.length) {
+      const index = next++;
+      const { data, error } = await readPage(offsets[index]);
+      if (error) throw new Error('La liste des séries ne peut pas être chargée. Réessaie dans un instant.');
+      if (!data?.length) throw new Error('Le chargement des séries est incomplet. Actualise la page.');
+      remaining[index] = data as Series[];
+    }
+  }));
+  return [...firstRows, ...remaining.flat()];
+}
+
 export default function CreditsAdmin() {
   const [series, setSeries] = useState<Series[]>([]);
   const [seasons, setSeasons] = useState<Record<string, Season[]>>({});
@@ -82,24 +152,8 @@ export default function CreditsAdmin() {
         if (session?.user.email !== 'lukas.leclerc312@gmail.com') throw new Error('Connecte-toi avec le compte administrateur pour accéder à cette page.');
         setAllowed(true);
         const [list, records] = await Promise.all([
-          (async () => {
-            const all: Series[] = [];
-            for (let offset = 0; ; offset += 1000) {
-              const { data, error } = await supabase.from('media').select('id,title,tmdb_id').eq('type', 'series').order('id').range(offset, offset + 999);
-              if (error) throw new Error('La liste des séries ne peut pas être chargée. Réessaie dans un instant.');
-              all.push(...data); if (data.length < 1000) break;
-            }
-            return all;
-          })(),
-          (async () => {
-            const all: Marker[] = [];
-            for (let offset = 0; ; offset += 1000) {
-              const { data, error } = await supabase.from('episode_credits').select('*').order('episode_key').order('season').order('episode').order('duration_ms').range(offset, offset + 999);
-              if (error) throw new Error('La table des génériques est indisponible. Applique la migration Supabase 20261027_episode_credits.sql.');
-              all.push(...data); if (data.length < 1000) break;
-            }
-            return all;
-          })(),
+          fetchSeriesList(),
+          fetchCreditMarkers(),
         ]);
         if (!cancelled) { setSeries(list); setMarkers(records); }
       } catch (cause) { if (!cancelled) setError(cause instanceof Error ? cause.message : 'Chargement impossible.'); }

@@ -46,7 +46,9 @@ export default function FamilyAdmin() {
       if (user?.email !== 'lukas.leclerc312@gmail.com') { router.replace('/'); return; }
       if (!alive.current) return;
       setReady(true);
-      const rows = await fetchCatalogueRows<Item>(supabase,'id,title,type,poster,tmdb_id,audience,release_year,family_classification');
+      const rows = await fetchCatalogueRows<Item>(supabase,'id,title,type,poster,tmdb_id,audience,release_year,family_classification',partial => {
+        if (alive.current) setItems(partial.map(row=>({...row,id:String(row.id)})));
+      },1000);
       if (alive.current) { setItems(rows.map(row=>({...row,id:String(row.id)}))); setLoaded(true); }
     })().catch(() => { if (alive.current) setError('Chargement impossible. Vérifie la migration 20261028_tmdb_family.sql puis recharge la page.'); });
     return () => { alive.current=false; stop.current=true; };

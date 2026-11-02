@@ -4,13 +4,28 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import SectionNavigation from '@/components/SectionNavigation';
 import { supabase } from '@/lib/supabase';
-import { fetchCatalogueRows } from '@/lib/catalogue';
 import { clearClientResources } from '@/lib/resource-cache';
 import { withMangaGenre, withoutMangaGenre } from '@/lib/catalogue-categories';
 import type { FamilyClassification } from '@/lib/tmdb-certification';
 
 type Item = { id: string; title: string; type: string; poster: string; tmdb_id: string | null; genres: string[] | null; family_classification: FamilyClassification | null };
 type Filter = 'review' | 'answered';
+const MANGA_COLUMNS = 'id,title,type,poster,tmdb_id,genres,family_classification';
+const MANGA_PAGE_SIZE = 500;
+
+async function fetchMangaRows(kind: Filter): Promise<Item[]> {
+  const rows: Item[] = [];
+  for (let offset = 0; ; offset += MANGA_PAGE_SIZE) {
+    const base = supabase.from('media').select(MANGA_COLUMNS);
+    const filtered = kind === 'review'
+      ? base.eq('family_classification->>manga_review', 'true')
+      : base.not('family_classification->>manga_manual', 'is', null);
+    const { data, error } = await filtered.order('id').range(offset, offset + MANGA_PAGE_SIZE - 1);
+    if (error) throw new Error('La liste des mangas à vérifier ne peut pas être chargée. Réessaie dans un instant.');
+    rows.push(...(data as Item[]));
+    if (data.length < MANGA_PAGE_SIZE) return rows;
+  }
+}
 
 // Titles the TMDB analysis could not settle (Chinese or Korean animation, Japanese
 // co-production, missing TMDB record). The admin's answer is kept by every later analysis.
@@ -31,8 +46,9 @@ export default function MangaReview() {
       if (user?.email !== 'lukas.leclerc312@gmail.com') { router.replace('/'); return; }
       if (!alive.current) return;
       setReady(true);
-      const rows = await fetchCatalogueRows<Item>(supabase, 'id,title,type,poster,tmdb_id,genres,family_classification');
-      if (alive.current) { setItems(rows.map(row => ({ ...row, id: String(row.id) }))); setLoaded(true); }
+      const [reviewRows, answeredRows] = await Promise.all([fetchMangaRows('review'), fetchMangaRows('answered')]);
+      const rows = new Map([...reviewRows, ...answeredRows].map(row => [String(row.id), { ...row, id: String(row.id) }]));
+      if (alive.current) { setItems([...rows.values()]); setLoaded(true); }
     })().catch(() => { if (alive.current) setError('Chargement impossible. Recharge la page.'); });
     return () => { alive.current = false; };
   }, [router]);
