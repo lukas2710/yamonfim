@@ -6,7 +6,8 @@ import { supabase } from '@/lib/supabase';
 // Ancillary pages may contain an unrestricted catalogue (live TV, history, requests).
 export default function ProfileAccess({ children }: { children: ReactNode }) {
   const path = usePathname();
-  const safe = path === '/' || path === '/profiles' || path.startsWith('/watch/') || path.startsWith('/login') || path.startsWith('/admin') || ['/confidentialite','/conditions','/mentions-legales'].includes(path);
+  // The app download page is public; don't gate APK updates on a Supabase profile lookup.
+  const safe = path === '/' || path === '/app' || path === '/profiles' || path.startsWith('/watch/') || path.startsWith('/login') || path.startsWith('/admin') || ['/confidentialite','/conditions','/mentions-legales'].includes(path);
   const [checked, setChecked] = useState('');
   const [blocked, setBlocked] = useState(false);
   useEffect(() => {
