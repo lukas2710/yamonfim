@@ -226,6 +226,7 @@ export default function Home() {
   const [completionData, setCompletionData] = useState<{ seen: SeenRow[]; history: CompletionProgress[] }>({ seen: [], history: [] });
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   const inProgressIds = useMemo(() => inProgressTitles(completionData.seen, completionData.history, completedIds), [completionData, completedIds]);
+  const resumableList = useMemo(() => continueWatchingList.filter(item => !completedIds.has(String(item.id))), [continueWatchingList, completedIds]);
   useEffect(() => {
     const controller = new AbortController();
     const seenIds = new Set(completionData.seen.map(row => String(row.media_id)));
@@ -373,7 +374,7 @@ export default function Home() {
           // films en cours jusqu'à leur générique, séries sur l'épisode en cours ou le suivant.
           const resume = new Map<string, MediaItem>();
           const seenKeys = new Set((watchedRes.data || []).map(row => `${row.media_id}/${row.ep_key}`));
-          for (const entry of continueWatchingEntries(progressRes.data || [], id => byId.has(id), row => seenKeys.has(`${row.media_id}/${row.type === 'series' ? `s${row.season_idx ?? Math.max(0, (row.season_number || 1) - 1)}_e${row.episode_idx ?? Math.max(0, (row.episode_number || 1) - 1)}` : 'movie_main'}`))) {
+          for (const entry of continueWatchingEntries(progressRes.data || [], id => byId.has(id), row => row.type !== 'series' && seenKeys.has(`${row.media_id}/movie_main`))) {
             resume.set(entry.id, { ...byId.get(entry.id)!, progress: { seasonIdx: 0, episodeIdx: 0, seasonNumber: entry.seasonNumber, episodeNumber: entry.episodeNumber, fromHistory: true, ratio: entry.ratio, finished: entry.finished } });
           }
           // Older series watched before the viewing history existed keep their last episode.
@@ -915,9 +916,9 @@ export default function Home() {
         {activeProfile?.profile_mode !== 'standard' && activeProfile?.profile_mode && <p className="text-sm font-semibold text-red-300">Univers {activeProfile.profile_mode === 'kids' ? 'Kids' : 'Junior'}</p>}
         {userEmail && !searchQuery && <MarketingConsentBanner />}
         
-        {continueWatchingList.length > 0 && !searchQuery && (
+        {resumableList.length > 0 && !searchQuery && (
           <Row title="Reprendre la lecture" icon={<Icon name="play" className="h-4 w-4 text-red-600" />}>
-            {continueWatchingList.map((item: MediaItem) => (
+            {resumableList.map((item: MediaItem) => (
               <div
                 key={item.id}
                 {...activateProps(() => handleMediaClick(item))}

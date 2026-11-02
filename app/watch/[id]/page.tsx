@@ -385,10 +385,11 @@ export default function WatchPage() {
           let historySeason = clampIndex(historyPosition.s, seasons.length);
           let historyEpisode = clampIndex(historyPosition.e, seasons[historySeason]?.episodes?.length || 0);
           let historyTime = userHistory.current_time || 0;
-          // Left during the credits (or finished): resume on the next episode from its start,
-          // and a finished movie starts over instead of replaying its last seconds.
+          // If this episode is already marked seen (including the VIP 80% rule),
+          // resume the series at the next episode instead of dropping playback history.
           const historyDuration = userHistory.duration || 0;
-          if (item.type === 'series' ? episodeFinished(historyTime, historyDuration) : isCompleted(historyTime, historyDuration)) {
+          const historyEpisodeSeen = item.type === 'series' && !!userWatched[epKey(historySeason, historyEpisode)];
+          if (item.type === 'series' ? (historyEpisodeSeen || episodeFinished(historyTime, historyDuration)) : isCompleted(historyTime, historyDuration)) {
             const next = item.type === 'series' ? nextPositionOf(seasons, { s: historySeason, e: historyEpisode }) : null;
             if (next) { historySeason = next.s; historyEpisode = next.e; }
             historyTime = 0;

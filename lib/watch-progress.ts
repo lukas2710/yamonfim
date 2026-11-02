@@ -39,11 +39,11 @@ export function continueWatchingEntries(rows: ResumeRow[], available: (id: strin
   const seen = new Set<string>();
   for (const row of [...rows].sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')))) {
     const id = String(row.media_id), time = Number(row.current_time) || 0, duration = Number(row.duration) || 0;
-    if (seen.has(id) || !available(id) || markedSeen(row)) continue;
+    if (seen.has(id) || !available(id) || (row.type !== 'series' && markedSeen(row))) continue;
     const series = row.type === 'series';
     // A movie barely started or already at its credits does not need resuming.
+    // For series, keep the row: the player advances to the next episode if needed.
     if (!series && (time < 60 || isCompleted(time, duration))) continue;
-    if (series && episodeFinished(time, duration)) continue;
     seen.add(id);
     entries.push({ id, series, ratio: duration > 0 ? Math.min(1, time / duration) : 0, finished: series && episodeFinished(time, duration),
       seasonNumber: Number(row.season_number) || 1, episodeNumber: Number(row.episode_number) || 1 });

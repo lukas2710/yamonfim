@@ -184,6 +184,7 @@ public final class PlayerActivity extends Activity implements App.Alive {
         playingSince = -1;
         playedMs = 0;
         lastSavedPosition = -1;
+        resumeAtMs = Math.max(0, resumeMs);
         stallSince = -1;
         hideError();
         hideSheet();
@@ -196,6 +197,7 @@ public final class PlayerActivity extends Activity implements App.Alive {
         if (mode == MODE_WEB) {
             releasePlayer();
             String url = Logic.preparePlayerUrl(source);
+            if (!url.isEmpty() && resumeMs >= 30_000L) url = Logic.setParam(url, "start", String.valueOf(resumeMs / 1000L));
             if (url.isEmpty()) { showError("Aucun lecteur disponible pour ce titre.", false); return; }
             showLoading("Ouverture du lecteur…");
             startWeb(url);
@@ -491,6 +493,7 @@ public final class PlayerActivity extends Activity implements App.Alive {
                 @Override public void onPageFinished(WebView view, String u) {
                     App.MAIN.postDelayed(() -> { if (alive) hideLoading(); }, 1200);
                     if (playingSince < 0 && resumed) playingSince = SystemClock.elapsedRealtime();
+                    fetchCredits();
                 }
             });
             web.setWebChromeClient(new WebChromeClient() {
@@ -1045,9 +1048,26 @@ public final class PlayerActivity extends Activity implements App.Alive {
     }
 
     /** Début du générique (site : /api/episode-credits) ; sans repère, 30 s avant la fin. */
+    private long durationForProgress() {
+        long duration = safeDuration();
+        if (duration > 0 || media == null) return duration;
+        int minutes = media.runtime;
+        if (media.hasEpisodes()) {
+            Models.Episode ep = media.episode(season, episode);
+            if (ep != null && ep.runtime > 0) minutes = ep.runtime;
+        }
+        return minutes > 0 ? minutes * 60_000L : 0;
+    }
+
+    private long webPosition() {
+        long elapsed = playedMs + (playingSince >= 0 ? SystemClock.elapsedRealtime() - playingSince : 0);
+        long duration = durationForProgress();
+        return duration > 0 ? Math.min(elapsed, duration) : elapsed;
+    }
+
     private void fetchCredits() {
         if (live || media == null || !media.hasEpisodes()) return;
-        final double duration = safeDuration() / 1000.0;
+        final double duration = durationForProgress() / 1000.0;
         if (duration < 300) { creditsStart = -1; return; }
         final String key = season + ":" + episode + ":" + Math.round(duration);
         if (key.equals(creditsKey) && creditsStart > -2) return;
@@ -1134,7 +1154,8 @@ public final class PlayerActivity extends Activity implements App.Alive {
         if (live || media == null) return;
         boolean timed = mode != MODE_WEB;
         if (timed && !prepared) return;
-        final long position = timed ? safePosition() / 1000 : 0, duration = timed ? safeDuration() / 1000 : 0;
+        final long position = (timed ? safePosition() : webPosition()) / 1000;
+        final long duration = durationForProgress() / 1000;
         lastSavedPosition = position;
         final Media m = media; final int s = season, e = episode;
         App.repo().enqueue(() -> App.repo().saveHistory(m, s, e, position, duration));
@@ -1143,7 +1164,21 @@ public final class PlayerActivity extends Activity implements App.Alive {
     private void onTick() {
         if (!resumed) return;
         if (mode == MODE_WEB) {
-            long played = playedMs + (playingSince >= 0 ? SystemClock.elapsedRealtime() - playingSince : 0);
+            if (playingSince < 0) playingSince = SystemClock.elapsedRealtime();
+            if (controlsVisible()) updateProgressUi();
+            if (live || media == null) return;
+            long posMs = webPosition(), durMs = durationForProgress();
+            double pos = posMs / 1000.0, dur = durMs / 1000.0;
+            if (dur > 0 && Logic.shouldMarkSeen(pos, dur, ps.unlimited)) markSeen();
+            if (lastSavedPosition < 0 || Math.abs(pos - lastSavedPosition) >= 10) persist();
+            if (!media.hasEpisodes()) return;
+            int[] next = media.next(season, episode);
+            if (next == null || autoNextOffered || dur < 60) return;
+            double target = creditsStart >= 0 ? Math.min(creditsStart + 5, dur) : dur - 30;
+            double remaining = target - pos;
+            if (remaining <= 0) { autoNextOffered = true; hideCountdown(); goNext(true); }
+            else if (remaining <= 5) showCountdown((int) Math.ceil(remaining));
+            else hideCountdown();
             return;
         }
         boolean playing = isPlaying();

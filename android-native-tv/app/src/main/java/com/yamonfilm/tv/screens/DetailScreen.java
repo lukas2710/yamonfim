@@ -210,6 +210,14 @@ public final class DetailScreen extends Screen {
                 if (error != null || keys == null) return;
                 watched = keys;
                 watchedLoaded = true;
+                // Une reprise dont l'épisode a été marqué vu doit ouvrir le suivant.
+                if (media.hasEpisodes() && history != null && watched.contains(Logic.epKey(history.seasonIdx, history.episodeIdx))) {
+                    int[] next = media.next(history.seasonIdx, history.episodeIdx);
+                    if (next != null && (season == history.seasonIdx && episode == history.episodeIdx)) {
+                        season = next[0];
+                        episode = next[1];
+                    }
+                }
                 App.repo().updateCompletionSnapshot(media, watched);
                 renderHeader();
                 renderSeasons();

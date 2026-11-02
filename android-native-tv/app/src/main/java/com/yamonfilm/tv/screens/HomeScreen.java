@@ -572,7 +572,9 @@ public final class HomeScreen extends Screen {
         for (History h : history) {
             Media m = App.repo().cached(h.mediaId);
             if (m == null || cards.size() >= 20) continue;
-            if (App.repo().seenPosition(m.id, m.isSeries(), h.seasonIdx, h.episodeIdx) || m.isSeries() && Logic.episodeFinished(h.currentTime, h.duration)) continue;
+            // Un épisode terminé reste une reprise valide : la fiche avance alors au suivant.
+            // Seule une série entièrement vue sort de cette rangée.
+            if (m.isSeries() ? App.repo().completed(m.id) : App.repo().seenPosition(m.id, false, h.seasonIdx, h.episodeIdx)) continue;
             // Comme sur le site : un film à peine commencé ou déjà à son générique (92 %) ne va pas dans « Reprendre ».
             if (!Logic.showInContinue(m.isSeries(), h.currentTime, h.duration)) continue;
             Card c = new Card(main, 260, 146, true, true);

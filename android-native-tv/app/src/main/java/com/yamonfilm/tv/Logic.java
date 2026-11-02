@@ -378,7 +378,7 @@ public final class Logic {
     /** Un épisode quitté dans ses deux dernières minutes (ou à 95 %) est considéré comme vu. */
     public static boolean episodeFinished(double time, double duration) { return duration > 0 && (time / duration >= .95 || (duration >= 600 && duration - time <= 120)); }
     /** Un film à peine commencé ou déjà au générique ne va pas dans « Reprendre ». */
-    public static boolean showInContinue(boolean series, double time, double duration) { return series ? !episodeFinished(time, duration) : time >= 60 && !isCompleted(time, duration); }
+    public static boolean showInContinue(boolean series, double time, double duration) { return series || time >= 60 && !isCompleted(time, duration); }
 
     // ------------------------------------------------------------ Lecture native (lib/catalogue-source.ts)
 
