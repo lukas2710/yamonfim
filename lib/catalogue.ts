@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // The home page needs cards, not the large JSON season/episode player payloads.
-export const CATALOGUE_CARD_COLUMNS = 'id,title,type,poster,backdrop,description,genres,tmdb_id,audience,release_year';
+export const CATALOGUE_CARD_COLUMNS = 'id,title,type,poster,backdrop,description,genres,tmdb_id,audience,release_year,created_at';
 // Light card rows read fastest in large pages; season payloads need small ones.
 const PAGE = 250, CARD_PAGE = 1000, PARALLEL = 6, MIN_PAGE = 25;
 export async function fetchCatalogueRows<T extends { id: string | number }>(client: SupabaseClient, columns: string, onPage?: (rows: T[]) => void, pageSize = PAGE): Promise<T[]> {
