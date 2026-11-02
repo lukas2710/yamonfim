@@ -105,13 +105,15 @@ public final class Repo {
     public List<Media> refreshCatalogue() throws IOException {
         // Same public card snapshot as the site: one cached download instead of
         // a hundred Supabase page requests. Existing pagination remains a fallback.
-        try {
-            Api.Result response = Api.http("GET", Api.SITE + "api/catalogue", null, null, 15000);
-            if (response.status == 200 && response.body.trim().startsWith("[")) {
-                List<Media> rows = parse(Api.parseArray(response.body));
-                publish(rows); saveCatalogue(rows); return rows;
-            }
-        } catch (IOException ignored) { }
+        Api.Result response = Api.http("GET", Api.SITE + "api/catalogue", null, null, 45000);
+        if (response.status == 200) {
+            if (!response.body.trim().startsWith("[")) throw new IOException("Réponse du catalogue invalide. Réessaie.");
+            List<Media> rows = parse(Api.parseArray(response.body));
+            publish(rows); saveCatalogue(rows); return rows;
+        }
+        // This route is shipped with the site. Avoid hundreds of slow Supabase
+        // page requests when the catalogue service is unavailable.
+        if (response.status != 404 && response.status != 405) throw new IOException("Le catalogue ne peut pas être chargé (" + response.status + "). Réessaie.");
         List<Media> rows = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         int total = Integer.MAX_VALUE, offset = 0;

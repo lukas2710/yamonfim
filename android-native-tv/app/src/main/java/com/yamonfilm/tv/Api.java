@@ -11,6 +11,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.zip.GZIPInputStream;
 import java.net.HttpURLConnection;
 import java.net.SocketTimeoutException;
 import java.net.URL;
@@ -83,6 +84,7 @@ public final class Api {
             c.setReadTimeout(readTimeout);
             c.setUseCaches(false);
             c.setRequestProperty("Accept", "application/json");
+            c.setRequestProperty("Accept-Encoding", "gzip");
             c.setRequestProperty("User-Agent", USER_AGENT);
             if (headers != null) for (Map.Entry<String, String> h : headers.entrySet()) c.setRequestProperty(h.getKey(), h.getValue());
             if (body != null) {
@@ -94,7 +96,8 @@ public final class Api {
             }
             int status = c.getResponseCode();
             InputStream in = status >= 400 ? c.getErrorStream() : c.getInputStream();
-            String text = in == null ? "" : readAll(in);
+            if (in != null && "gzip".equalsIgnoreCase(c.getContentEncoding())) in = new GZIPInputStream(in);
+            String text = in == null ? "" : readAll(in, System.nanoTime() + readTimeout * 1_000_000L);
             return new Result(status, text, c.getHeaderField("Content-Range"));
         } catch (UnknownHostException e) {
             throw new IOException("Pas de connexion Internet. Vérifie le réseau de la TV.", e);
@@ -106,11 +109,18 @@ public final class Api {
     }
 
     static String readAll(InputStream in) throws IOException {
+        return readAll(in, Long.MAX_VALUE);
+    }
+
+    private static String readAll(InputStream in, long deadlineNanos) throws IOException {
         try (InputStream input = in) {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             byte[] buffer = new byte[16384];
             int n;
-            while ((n = input.read(buffer)) > 0) out.write(buffer, 0, n);
+            while ((n = input.read(buffer)) > 0) {
+                if (System.nanoTime() - deadlineNanos >= 0) throw new SocketTimeoutException("Le téléchargement a dépassé le délai prévu.");
+                out.write(buffer, 0, n);
+            }
             return new String(out.toByteArray(), StandardCharsets.UTF_8);
         }
     }
