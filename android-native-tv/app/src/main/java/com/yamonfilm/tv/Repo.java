@@ -47,6 +47,31 @@ public final class Repo {
     public int completedRevision() { return 31 * (31 * completed.hashCode() + homeSeen.hashCode()) + progressing.hashCode(); }
     public boolean progressing(String id) { return java.util.Objects.equals(profileId(), completedProfile) && progressing.contains(id); }
     public boolean seenPosition(String id, boolean series, int season, int episode) { Set<String> keys = java.util.Objects.equals(profileId(), completedProfile) ? homeSeen.get(id) : null; return keys != null && keys.contains(series ? Logic.epKey(season, episode) : "movie_main"); }
+
+    /** Keep every TV shelf and grid in sync immediately after a title's watched keys load. */
+    public synchronized void updateCompletionSnapshot(Media media, Set<String> watchedKeys) {
+        if (media == null || profileId() == null) return;
+        String pid = profileId();
+        if (completedProfile != null && !java.util.Objects.equals(pid, completedProfile)) return;
+        Map<String, Set<String>> nextSeen = new HashMap<>(homeSeen);
+        nextSeen.put(media.id, Collections.unmodifiableSet(new HashSet<>(watchedKeys)));
+        Set<String> nextCompleted = new HashSet<>(completed);
+        boolean done;
+        if (!media.isSeries()) done = watchedKeys.contains("movie_main");
+        else {
+            int total = media.totalEpisodes(), watched = 0;
+            boolean allCurrentEpisodes = total > 0;
+            for (int s = 0; s < media.seasons.size(); s++) for (int e = 0; e < media.seasons.get(s).episodes.size(); e++) {
+                if (!watchedKeys.contains(Logic.epKey(s, e))) allCurrentEpisodes = false;
+            }
+            for (String key : watchedKeys) if (key.matches("s\\d+_e\\d+")) watched++;
+            done = total > 0 && (allCurrentEpisodes || watched >= total);
+        }
+        if (done) nextCompleted.add(media.id); else nextCompleted.remove(media.id);
+        homeSeen = Collections.unmodifiableMap(nextSeen);
+        completed = Collections.unmodifiableSet(nextCompleted);
+        completedProfile = pid;
+    }
     private volatile List<Media> catalogue = Collections.emptyList();
     private volatile Map<String, Media> byId = Collections.emptyMap();
     private volatile Profile profile;

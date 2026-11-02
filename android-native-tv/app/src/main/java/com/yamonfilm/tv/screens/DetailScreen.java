@@ -210,6 +210,7 @@ public final class DetailScreen extends Screen {
                 if (error != null || keys == null) return;
                 watched = keys;
                 watchedLoaded = true;
+                App.repo().updateCompletionSnapshot(media, watched);
                 renderHeader();
                 renderSeasons();
                 renderEpisodes(false);
@@ -373,8 +374,12 @@ public final class DetailScreen extends Screen {
     private void setWatched(List<String> keys, boolean value) {
         if (value) watched.addAll(keys); else watched.removeAll(keys);
         renderHeader(); renderSeasons(); renderEpisodes(false);
-        final String id = media.id;
-        io(() -> { App.repo().setWatched(id, keys, value); return true; }, (ok, e) -> { if (e != null) fail(e); });
+        final Media watchedMedia = media;
+        final String id = watchedMedia.id;
+        final Set<String> snapshot = new java.util.HashSet<>(watched);
+        io(() -> { App.repo().setWatched(id, keys, value); return true; }, (ok, e) -> {
+            if (e != null) fail(e); else App.repo().updateCompletionSnapshot(watchedMedia, snapshot);
+        });
     }
 
     @Override protected boolean onLongPress(View focused) {

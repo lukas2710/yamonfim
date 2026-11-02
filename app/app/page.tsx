@@ -6,8 +6,8 @@ export const metadata: Metadata = {
   description: 'Installe YAMONFILM sur ta télévision Android TV, Google TV, Fire TV ou décodeur Bbox, et sur ton iPhone ou Android.',
 };
 
-const APK = '/yamonfilm-tv.apk?v=2.7.4';
-const VERSION = '2.7.4';
+const APK = '/yamonfilm-tv.apk?v=2.7.5';
+const VERSION = '2.7.5';
 
 const GUIDES = [
   {
@@ -48,7 +48,7 @@ export default function TvAppPage() {
           YAMON<span className="text-red-600">FILM</span> sur ta télé
         </h1>
         <p className="mt-5 max-w-2xl text-lg leading-8 text-zinc-300">
-          Tes films et séries sur grand écran, pilotés à la télécommande. Même compte, mêmes profils, même historique et même accès VIP que sur le site.
+          Tes films et séries sur grand écran, pilotés à la télécommande. Même compte, mêmes profils, même historique, enchaînement automatique des épisodes et même accès VIP que sur le site.
         </p>
         <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
           <a

@@ -73,7 +73,7 @@ public final class HistoryScreen extends Screen {
                 String sub = m.isSeries() ? "S" + h.seasonNumber + " · É" + h.episodeNumber + (seen != null ? " · " + seen.size() + " vu" + (seen.size() > 1 ? "s" : "") : "") : "FILM";
                 card.caption(sub, m.title);
                 card.bindImage(Logic.tmdbSize(m.image(), "w780"), m.title);
-                boolean done = !m.isSeries() && seen != null && seen.contains("movie_main");
+                boolean done = App.repo().completed(m.id) || (!m.isSeries() && seen != null && seen.contains("movie_main"));
                 if (done) card.badge("✓ VU", 0xE6168A45); else card.progress(h.fraction());
                 card.setOnClickListener(v -> main.openMedia(m));
                 cards.add(card);

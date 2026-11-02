@@ -74,7 +74,7 @@ public final class PlayerActivity extends Activity implements App.Alive {
     private LinearLayout loadingBox, topBar, bottomBar, buttons, errorBox, sheet, countdown;
     private FrameLayout drawer;
     private TextView loadingTitle, loadingStatus, title, subtitle, infoPill, timeLeft, timeRight, toastView;
-    private TextView errorText, errorRetry, errorSource, errorQuit, countdownText, countdownGo;
+    private TextView errorText, errorRetry, errorSource, errorQuit, countdownText, countdownGo, countdownCancel;
     private ImageView playPause;
     private SeekView seek;
 
@@ -116,7 +116,8 @@ public final class PlayerActivity extends Activity implements App.Alive {
     private long chargeFirstPos = -1;
     private final Set<String> markedSeen = new HashSet<>();
     private long playingSince = -1, playedMs, lastSavedPosition = -1;
-    private boolean ended, autoNextOffered, switching;
+    private boolean ended, autoNextOffered, switching, waitingForStillWatching;
+    private int autoChainCount;
     private double creditsStart = -2;
     private String creditsKey = "";
 
@@ -178,6 +179,7 @@ public final class PlayerActivity extends Activity implements App.Alive {
         source = src == null ? "" : src;
         ended = false;
         autoNextOffered = false;
+        waitingForStillWatching = false;
         creditsStart = -2;
         playingSince = -1;
         playedMs = 0;
@@ -957,11 +959,33 @@ public final class PlayerActivity extends Activity implements App.Alive {
         LinearLayout row = Ui.row(this);
         Ui.noClip(row);
         countdownGo = Ui.button(this, "Lancer maintenant", R.drawable.ic_next, Ui.STYLE_PRIMARY);
-        countdownGo.setOnClickListener(v -> { autoNextOffered = true; hideCountdown(); goNext(); });
-        TextView cancel = Ui.button(this, "Annuler", 0, Ui.STYLE_GHOST);
-        cancel.setOnClickListener(v -> { autoNextOffered = true; hideCountdown(); });
+        countdownGo.setOnClickListener(v -> {
+            if (waitingForStillWatching) {
+                waitingForStillWatching = false;
+                autoChainCount = 0;
+                autoNextOffered = false;
+                hideCountdown();
+                goNext(false);
+            } else {
+                autoNextOffered = true;
+                hideCountdown();
+                goNext(false);
+            }
+        });
+        countdownCancel = Ui.button(this, "Annuler", 0, Ui.STYLE_GHOST);
+        countdownCancel.setOnClickListener(v -> {
+            if (waitingForStillWatching) {
+                waitingForStillWatching = false;
+                autoChainCount = 0;
+                hideCountdown();
+                finish();
+            } else {
+                autoNextOffered = true;
+                hideCountdown();
+            }
+        });
         row.addView(countdownGo);
-        row.addView(cancel, Ui.lp(Ui.WRAP, Ui.WRAP, dp(12), 0, 0, 0));
+        row.addView(countdownCancel, Ui.lp(Ui.WRAP, Ui.WRAP, dp(12), 0, 0, 0));
         countdown.addView(row, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(14), 0, 0));
         countdown.setVisibility(View.GONE);
         FrameLayout.LayoutParams p = Ui.flp(Ui.WRAP, Ui.WRAP, Gravity.BOTTOM | Gravity.END);
@@ -970,8 +994,11 @@ public final class PlayerActivity extends Activity implements App.Alive {
     }
 
     private void showCountdown(int seconds) {
+        if (waitingForStillWatching) return;
         int[] next = media.next(season, episode);
         Episode ep = next == null ? null : media.episode(next[0], next[1]);
+        countdownGo.setText("Lancer maintenant");
+        countdownCancel.setText("Annuler");
         countdownText.setText("Épisode suivant dans " + seconds + " s" + (ep != null ? "\nS" + media.seasons.get(next[0]).number + " · É" + ep.number + (ep.title.isEmpty() ? "" : " — " + ep.title) : ""));
         if (countdown.getVisibility() != View.VISIBLE) {
             countdown.setVisibility(View.VISIBLE);
@@ -983,16 +1010,38 @@ public final class PlayerActivity extends Activity implements App.Alive {
     }
 
     private void hideCountdown() {
+        waitingForStillWatching = false;
         if (countdown.getVisibility() != View.VISIBLE) return;
         boolean had = MainActivity.isInside(getCurrentFocus(), countdown);
         countdown.setVisibility(View.GONE);
         if (had) root.requestFocus();
     }
 
-    private void goNext() {
+    private void goNext(boolean automatic) {
         if (live || media == null) return;
+        if (automatic && autoChainCount >= 3) {
+            autoNextOffered = true;
+            showStillWatching();
+            return;
+        }
+        if (automatic) autoChainCount++;
+        else autoChainCount = 0;
         if (ended || Logic.shouldMarkSeen(safePosition(), safeDuration(), ps.unlimited)) markSeen();
-        step(1);
+        step(1, automatic);
+    }
+
+    private void showStillWatching() {
+        waitingForStillWatching = true;
+        countdownText.setText("Tu es toujours là ?\nTu as enchaîné plusieurs épisodes.");
+        countdownGo.setText("Continuer");
+        countdownCancel.setText("Arrêter");
+        if (countdown.getVisibility() != View.VISIBLE) {
+            countdown.setVisibility(View.VISIBLE);
+            countdown.setAlpha(0f);
+            countdown.setTranslationY(dp(20));
+            countdown.animate().alpha(1f).translationY(0).setDuration(220).start();
+        }
+        countdownGo.requestFocus();
     }
 
     /** Début du générique (site : /api/episode-credits) ; sans repère, 30 s avant la fin. */
@@ -1012,7 +1061,12 @@ public final class PlayerActivity extends Activity implements App.Alive {
     // ================================================================= Épisodes et chaînes
 
     private void step(int direction) {
+        step(direction, false);
+    }
+
+    private void step(int direction, boolean automatic) {
         if (live) { zap(direction); return; }
+        if (!automatic) autoChainCount = 0;
         int[] target = direction > 0 ? media.next(season, episode) : media.previous(season, episode);
         if (target == null) { toast(direction > 0 ? "C'est le dernier épisode." : "C'est le premier épisode."); return; }
         playEpisode(target[0], target[1]);
@@ -1119,7 +1173,7 @@ public final class PlayerActivity extends Activity implements App.Alive {
         if (next == null || autoNextOffered || !playing || dur < 60) { if (!playing || next == null) hideCountdown(); return; }
         double target = creditsStart >= 0 ? Math.min(creditsStart + 5, dur) : dur - 30;
         double remaining = target - pos;
-        if (remaining <= 0) { autoNextOffered = true; hideCountdown(); goNext(); }
+        if (remaining <= 0) { autoNextOffered = true; hideCountdown(); goNext(true); }
         else if (remaining <= 5) showCountdown((int) Math.ceil(remaining));
         else hideCountdown();
     }
@@ -1151,7 +1205,7 @@ public final class PlayerActivity extends Activity implements App.Alive {
         persist();
         updatePlayPause();
         if (live) return;
-        if (media.next(season, episode) != null && !autoNextOffered) { autoNextOffered = true; goNext(); }
+        if (media.next(season, episode) != null && !autoNextOffered) { autoNextOffered = true; goNext(true); }
         else { toast("Lecture terminée. Ton historique est à jour."); showControls(true, playPause); }
     }
 
