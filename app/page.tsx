@@ -1005,7 +1005,7 @@ export default function Home() {
               </span>
               {!searchQuery && <select aria-label="Classer le catalogue" className="ml-auto rounded-lg border border-white/15 bg-zinc-900 px-3 py-2 text-sm" value={browseSort} onChange={event => setBrowseSort(event.target.value as 'recent' | 'rating')}><option value="recent">Derniers ajouts</option><option value="rating" disabled={!rankings}>Meilleures notes TMDB</option></select>}
             </div>
-            {browseSort === 'rating' && !searchQuery && <p className="mb-4 text-sm text-zinc-400">Sélection TMDB disponible sur le site · au moins 300 votes pour les films, 150 pour les séries.</p>}
+            {browseSort === 'rating' && !searchQuery && <p className="mb-4 text-sm text-zinc-400">Classement par note TMDB · un titre doit avoir au moins 300 avis (film) ou 150 avis (série) pour être classé.</p>}
 
             {filteredMedia.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-white/10 py-16 text-center">
@@ -1048,7 +1048,7 @@ export default function Home() {
             {([
               { title: 'Films en tendance cette semaine', subtitle: 'Tendances TMDB de la semaine · disponibles sur Yamonfilm', items: trendingMovies },
               { title: 'Séries en tendance cette semaine', subtitle: 'Tendances TMDB de la semaine · disponibles sur Yamonfilm', items: trendingSeries },
-              { title: 'Les films les mieux notés', subtitle: 'Notes TMDB · au moins 300 votes', items: ratedCatalogue.filter(item => item.type === 'movie') },
+              { title: 'Les films les mieux notés', subtitle: 'Notes TMDB · au moins 300 avis par titre', items: ratedCatalogue.filter(item => item.type === 'movie') },
               { title: 'Les séries les mieux notées', subtitle: 'Notes TMDB · au moins 150 votes', items: ratedCatalogue.filter(item => item.type === 'series') },
             ]).map(section => section.items.length > 0 && <Row key={section.title} title={section.title} subtitle={section.subtitle} icon={<Icon name="chart" className="h-5 w-5 text-amber-400" />}>
               {section.items.slice(0, 20).map(item => <PosterCard key={item.id} item={item} locked={userLimitReached} badge={rankings?.ratings[tmdbKey(item)]?.rating ? `★ ${rankings.ratings[tmdbKey(item)].rating.toFixed(1)} / 10` : undefined} onOpen={() => handleMediaClick(item)} onPrepare={() => prepareMedia(item)} className="w-[130px] sm:w-[170px]" />)}
@@ -1123,7 +1123,7 @@ export default function Home() {
               const genreItems = genreSections.get(genre) || [];
               if (genreItems.length === 0) return null;
               return (
-                <Row key={genre} title={genre === MANGA_GENRE ? 'Mangas populaires' : genre === FOREIGN_GENRE ? 'Populaires en langue étrangère' : `Populaires en ${genre}`} subtitle="Notes TMDB · au moins 300 votes pour les films, 150 pour les séries" onSeeAll={() => { if (genre === MANGA_GENRE) selectType('manga'); else if (genre === FOREIGN_GENRE) selectType('foreign'); else { setSelectedGenre(genre); setSelectedType('all'); setSearchQuery(''); setBrowseSort('rating'); } }} icon={<Icon name="film" className="h-5 w-5 text-zinc-400" />}>
+                <Row key={genre} title={genre === MANGA_GENRE ? 'Mangas populaires' : genre === FOREIGN_GENRE ? 'Populaires en langue étrangère' : `Populaires en ${genre}`} subtitle="Classement par note TMDB · 300 avis minimum par film, 150 par série" onSeeAll={() => { if (genre === MANGA_GENRE) selectType('manga'); else if (genre === FOREIGN_GENRE) selectType('foreign'); else { setSelectedGenre(genre); setSelectedType('all'); setSearchQuery(''); setBrowseSort('rating'); } }} icon={<Icon name="film" className="h-5 w-5 text-zinc-400" />}>
                   {genreItems.slice(0, 20).map((item: MediaItem) => (
                     <PosterCard
                       key={genre + '-' + item.id}

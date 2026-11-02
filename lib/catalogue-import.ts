@@ -29,7 +29,8 @@ type SeriesSeason = { seasonNumber: number; poster_path: string; episodes: { num
 const TMDB_KEY = 'af281c5089038e174e83c576ff765be9';
 async function tmdbMetadata(path: string) {
   const response = await fetch(`https://api.themoviedb.org/3/${path}?api_key=${TMDB_KEY}&language=fr-FR`, { signal: AbortSignal.timeout(20000) });
-  if (!response.ok) throw new Error('Fiche TMDB indisponible. Réessaie.');
+  if (response.status === 404) throw new Error('Titre introuvable sur TMDB.');
+  if (!response.ok) throw new Error('TMDB est temporairement indisponible. Réessaie.');
   return response.json();
 }
 function seasonEpisodes(id: string, season: number, info: { episodes: { episode_number: number; name?: string; still_path?: string; runtime?: number }[] }, poster: string, runtime: number) {

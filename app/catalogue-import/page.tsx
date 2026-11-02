@@ -60,7 +60,7 @@ export default function CatalogueImportPage() {
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : 'Ajout impossible. Réessaie.';
         setError(message);
-        reply({ action: 'catalogue:result', ...item, ok: false, error: message });
+        reply({ action: 'catalogue:result', ...item, ok: false, error: message, permanent: message === 'Titre introuvable sur TMDB.' });
       } finally { busy.current = false; }
     };
     window.addEventListener('message', receive);

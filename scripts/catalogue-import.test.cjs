@@ -119,7 +119,7 @@ test('bulk import skips existing and queued titles, and stopping preserves the a
   `, context);
 });
 
-test('unavailable films remain disabled after reload and are excluded from bulk imports', () => {
+test('only titles confirmed missing from TMDB stay disabled after reload', () => {
   const storage = new Map();
   const node = () => ({ append() {}, setAttribute() {} });
   function load() {
@@ -131,7 +131,7 @@ test('unavailable films remain disabled after reload and are excluded from bulk 
     return context;
   }
   const first = load();
-  vm.runInContext("unavailableImports.set('123','Fiche introuvable');saveUnavailableImports()", first);
+  vm.runInContext("unavailableImports.set('123','Titre introuvable sur TMDB.');saveUnavailableImports()", first);
   const second = load();
   vm.runInContext(`
     const item = {source_id:123,kind:'movie'};
@@ -142,4 +142,18 @@ test('unavailable films remain disabled after reload and are excluded from bulk 
     resetUnavailableButton.onclick();
     if (!canQueueImport(item)) throw Error('Reset failed');
   `, second);
+});
+
+test('temporary add failures are not persisted as unavailable', () => {
+  const storage = new Map([[ 'moviez-unavailable-films-v1', JSON.stringify([['123', 'Connexion administrateur indisponible']]) ]]);
+  const node = () => ({ append() {}, setAttribute() {} });
+  const context = { location: { origin: 'null', protocol: 'file:' }, crypto: require('node:crypto').webcrypto,
+    localStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) },
+    document: { createElement: node, querySelector: node }, window: { addEventListener() {} }, dbDone: new Set(), render() {} };
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync('scripts/catalogue-direct-import.js', 'utf8') + `
+    catalogueStatusReady = true;
+    const item = {source_id:123,kind:'movie'};
+    if (unavailableImports.has('123') || !canQueueImport(item)) throw Error('Temporary failure still blocked retry');
+  `, context);
 });

@@ -5,7 +5,9 @@ const unavailableKey = 'moviez-unavailable-films-v1';
 let unavailableImports = new Map();
 try {
   const saved = JSON.parse(localStorage.getItem(unavailableKey) || '[]');
-  if (Array.isArray(saved)) unavailableImports = new Map(saved.filter(row => Array.isArray(row) && /^\d+$/.test(row[0]) && typeof row[1] === 'string'));
+  // Only a confirmed TMDB 404 is permanent. Older versions stored temporary
+  // auth/network/database failures here too, which incorrectly blocked retry.
+  if (Array.isArray(saved)) unavailableImports = new Map(saved.filter(row => Array.isArray(row) && /^\d+$/.test(row[0]) && row[1] === 'Titre introuvable sur TMDB.'));
 } catch { /* Storage may be unavailable. */ }
 function saveUnavailableImports() {
   try { localStorage.setItem(unavailableKey, JSON.stringify([...unavailableImports])); }
@@ -41,13 +43,18 @@ window.addEventListener('message', event => {
     directStatus.replaceChildren(document.createTextNode('Connecte-toi une fois avec ton compte administrateur : '));
     const login = document.createElement('a'); login.href = importSite + '/login'; login.target = '_blank'; login.rel = 'noopener'; login.textContent = 'Se connecter au site ↗'; directStatus.append(login); return;
   }
+  if (message.action === 'catalogue:progress') {
+    if (importPending && message.job === importPending.job && message.id === importPending.id) directStatus.textContent = String(message.message || 'Ajout en cours…');
+    return;
+  }
   if (!importPending || message.job !== importPending.job || message.id !== importPending.id || message.type !== importPending.type) return;
   if (message.action === 'catalogue:result') {
     importStates.set(message.id, message.ok === true ? { ok: true, confirmedAt: Date.now() } : { error: String(message.error || 'Ajout impossible') });
     if (message.ok === true) { dbDone.add(message.id); unavailableImports.delete(message.id); rebuildDone(); }
-    else { unavailableImports.set(message.id, String(message.error || 'Ajout impossible')); }
+    else if (message.permanent === true && message.error === 'Titre introuvable sur TMDB.') unavailableImports.set(message.id, message.error);
+    else unavailableImports.delete(message.id);
     saveUnavailableImports();
-    directStatus.textContent = message.ok === true ? (message.already ? 'Déjà présent sur ton site ✓' : 'Ajouté sur ton site ✓') : 'Non disponible : ' + String(message.error || 'Ajout impossible');
+    directStatus.textContent = message.ok === true ? (message.already ? 'Déjà présent sur ton site ✓' : 'Ajouté sur ton site ✓') : String(message.error || 'Ajout impossible') + (message.permanent ? '' : ' Tu peux réessayer.');
     importPending = null; updateBulkStatus(); render(); sendImport();
   }
 });
