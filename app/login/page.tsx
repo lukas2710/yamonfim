@@ -236,7 +236,7 @@ export default function LoginPage() {
                 </span>
               </div>
 
-              <h3 className="mb-1.5 text-xl font-bold tracking-tight">Installer YAMONFIM</h3>
+              <h3 className="mb-1.5 text-xl font-bold tracking-tight">Installer YAMONFILM</h3>
               <p className="mb-6 text-sm leading-relaxed text-zinc-400">
                 Ajoute l'application sur ton appareil pour le plein écran et un accès en un clic.
               </p>
@@ -349,7 +349,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <p className="text-xs text-zinc-600">© {new Date().getFullYear()} YAMONFIM</p>
+          <p className="text-xs text-zinc-600">© {new Date().getFullYear()} YAMONFILM</p>
         </div>
       </aside>
 
@@ -502,7 +502,7 @@ export default function LoginPage() {
                   onChange={e => setMarketingConsent(e.target.checked)}
                   className="mt-0.5 h-4 w-4 shrink-0 accent-red-600"
                 />
-                <span>J’accepte de recevoir par email les nouveautés et offres de YAMONFIM. Désinscription possible à tout moment.</span>
+                <span>J’accepte de recevoir par email les nouveautés et offres de YAMONFILM. Désinscription possible à tout moment.</span>
               </label>
             )}
 
@@ -531,7 +531,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={switchMode}
-              className="cursor-pointer font-semibold text-white underline-offset-4 transition hover:text-red-500 hover:underline"
+              className="min-h-11 cursor-pointer px-2 font-semibold text-white underline-offset-4 transition hover:text-red-500 hover:underline"
             >
               {isSignUp ? 'Se connecter' : 'Créer un compte gratuitement'}
             </button>

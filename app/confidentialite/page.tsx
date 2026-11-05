@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import LegalPage, { Section } from '@/components/LegalPage';
 import { LEGAL } from '@/lib/legal';
 
-export const metadata: Metadata = { title: 'Politique de confidentialité · YAMONFIM' };
+export const metadata: Metadata = { title: 'Politique de confidentialité · YAMONFILM' };
 
 export default function Confidentialite() {
   return <LegalPage title="Politique de confidentialité" current="/confidentialite">
@@ -27,7 +27,7 @@ export default function Confidentialite() {
       <p>Chaque email contient un lien de désinscription immédiate. Vous pouvez aussi changer d’avis à tout moment depuis la page Mon abonnement ou en écrivant à {LEGAL.email}. Votre adresse n’est jamais vendue ni transmise à des tiers pour leur propre prospection. Sans réponse à nos emails pendant 3 ans, nous cessons de vous écrire.</p>
     </Section>
     <Section title="Destinataires et sous-traitants">
-      <p>Vos données ne sont ni vendues ni louées. Elles sont accessibles à l’éditeur et à ses prestataires techniques : Supabase (base de données et authentification), Vercel (hébergement et mesure d’audience anonyme), Stripe (paiement). Certains prestataires sont situés hors de l’Union européenne ; les transferts sont encadrés par les clauses contractuelles types de la Commission européenne ou le cadre de protection des données UE–États-Unis.</p>
+      <p>Vos données ne sont ni vendues ni louées. Elles sont accessibles à l’éditeur et à ses prestataires techniques : Supabase (base de données et authentification), Netlify (hébergement), Stripe (paiement). Certains prestataires sont situés hors de l’Union européenne ; les transferts sont encadrés par les clauses contractuelles types de la Commission européenne ou le cadre de protection des données UE–États-Unis.</p>
     </Section>
     <Section title="Durées de conservation">
       <ul>
@@ -37,7 +37,7 @@ export default function Confidentialite() {
       </ul>
     </Section>
     <Section title="Cookies et stockage local">
-      <p>Le site utilise uniquement des éléments nécessaires à son fonctionnement : maintien de la connexion, profil choisi, préférences d’affichage (stockage local du navigateur). La mesure d’audience Vercel Analytics ne dépose pas de cookie et ne vous identifie pas. Aucun cookie publicitaire n’est utilisé, aucun consentement n’est donc requis.</p>
+      <p>Le site utilise uniquement des éléments nécessaires à son fonctionnement : maintien de la connexion, profil choisi, préférences d’affichage (stockage local du navigateur). Aucun cookie publicitaire n’est utilisé, aucun consentement n’est donc requis.</p>
     </Section>
     <Section title="Vos droits">
       <p>Vous pouvez accéder à vos données, les rectifier, les supprimer, vous opposer à certains traitements, en demander la limitation ou la portabilité, et définir des directives après votre décès. Écrivez à {LEGAL.email} depuis l’adresse de votre compte ; une réponse vous sera apportée sous un mois.</p>

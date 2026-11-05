@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import LegalPage, { Section } from '@/components/LegalPage';
 import { LEGAL } from '@/lib/legal';
 
-export const metadata: Metadata = { title: 'Mentions légales · YAMONFIM' };
+export const metadata: Metadata = { title: 'Mentions légales · YAMONFILM' };
 
 export default function MentionsLegales() {
   return <LegalPage title="Mentions légales" current="/mentions-legales">

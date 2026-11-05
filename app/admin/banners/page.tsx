@@ -264,7 +264,7 @@ export default function AdminBannersPage() {
             <div className={styles.previewLabel}><span className={styles.liveDot} /> APERÇU EN DIRECT<span>PAGE D’ACCUEIL</span></div>
             <div className={styles.preview}>
               {backdrop && <img decoding="async" className={styles.cover} src={backdrop} alt="Aperçu de la couverture" />}
-              <div className={styles.previewContent}><span className={styles.badge}>LA SÉLECTION YAMONFIM</span><h2>{title || 'Votre prochaine obsession.'}</h2><p>{subtitle || 'Une collection à votre image. Ajoutez un titre et laissez la magie opérer.'}</p><span className={styles.discover}>Découvrir la sélection <span>→</span></span></div>
+              <div className={styles.previewContent}><span className={styles.badge}>LA SÉLECTION YAMONFILM</span><h2>{title || 'Votre prochaine obsession.'}</h2><p>{subtitle || 'Une collection à votre image. Ajoutez un titre et laissez la magie opérer.'}</p><span className={styles.discover}>Découvrir la sélection <span>→</span></span></div>
             </div>
             <div className={styles.filmstrip}>{selectedMedia.slice(0, 5).map((m, i) => <div key={m.key} className={styles.miniPoster}>{ranked && <span className={styles.miniRank}>{i + 1}</span>}{m.poster ? <img decoding="async" src={m.poster} alt={m.season === null ? m.title : m.title + ' – saison ' + m.season} /> : <span>{m.title}</span>}</div>)}{selectedMedia.length === 0 && <p>Les affiches de votre sélection apparaîtront ici.</p>}</div>
             <div className={styles.tip}><span>✦</span><div><h3>Le détail qui change tout</h3><p>Un titre court, une belle image et des films qui partagent la même énergie : les meilleures sélections racontent déjà une histoire.</p></div></div>
@@ -277,7 +277,7 @@ export default function AdminBannersPage() {
             <footer><span>{b.media_ids?.length || 0} titres associés{b.ranked ? ' · Top numéroté' : ''}</span><div><button type="button" onClick={() => startEditing(b)}>Modifier</button><button type="button" onClick={() => toggleActive(b.id, b.active)}>{b.active ? 'Masquer' : 'Afficher'}</button><button type="button" className={styles.delete} aria-label={`Supprimer ${b.title}`} onClick={() => void handleDeleteBanner(b)}>Supprimer</button></div></footer>
           </article>)}</div>}
         </section>
-        <footer className={styles.bottom}>YAMONFIM STUDIO<span>Le cinéma commence par une bonne sélection.</span></footer>
+        <footer className={styles.bottom}>YAMONFILM STUDIO<span>Le cinéma commence par une bonne sélection.</span></footer>
       </div>
     </main>
   );

@@ -3,7 +3,7 @@ import LegalPage, { Section } from '@/components/LegalPage';
 import { LEGAL } from '@/lib/legal';
 import { PLANS, formatEuro } from '@/app/abonnement/plans';
 
-export const metadata: Metadata = { title: 'Conditions générales · YAMONFIM' };
+export const metadata: Metadata = { title: 'Conditions générales · YAMONFILM' };
 
 export default function Conditions() {
   return <LegalPage title="Conditions générales d’utilisation et de vente" current="/conditions">

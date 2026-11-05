@@ -299,9 +299,8 @@ export default function WatchPage() {
 
   const handleDeleteComment = async (commentId: string) => {
     const { error } = await supabase.from('comments').delete().eq('id', commentId);
-    if (!error && id) {
-      fetchComments(String(id));
-    }
+    if (error) setNotice('Le commentaire n’a pas pu être supprimé.');
+    else if (id) fetchComments(String(id));
   };
 
   useEffect(() => {

@@ -66,7 +66,7 @@ export default function DailyAdditions({ completedIds = new Set<string>(), inPro
     {open && <div className="yf-backdrop fixed inset-0 z-[200] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md" onClick={() => setOpen(false)}>
       <section role="dialog" aria-modal="true" aria-labelledby="daily-additions-title" onClick={event => event.stopPropagation()} className="yf-pop relative max-h-[85vh] w-full max-w-md overflow-y-auto rounded-3xl border border-white/10 bg-[#121214] p-6 text-white shadow-2xl">
         <button type="button" onClick={() => setOpen(false)} aria-label="Fermer" className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full bg-white/5 text-lg text-zinc-400 hover:bg-white/10 hover:text-white">×</button>
-        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-red-400">Aujourd’hui sur YAMONFIM</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-red-400">Aujourd’hui sur YAMONFILM</p>
         <h2 id="daily-additions-title" className="mt-2 text-2xl font-black tracking-tight">{total ? `${total} nouveauté${total > 1 ? 's' : ''}` : 'Pas encore de nouveauté'}</h2>
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div className="rounded-2xl bg-gradient-to-br from-red-500/15 to-white/[0.03] p-4 ring-1 ring-white/5"><p className="text-3xl font-black tabular-nums"><CountUp value={movies} /></p><p className="text-xs text-zinc-400">film{movies > 1 ? 's' : ''} ajouté{movies > 1 ? 's' : ''}</p></div>

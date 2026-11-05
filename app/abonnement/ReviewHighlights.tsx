@@ -32,7 +32,7 @@ export default function ReviewHighlights({ userId }: { userId?: string }) {
               <p>« {review.comment.length > 220 ? review.comment.slice(0, 217).trimEnd() + '…' : review.comment} »</p>
               <footer>
                 <span className={styles.avatar} style={{ background: AVATAR_COLORS[review.display_name.charCodeAt(0) % AVATAR_COLORS.length] }} aria-hidden="true">{review.display_name.slice(0, 1).toUpperCase()}</span>
-                <span><strong>{review.display_name}</strong><small>Membre Yamonfim</small></span>
+                <span><strong>{review.display_name}</strong><small>Membre Yamonfilm</small></span>
               </footer>
             </article>
           ))}

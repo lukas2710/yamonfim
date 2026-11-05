@@ -339,7 +339,7 @@ export default function AdminStatsPage() {
           </div>
         </details>
 
-        <footer className="border-t border-white/5 pt-6 text-[10px] text-zinc-600">YAMONFIM · Statistiques · heure de Paris</footer>
+        <footer className="border-t border-white/5 pt-6 text-[10px] text-zinc-600">YAMONFILM · Statistiques · heure de Paris</footer>
       </div>
     </main>
   );

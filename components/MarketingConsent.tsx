@@ -46,6 +46,6 @@ export function MarketingConsentToggle() {
   if (consent === undefined) return null;
   return <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: 18, fontSize: 11, lineHeight: 1.6, color: '#a1a1aa', cursor: 'pointer' }}>
     <input type="checkbox" checked={consent === true} disabled={saving} onChange={e => void save(e.target.checked)} style={{ marginTop: 3, accentColor: '#dc2626' }} />
-    <span>Recevoir par email les nouveautés et offres de YAMONFIM.{error && <span style={{ display: 'block', color: '#fca5a5' }}>{error}</span>}</span>
+    <span>Recevoir par email les nouveautés et offres de YAMONFILM.{error && <span style={{ display: 'block', color: '#fca5a5' }}>{error}</span>}</span>
   </label>;
 }

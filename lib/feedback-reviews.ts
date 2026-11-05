@@ -11,7 +11,7 @@ export function collectVipReviews(feedback: CollectedFeedback[], publications: P
     if (selected.has(row.user_id)) continue;
     const publication = consent.get(row.user_id), comment = clean(row.message || '');
     if (!comment || !publication || clean(publication.comment || '') !== comment || publication.rating !== row.rating || !Number.isInteger(row.rating) || row.rating < 1 || row.rating > 5) continue;
-    selected.set(row.user_id, { id: row.id, display_name: clean(publication.display_name || '') || 'Membre Yamonfim', rating: row.rating, comment, created_at: row.created_at });
+    selected.set(row.user_id, { id: row.id, display_name: clean(publication.display_name || '') || 'Membre Yamonfilm', rating: row.rating, comment, created_at: row.created_at });
   }
   const reviews = [...selected.values()];
   return { reviews, total: reviews.length, average: reviews.length ? reviews.reduce((sum, row) => sum + row.rating, 0) / reviews.length : 0 };

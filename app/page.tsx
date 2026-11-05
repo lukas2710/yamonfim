@@ -578,7 +578,7 @@ export default function Home() {
 
   const featured: MediaItem = carouselItems[currentIndex] || {
     id: null,
-    title: 'Bienvenue sur YAMONFIM',
+    title: 'Bienvenue sur YAMONFILM',
     type: 'movie',
     poster: '',
     backdrop: '',
@@ -867,7 +867,7 @@ export default function Home() {
               <div className="mb-3 flex flex-wrap items-center gap-3 sm:mb-6">
                 <span className="flex items-center gap-2 rounded-full border border-red-400/25 bg-red-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-red-200 backdrop-blur-md"><Icon name="sparkles" className="h-3.5 w-3.5" />Sous les projecteurs</span>
                 {featured.heroSeason && <span className="rounded-full bg-red-600 px-3 py-1.5 text-[11px] font-black uppercase tracking-wide text-white shadow-lg shadow-red-950/50">Saison {featured.heroSeason} · Nouveau</span>}
-                <span className="hidden text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-300 sm:inline">La sélection Yamonfim</span>
+                <span className="hidden text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-300 sm:inline">La sélection Yamonfilm</span>
               </div>
               <h1 className="max-w-3xl break-words text-[2rem] font-black leading-[1.02] tracking-[-0.03em] text-white drop-shadow-xl line-clamp-2 sm:line-clamp-none sm:text-7xl sm:leading-[0.98] sm:tracking-[-0.04em] lg:text-8xl">{featured.title}</h1>
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-300 sm:mt-6 sm:gap-3">
