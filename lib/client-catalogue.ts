@@ -21,10 +21,27 @@ export function fetchCatalogueCards<T extends { id: string | number }>(client: S
   }).then(rows => { onPage?.(rows); return rows; });
 }
 
+// The prepared list is refreshed once an hour: what was added since is read
+// directly, by identifier, so a long bulk addition cannot fall out of it.
+export function fetchVisibleCatalogueCards<T extends { id: string | number }>(client: SupabaseClient, onPage?: (rows: T[]) => void) {
+  return readClientResource<T[]>('catalogue:visible', async () => {
+    const rows = await fetchPublicCatalogueCards<T>(client, onPage);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2500);
+    try {
+      const last = rows.reduce((top, row) => Math.max(top, Number(row.id) || 0), 0);
+      const { data, error } = await client.from('media').select('id,title,type,poster,backdrop,description,genres,tmdb_id,audience,release_year').gt('id', last).order('id', { ascending: false }).limit(1000).abortSignal(controller.signal);
+      if (!error && data) return [...(data as unknown as T[]), ...rows];
+    } catch { /* The prepared list remains usable when Supabase is slow. */ }
+    finally { clearTimeout(timer); }
+    return rows;
+  }).then(rows => { onPage?.(rows); return rows; });
+}
+
 const PAGE_SIZE = 2000, PARALLEL = 4, REFRESH_EVERY = 8;
 // The list weighs tens of megabytes: the first page shows the home at once, and
 // the rest arrives in order, refreshing the screen only every few pages.
-export async function readCataloguePages<T>(read: (offset: number) => Promise<Response>, onPage?: (rows: T[]) => void) {
+export async function readCataloguePages<T extends { id: string | number }>(read: (offset: number) => Promise<Response>, onPage?: (rows: T[]) => void) {
   const page = async (offset: number) => {
     for (let attempt = 0; ; attempt++) {
       try {
@@ -55,7 +72,18 @@ export async function readCataloguePages<T>(read: (offset: number) => Promise<Re
       }
     }
   }));
+  // Pages cached before and after an update overlap and leave older titles out.
+  if (new Set(rows.map(row => String(row.id))).size < total) throw new Error('Catalogue incomplet. Réessaie.');
   return rows;
+}
+
+// One answer is one version of the list: nothing can be left out between two pages.
+export async function readWholeCatalogue<T>(read: () => Promise<Response>) {
+  const response = await read();
+  if (!response.ok) throw new Error(`Le catalogue ne peut pas être chargé (${response.status}). Réessaie.`);
+  const rows: unknown = await response.json();
+  if (!Array.isArray(rows)) throw new Error('Réponse catalogue invalide. Réessaie.');
+  return rows as T[];
 }
 
 // Public cards are shared across visitor and admin screens. Keep one request
@@ -64,5 +92,5 @@ export async function readCataloguePages<T>(read: (offset: number) => Promise<Re
 export function fetchPublicCatalogueCards<T extends { id: string | number }>(client: SupabaseClient, onPage?: (rows: T[]) => void) {
   return readClientResource<T[]>('catalogue:public', () => readCataloguePages<T>(
     offset => fetch(`/api/catalogue?limit=${PAGE_SIZE}&offset=${offset}`, { signal: AbortSignal.timeout(20000) }), onPage,
-  )).then(rows => { onPage?.(rows); return rows; });
+  ).catch(() => readWholeCatalogue<T>(() => fetch('/api/catalogue', { signal: AbortSignal.timeout(60000) })))).then(rows => { onPage?.(rows); return rows; });
 }

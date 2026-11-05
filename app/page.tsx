@@ -12,7 +12,8 @@ import { prepareWatchMedia } from '@/lib/client-media';
 import { readClientResource } from '@/lib/resource-cache';
 import { supabase } from '@/lib/supabase';
 import { fetchSubscriptionProfile } from '@/lib/subscription';
-import { fetchPublicCatalogueCards } from '@/lib/client-catalogue';
+import { fetchVisibleCatalogueCards } from '@/lib/client-catalogue';
+import { searchCatalogueDatabase } from '@/lib/catalogue-search';
 import { CATALOGUE_CARD_COLUMNS } from '@/lib/catalogue';
 import { indexSearch, rankSearch, type SearchEntry } from '@/lib/search';
 import { inCategory, isMainstream, MANGA_GENRE, FOREIGN_GENRE, type Category } from '@/lib/catalogue-categories';
@@ -343,7 +344,7 @@ export default function Home() {
         // titles are read directly, then the rows refresh as the catalogue arrives.
         let knownRows: MediaItem[] = [], ownRows: MediaItem[] = [];
         let refreshResume = () => {};
-        const catalogueTask = fetchPublicCatalogueCards<MediaItem>(supabase, rows => {
+        const catalogueTask = fetchVisibleCatalogueCards<MediaItem>(supabase, rows => {
           knownRows = rows;
           setMediaList(rows.filter(item => canWatch(item, currentProfile.profile_mode || 'standard'))); firstPageReady = true; reveal();
           refreshResume();
@@ -601,6 +602,29 @@ export default function Home() {
     );
     return browseSort === 'rating' && !deferredQuery ? bestRated(matches.filter(item => selectedType === 'manga' || homeIds.has(String(item.id))), rankings) : matches;
   }, [mediaList, searchIndex, selectedType, selectedGenre, selectedYear, deferredQuery, browseSort, rankings, homeIds]);
+  // Few results: ask the database too, so the home page answers like the admin form.
+  const [databaseMatches, setDatabaseMatches] = useState<{ query: string; rows: MediaItem[] }>({ query: '', rows: [] });
+  const databaseQuery = deferredQuery.trim();
+  const askDatabase = databaseQuery.length >= 2 && filteredMedia.length < 24;
+  useEffect(() => {
+    if (!askDatabase) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      searchCatalogueDatabase<MediaItem>(supabase, databaseQuery, controller.signal)
+        .catch(() => [] as MediaItem[])
+        .then(rows => { if (!controller.signal.aborted) setDatabaseMatches({ query: databaseQuery, rows }); });
+    }, 450);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [askDatabase, databaseQuery]);
+  const databaseSearching = askDatabase && databaseMatches.query !== databaseQuery;
+  const shownMedia = useMemo(() => {
+    if (databaseMatches.query !== databaseQuery || !databaseQuery) return filteredMedia;
+    const known = new Set(filteredMedia.map(item => String(item.id)));
+    return [...filteredMedia, ...databaseMatches.rows.filter(item => !known.has(String(item.id))
+      && canWatch(item, activeProfile?.profile_mode || 'standard') && inCategory(item, selectedType)
+      && (selectedGenre === 'all' || item.genres?.includes(selectedGenre))
+      && (selectedYear === 'all' || String(releaseYear(item)) === selectedYear))];
+  }, [filteredMedia, databaseMatches, databaseQuery, activeProfile, selectedType, selectedGenre, selectedYear]);
 
   const { recentMovies, recentSeries } = useMemo(() => {
   const recentMovies: MediaItem[] = [], recentSeries: MediaItem[] = [];
@@ -723,7 +747,7 @@ export default function Home() {
                 aria-label="Rechercher un film ou une série"
                 placeholder="Film, série, genre…"
                 value={searchQuery}
-                onChange={e => { setResultLimit(60); setSearchQuery(e.target.value); setSelectedType('all'); setSelectedGenre('all'); }}
+                onChange={e => { setResultLimit(60); setSearchQuery(e.target.value); setSelectedType('all'); setSelectedGenre('all'); setSelectedYear('all'); }}
                 onBlur={() => !searchQuery && setSearchOpen(false)}
                 // « OK » / Entrée closes the TV or phone keyboard so the results are visible.
                 onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
@@ -1047,19 +1071,19 @@ export default function Home() {
                   : selectedGenre !== 'all' ? selectedGenre : selectedYear !== 'all' ? `${CATEGORY_TITLES[selectedType]} · ${selectedYear}` : 'Tout le catalogue'}
               </h2>
               <span className="text-sm text-zinc-500">
-                {filteredMedia.length} titre{filteredMedia.length > 1 ? 's' : ''}
+                {shownMedia.length} titre{shownMedia.length > 1 ? 's' : ''}
               </span>
               {!searchQuery && <select aria-label="Classer le catalogue" className="ml-auto rounded-lg border border-white/15 bg-zinc-900 px-3 py-2 text-sm" value={browseSort} onChange={event => setBrowseSort(event.target.value as 'recent' | 'rating')}><option value="recent">Derniers ajouts</option><option value="rating" disabled={!rankings}>Meilleures notes TMDB</option></select>}
             </div>
             {browseSort === 'rating' && !searchQuery && <p className="mb-4 text-sm text-zinc-400">Classement par note TMDB · un titre doit avoir au moins 300 avis (film) ou 150 avis (série) pour être classé.</p>}
 
-            {filteredMedia.length === 0 ? (
+            {shownMedia.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-white/10 py-16 text-center">
                 <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 text-zinc-500">
                   <Icon name="search" className="h-5 w-5" />
                 </span>
                 <div>
-                  <p className="font-semibold text-white">{catalogueLoading ? 'Recherche dans le reste du catalogue…' : 'Aucun contenu trouvé'}</p>
+                  <p className="font-semibold text-white">{catalogueLoading || databaseSearching ? 'Recherche dans le reste du catalogue…' : 'Aucun contenu trouvé'}</p>
                   <p className="mt-1 text-sm text-zinc-500">Essayez un autre titre ou faites une demande.</p>
                 </div>
                 <button
@@ -1071,7 +1095,7 @@ export default function Home() {
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4 md:grid-cols-5 lg:grid-cols-6 2xl:grid-cols-8">
-                {filteredMedia.slice(0, resultLimit).map((item: MediaItem) => (
+                {shownMedia.slice(0, resultLimit).map((item: MediaItem) => (
                   <PosterCard
                     key={item.id}
                     item={item}
@@ -1083,7 +1107,7 @@ export default function Home() {
                 ))}
               </div>
             )}
-            {filteredMedia.length > resultLimit && <button onClick={() => setResultLimit(count => count + 60)} className="mx-auto mt-6 block min-h-11 rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm font-semibold hover:bg-white/10">Afficher plus de résultats ({Math.min(resultLimit, filteredMedia.length)} / {filteredMedia.length})</button>}
+            {shownMedia.length > resultLimit && <button onClick={() => setResultLimit(count => count + 60)} className="mx-auto mt-6 block min-h-11 rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm font-semibold hover:bg-white/10">Afficher plus de résultats ({Math.min(resultLimit, filteredMedia.length)} / {filteredMedia.length})</button>}
           </section>
         ) : (
           <>
