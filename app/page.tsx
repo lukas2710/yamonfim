@@ -16,7 +16,7 @@ import { fetchPublicCatalogueCards } from '@/lib/client-catalogue';
 import { CATALOGUE_CARD_COLUMNS } from '@/lib/catalogue';
 import { indexSearch, rankSearch, type SearchEntry } from '@/lib/search';
 import { inCategory, isMainstream, MANGA_GENRE, FOREIGN_GENRE, type Category } from '@/lib/catalogue-categories';
-import { continueWatchingEntries, type ResumeRow } from '@/lib/watch-progress';
+import { continueWatchingEntries, seenAfterProgress, type ResumeRow } from '@/lib/watch-progress';
 import { fetchUserLists, LIST_LABELS, listTitles, type ListEntry, type UserList } from '@/lib/user-lists';
 import { personalizedRecommendations, discoveryPreferences, homeDiscoveryTitles, type RecommendationHistory } from '@/lib/recommendations';
 import { bestRated, weeklyTrending, tmdbKey, type HomeRankings } from '@/lib/home-rankings';
@@ -385,8 +385,7 @@ export default function Home() {
           // (VIP) stays there while it is still being watched.
           const seenAt = new Map((watchedRes.data || []).map(row => [`${row.media_id}/${row.ep_key}`, row.watched_at || '']));
           const markedSeen = (row: ResumeRow) => {
-            const at = seenAt.get(`${row.media_id}/movie_main`);
-            return at !== undefined && String(at) >= String(row.updated_at || '');
+            return seenAfterProgress(seenAt.get(`${row.media_id}/movie_main`), row.updated_at);
           };
           refreshResume = () => {
           const byId = new Map([...ownRows, ...knownRows].filter(item => canWatch(item, currentProfile.profile_mode || 'standard')).map(item => [String(item.id), item]));

@@ -33,6 +33,10 @@ export function episodeFinished(currentTime: number, duration: number) {
   return Number.isFinite(currentTime) && Number.isFinite(duration) && duration > 0 && (currentTime / duration >= .95 || (duration >= 600 && duration - currentTime <= 120));
 }
 export interface ResumeRow { media_id: unknown; type?: string; current_time?: number | null; duration?: number | null; season_idx?: number | null; episode_idx?: number | null; season_number?: number | null; episode_number?: number | null; updated_at?: string | null }
+/** Coché à la main après le dernier visionnage : un film vu à 80 % (VIP) reste à reprendre tant qu'il est regardé. */
+export function seenAfterProgress(watchedAt: string | null | undefined, updatedAt: string | null | undefined) {
+  return !!watchedAt && String(watchedAt) >= String(updatedAt || '');
+}
 /** Entrées de « Reprendre », de la plus récente à la plus ancienne, depuis l'historique de lecture. */
 export function continueWatchingEntries(rows: ResumeRow[], available: (id: string) => boolean, markedSeen: (row: ResumeRow) => boolean = () => false) {
   const entries: { id: string; ratio: number; finished: boolean; seasonNumber: number; episodeNumber: number; series: boolean }[] = [];

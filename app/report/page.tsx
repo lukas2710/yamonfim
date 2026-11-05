@@ -121,13 +121,15 @@ export default function ReportPage() {
 
   const handleStatusChange = async (id: string, newStatus: string) => {
     const { error } = await supabase.from('reports').update({ status: newStatus }).eq('id', id);
-    if (!error) fetchReports();
+    if (error) setErrorMsg('Le statut n’a pas pu être modifié. Réessaie.');
+    else fetchReports();
   };
 
   const handleDelete = async (id: string) => {
     const { error } = await supabase.from('reports').delete().eq('id', id);
     setConfirmDeleteId(null);
-    if (!error) fetchReports();
+    if (error) setErrorMsg('Le signalement n’a pas pu être supprimé. Réessaie.');
+    else fetchReports();
   };
 
   const isAdmin = currentUser?.email === ADMIN_EMAIL;

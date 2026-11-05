@@ -4,7 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 export const CATALOGUE_CARD_COLUMNS = 'id,title,type,poster,backdrop,description,genres,tmdb_id,audience,release_year,created_at';
 // Light card rows read fastest in large pages; season payloads need small ones.
 const PAGE = 250, CARD_PAGE = 1000, PARALLEL = 6, MIN_PAGE = 25;
-export async function fetchCatalogueRows<T extends { id: string | number }>(client: SupabaseClient, columns: string, onPage?: (rows: T[]) => void, pageSize = PAGE): Promise<T[]> {
+export async function fetchCatalogueRows<T extends { id: string | number }>(client: SupabaseClient, columns: string, onPage?: (rows: T[]) => void, pageSize = /seasons|\*/.test(columns) ? PAGE : CARD_PAGE): Promise<T[]> {
   const page = async (from: number, size: number, counted = false): Promise<{ data: T[]; count: number | null }> => {
     const { data, error, count } = await client.from('media')
       .select(columns, counted ? { count: 'exact' } : undefined)
@@ -58,5 +58,5 @@ export async function fetchCatalogueRows<T extends { id: string | number }>(clie
 }
 
 export function fetchCatalogueCards<T extends { id: string | number }>(client: SupabaseClient, onPage?: (rows: T[]) => void) {
-  return fetchCatalogueRows<T>(client, CATALOGUE_CARD_COLUMNS, onPage, CARD_PAGE);
+  return fetchCatalogueRows<T>(client, CATALOGUE_CARD_COLUMNS, onPage);
 }

@@ -9,7 +9,7 @@ import PageHero from '@/components/PageHero';
 import HistoryEpisodesDialog from '@/components/HistoryEpisodesDialog';
 import WatchStatusBadge from '@/components/WatchStatusBadge';
 import { fetchProfileWatched } from '@/lib/profile-watched';
-import { continueWatchingEntries } from '@/lib/watch-progress';
+import { continueWatchingEntries, seenAfterProgress } from '@/lib/watch-progress';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -133,6 +133,7 @@ export default function HistoryPage() {
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [tableMissing, setTableMissing] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
@@ -184,12 +185,14 @@ export default function HistoryPage() {
 
         const ids = Array.from(new Set([...Object.keys(w), ...h.map(r => r.media_id)]));
         const byId: Record<string, MediaItem> = {};
-        if (ids.length > 0) {
-          const { data: mediaData } = await supabase
-            .from('media')
-            .select('id, title, type, poster, backdrop, seasons')
-            .in('id', ids);
-          (mediaData || []).forEach((m: any) => { byId[String(m.id)] = m; });
+        // Season lists are heavy: a long history is read in small batches, or the query times out.
+        const batches = Array.from({ length: Math.ceil(ids.length / 40) }, (_, index) => ids.slice(index * 40, index * 40 + 40));
+        for (let start = 0; start < batches.length; start += 3) {
+          const results = await Promise.all(batches.slice(start, start + 3).map(batch => supabase.from('media').select('id, title, type, poster, backdrop, seasons').in('id', batch)));
+          for (const { data, error } of results) {
+            if (error) throw error;
+            (data || []).forEach((m: any) => { byId[String(m.id)] = m; });
+          }
         }
 
         setWatched(w);
@@ -197,6 +200,7 @@ export default function HistoryPage() {
         setMediaById(byId);
       } catch (err) {
         console.error('Erreur historique :', err);
+        setLoadError('L’historique n’a pas pu être chargé. Actualise la page pour réessayer.');
       } finally {
         setLoading(false);
       }
@@ -255,26 +259,27 @@ export default function HistoryPage() {
   const clearAll = async () => {
     if (!userId || !activeProfile) return;
     setConfirmClearAll(false);
-    setWatched({});
-    setHistory([]);
-    await Promise.all([
+    const results = await Promise.all([
       supabase.from('user_watched').delete().eq('user_id', userId).eq('profile_id', activeProfile.id),
       supabase.from('watch_history').delete().eq('user_id', userId).eq('profile_id', activeProfile.id),
     ]);
+    if (results.some(result => result.error)) { setToast('L’historique n’a pas pu être effacé. Réessaie.'); return; }
+    setWatched({});
+    setHistory([]);
     setToast('Historique du profil effacé');
   };
 
   const removeFromHistory = async (mediaId: string) => {
     if (!userId || !activeProfile) return;
     setConfirmRemoveId(null);
-    setWatched(prev => { const n = { ...prev }; delete n[mediaId]; return n; });
-    setHistory(prev => prev.filter(r => r.media_id !== mediaId));
-    if (selectedSeriesId === mediaId) setSelectedSeriesId(null);
-
-    await Promise.all([
+    const results = await Promise.all([
       supabase.from('user_watched').delete().eq('user_id', userId).eq('profile_id', activeProfile.id).eq('media_id', mediaId),
       supabase.from('watch_history').delete().eq('user_id', userId).eq('profile_id', activeProfile.id).eq('media_id', mediaId),
     ]);
+    if (results.some(result => result.error)) { setToast('Ce titre n’a pas pu être retiré. Réessaie.'); return; }
+    setWatched(prev => { const n = { ...prev }; delete n[mediaId]; return n; });
+    setHistory(prev => prev.filter(r => r.media_id !== mediaId));
+    if (selectedSeriesId === mediaId) setSelectedSeriesId(null);
   };
 
   /* ---------------- Données dérivées ---------------- */
@@ -327,7 +332,7 @@ export default function HistoryPage() {
   }, [watched, mediaById]);
 
   const continueList = useMemo(() => {
-    const resumable = new Set(continueWatchingEntries(history.map(row => ({ ...row, type: mediaById[row.media_id]?.type })), id => !!mediaById[id], row => !!watched[String(row.media_id)]?.[row.type === 'series' ? `s${row.season_idx ?? 0}_e${row.episode_idx ?? 0}` : MOVIE_KEY]).map(row => row.id));
+    const resumable = new Set(continueWatchingEntries(history.map(row => ({ ...row, type: mediaById[row.media_id]?.type })), id => !!mediaById[id], row => row.type !== 'series' && seenAfterProgress(watched[String(row.media_id)]?.[MOVIE_KEY], row.updated_at)).map(row => row.id));
     return entries.filter(entry => resumable.has(entry.id)).slice(0, 10);
   }, [entries, history, mediaById, watched]);
 
@@ -368,7 +373,9 @@ export default function HistoryPage() {
   return (
     <main className="yf-page yf-history relative min-h-screen overflow-x-hidden bg-[#0a0a0b] pb-24 font-sans text-white antialiased selection:bg-red-600 selection:text-white">
       <div className="pointer-events-none absolute -top-56 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-red-600/10 blur-[140px]" />
+      {toast && <p role="status" className="fixed inset-x-4 bottom-6 z-50 mx-auto max-w-md rounded-xl border border-white/10 bg-zinc-900 p-4 text-center text-sm font-semibold text-white shadow-2xl">{toast}</p>}
 
+      {(loadError || tableMissing) && <p role="alert" className="relative z-10 mx-auto mt-4 max-w-6xl rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{loadError || 'Les épisodes vus ne peuvent pas être chargés. Actualise la page pour réessayer.'}</p>}
       <header className="yf-topbar sticky top-0 z-40 border-b border-white/5 bg-[#0a0a0b]/85 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-8">
           <button

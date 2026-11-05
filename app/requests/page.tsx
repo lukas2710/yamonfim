@@ -1,6 +1,6 @@
 'use client';
 
-import { fetchCatalogueRows } from '@/lib/catalogue';
+import { fetchPublicCatalogueCards } from '@/lib/client-catalogue';
 import { searchQueryVariants } from '@/lib/search';
 
 import SectionNavigation from '@/components/SectionNavigation';
@@ -143,7 +143,8 @@ export default function RequestsPage() {
         else if (data) setRequests(data);
         setLoading(false);
       });
-    const catalogueTask = fetchCatalogueRows<MediaItem>(supabase, 'id,title,type,tmdb_id')
+    // The cached list: reading 45 000 titles from the database at each visit overloads it.
+    const catalogueTask = fetchPublicCatalogueCards<MediaItem>(supabase)
       .then(setCatalogMedia).catch(() => setErrorMsg('La vérification du catalogue est momentanément indisponible.'));
     await Promise.all([requestsTask, catalogueTask]);
   };
@@ -266,6 +267,7 @@ export default function RequestsPage() {
     e.preventDefault();
     if (!selectedMedia && !searchQuery.trim()) return;
     if (duplicateInfo || submitting || submitLock.current) return;
+    if (!currentUser) { setErrorMsg('Connecte-toi pour envoyer une demande.'); return; }
     submitLock.current = true;
 
     setSubmitting(true);
@@ -316,13 +318,15 @@ export default function RequestsPage() {
 
   const handleStatusChange = async (id: string, newStatus: string) => {
     const { error } = await supabase.from('requests').update({ status: newStatus }).eq('id', id);
-    if (!error) fetchData();
+    if (error) setErrorMsg('Le statut n’a pas pu être modifié. Réessaie.');
+    else fetchData();
   };
 
   const handleDelete = async (id: string) => {
     const { error } = await supabase.from('requests').delete().eq('id', id);
     setConfirmDeleteId(null);
-    if (!error) fetchData();
+    if (error) setErrorMsg('La demande n’a pas pu être supprimée. Réessaie.');
+    else fetchData();
   };
 
   const isAdmin = currentUser?.email === ADMIN_EMAIL;

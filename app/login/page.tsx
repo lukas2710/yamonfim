@@ -157,7 +157,7 @@ export default function LoginPage() {
     try {
       if (isSignUp) {
         // Marketing consent is opt-in (unchecked by default) and kept with the account.
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email: cleanEmail,
           password,
           options: { data: { marketing_consent: marketingConsent, marketing_consent_at: new Date().toISOString() } },
@@ -165,6 +165,10 @@ export default function LoginPage() {
 
         if (error) {
           setErrorMsg(translateSignUpError(error.message));
+        } else if (data.user && !data.user.identities?.length) {
+          // Supabase hides existing addresses behind a normal-looking success.
+          setErrorMsg('Un compte existe déjà avec cet email. Connecte-toi ou réinitialise ton mot de passe.');
+          setIsSignUp(false);
         } else {
           setSuccessMsg('Compte créé avec succès ! Vérifie ton adresse email si une confirmation est demandée.');
           setIsSignUp(false);
@@ -176,7 +180,10 @@ export default function LoginPage() {
         });
 
         if (error) {
-          setErrorMsg('Email ou mot de passe incorrect.');
+          setErrorMsg(/not confirmed/i.test(error.message) ? 'Confirme ton adresse email avec le lien reçu, puis reconnecte-toi.'
+            : /rate limit|too many/i.test(error.message) ? 'Trop de tentatives. Patiente quelques minutes avant de réessayer.'
+            : error.status && error.status >= 500 || /fetch|network/i.test(error.message) ? 'Connexion impossible pour le moment. Vérifie ta connexion Internet puis réessaie.'
+            : 'Email ou mot de passe incorrect.');
         } else {
           localStorage.removeItem('active_profile');
           router.push('/profiles');
