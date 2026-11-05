@@ -7,7 +7,7 @@ const UPDATED = 'yf-vip-reviews-updated';
 export function refreshVipReviews() { window.dispatchEvent(new Event(UPDATED)); }
 export function useVipReviews(userId?: string) {
   const [version, setVersion] = useState(0);
-  const [data, setData] = useState<VipReviews>({ reviews: [], average: 0, total: 0 });
+  const [data, setData] = useState<VipReviews>({ reviews: [], average: 0, total: 0, distribution: [0, 0, 0, 0, 0] });
   const [loading, setLoading] = useState(true), [unavailable, setUnavailable] = useState(false);
   useEffect(() => { const refresh = () => setVersion(value => value + 1); window.addEventListener(UPDATED, refresh); return () => window.removeEventListener(UPDATED, refresh); }, []);
   useEffect(() => {

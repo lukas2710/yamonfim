@@ -4,6 +4,7 @@ import { collectVipReviews, type VipReviews } from '@/lib/feedback-reviews';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+const OWNER_EMAIL = 'lukas.leclerc312@gmail.com';
 let cached: { at: number; data: VipReviews } | null = null;
 let pending: Promise<VipReviews> | null = null;
 async function member(request: Request) {
@@ -17,19 +18,28 @@ function database() {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error('Configuration des avis indisponible');
   return createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 }
+async function ownerId(db: ReturnType<typeof database>) {
+  for (let page = 1; ; page++) {
+    const { data, error } = await db.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error) throw error;
+    const owner = data.users.find(user => user.email === OWNER_EMAIL);
+    if (owner) return owner.id;
+    if (data.users.length < 1000) return undefined;
+  }
+}
 async function collected() {
   const db = database(), publications = [], feedback = [];
   for (let offset = 0; ; offset += 1000) {
-    const { data, error } = await db.from('site_reviews').select('user_id,display_name,rating,comment').order('user_id').range(offset, offset + 999);
+    const { data, error } = await db.from('site_reviews').select('id,user_id,display_name,rating,comment,created_at').order('user_id').range(offset, offset + 999);
     if (error) throw error;
     publications.push(...data); if (data.length < 1000) break;
   }
   for (let offset = 0; ; offset += 1000) {
-    const { data, error } = await db.from('site_feedback').select('id,user_id,rating,message,created_at').neq('message', '').order('created_at', { ascending: false }).order('id').range(offset, offset + 999);
+    const { data, error } = await db.from('site_feedback').select('id,user_id,rating,message,created_at').order('created_at', { ascending: false }).order('id').range(offset, offset + 999);
     if (error) throw error;
     feedback.push(...data); if (data.length < 1000) break;
   }
-  return collectVipReviews(feedback, publications);
+  return collectVipReviews(feedback, publications, await ownerId(db));
 }
 export async function GET(request: Request) {
   if (!await member(request)) return Response.json({ error: 'Connexion requise' }, { status: 401 });

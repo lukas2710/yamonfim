@@ -9,9 +9,10 @@ const Stars = ({ value }: { value: number }) => <span className={styles.stars} a
 
 /** Avis des membres avec commentaire, juste avant les offres : la preuve sociale au moment de choisir. */
 export default function ReviewHighlights({ userId }: { userId?: string }) {
-  const { reviews, average, total } = useVipReviews(userId);
+  const { reviews: all, average, total, distribution } = useVipReviews(userId);
+  const reviews = all.filter(review => review.comment);
 
-  if (!total || !reviews.length) return null;
+  if (!total) return null;
   // Liste doublée : le défilement boucle sans saut.
   const loop = reviews.length >= 3 ? [...reviews, ...reviews] : reviews;
   return (
@@ -19,12 +20,15 @@ export default function ReviewHighlights({ userId }: { userId?: string }) {
       <div className={styles.head}>
         <div className={styles.score}>
           <strong>{average.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</strong>
-          <div><Stars value={Math.round(average)} /><span>{total} avis de membres</span></div>
+          <div><Stars value={Math.round(average)} /><span>{total > 1 ? `Note de ${total} membres` : 'Note d’un membre'}</span></div>
         </div>
         <h2 id="highlights-title">Ce qu’en pensent les membres</h2>
+        <div className={styles.bars} aria-label="Répartition des notes">
+          {[5, 4, 3, 2, 1].map(star => <div key={star} className={styles.bar}><span>{star} ★</span><i><b style={{ width: `${distribution[star - 1] / total * 100}%` }} /></i><span>{distribution[star - 1]}</span></div>)}
+        </div>
         <a href="#avis" className={styles.all}>Lire tous les avis ↓</a>
       </div>
-      <div className={`${styles.viewport} ${reviews.length >= 3 ? styles.moving : ''}`}>
+      {reviews.length > 0 && <div className={`${styles.viewport} ${reviews.length >= 3 ? styles.moving : ''}`}>
         <div className={styles.track} style={{ ['--duration' as string]: `${reviews.length * 7}s` }}>
           {loop.map((review, i) => (
             <article key={`${review.id}-${i}`} className={styles.card} aria-hidden={i >= reviews.length ? true : undefined}>
@@ -32,12 +36,12 @@ export default function ReviewHighlights({ userId }: { userId?: string }) {
               <p>« {review.comment.length > 220 ? review.comment.slice(0, 217).trimEnd() + '…' : review.comment} »</p>
               <footer>
                 <span className={styles.avatar} style={{ background: AVATAR_COLORS[review.display_name.charCodeAt(0) % AVATAR_COLORS.length] }} aria-hidden="true">{review.display_name.slice(0, 1).toUpperCase()}</span>
-                <span><strong>{review.display_name}</strong><small>Membre Yamonfilm</small></span>
+                <span><strong>{review.display_name}</strong><small>Membre Yamonfilm · {new Date(review.created_at).toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris', day: 'numeric', month: 'long', year: 'numeric' })}</small></span>
               </footer>
             </article>
           ))}
         </div>
-      </div>
+      </div>}
     </section>
   );
 }

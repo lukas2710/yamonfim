@@ -22,3 +22,4 @@
 .footerLegal{display:flex;flex-wrap:wrap;gap:6px 16px;margin-left:auto;font-size:10px;color:#8b8b92}
 .footerLegal a:hover{color:#f4f4f5}
 @media(max-width:760px){.footerLegal{margin-left:0;flex-basis:100%;order:2}}
+.reviewNoComment{color:#a1a1aa;font-size:14px;font-style:italic}
