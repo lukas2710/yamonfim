@@ -48,7 +48,8 @@ public final class DetailScreen extends Screen {
     private TextView kicker, title, progressText, description, episodeLabel;
     private LinearLayout meta;
     private LinearLayout buttons;
-    private TextView play, restart, watchedButton;
+    private TextView play, restart, watchedButton, favorite, later;
+    private boolean favoriteOn, laterOn;
     private Shelf seasons, episodes;
     private Cards.VScroll scroll;
     private LinearLayout loadingRow;
@@ -110,6 +111,14 @@ public final class DetailScreen extends Screen {
         buttons.addView(play);
         buttons.addView(restart, Ui.lp(Ui.WRAP, Ui.WRAP, dp(14), 0, 0, 0));
         buttons.addView(watchedButton, Ui.lp(Ui.WRAP, Ui.WRAP, dp(14), 0, 0, 0));
+        favorite = Ui.button(main, "Favori", R.drawable.ic_plus, Ui.STYLE_NORMAL);
+        favorite.setOnClickListener(v -> toggleList("favorite"));
+        favorite.setVisibility(View.GONE);
+        later = Ui.button(main, "Plus tard", R.drawable.ic_list, Ui.STYLE_NORMAL);
+        later.setOnClickListener(v -> toggleList("later"));
+        later.setVisibility(View.GONE);
+        buttons.addView(favorite, Ui.lp(Ui.WRAP, Ui.WRAP, dp(14), 0, 0, 0));
+        buttons.addView(later, Ui.lp(Ui.WRAP, Ui.WRAP, dp(14), 0, 0, 0));
         c.addView(buttons, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(22), 0, 0));
         loadingRow = Ui.row(main);
         loadingRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
@@ -138,7 +147,40 @@ public final class DetailScreen extends Screen {
     @Override protected void onShow(boolean first) { load(first); }
     @Override protected void onRefresh() { if (loaded) load(false); }
 
+    /** Les listes n'affectent pas l'accès : la limite gratuite reste vérifiée à la lecture. */
+    private void loadLists() {
+        final String id = media.id;
+        io(() -> App.repo().lists(), (lists, e) -> {
+            if (lists == null) return; // Boutons masqués tant que les listes sont indisponibles.
+            favoriteOn = lists.get("favorite").contains(id);
+            laterOn = lists.get("later").contains(id);
+            renderLists();
+        });
+    }
+
+    private void renderLists() {
+        favorite.setText(favoriteOn ? "Favori ✓" : "Favori");
+        later.setText(laterOn ? "Plus tard ✓" : "Plus tard");
+        favorite.setVisibility(View.VISIBLE);
+        later.setVisibility(View.VISIBLE);
+    }
+
+    private void toggleList(String list) {
+        final boolean isFavorite = list.equals("favorite");
+        final boolean value = !(isFavorite ? favoriteOn : laterOn);
+        final String id = media.id;
+        if (isFavorite) favoriteOn = value; else laterOn = value;
+        renderLists();
+        io(() -> { App.repo().setListed(id, list, value); return true; }, (ok, e) -> {
+            if (e == null) return;
+            if (isFavorite) favoriteOn = !value; else laterOn = !value;
+            renderLists();
+            fail(e);
+        });
+    }
+
     private void load(boolean first) {
+        if (first) loadLists();
         if (loading) return;
         loading = true;
         final int generation = ++loadGeneration;

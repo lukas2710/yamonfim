@@ -12,11 +12,13 @@ create table if not exists public.user_lists (
 create index if not exists user_lists_profile_recent on public.user_lists (user_id, profile_id, created_at desc);
 alter table public.user_lists enable row level security;
 revoke all on public.user_lists from anon;
-grant select, insert, delete on public.user_lists to authenticated;
+grant select, insert, update, delete on public.user_lists to authenticated;
 drop policy if exists user_lists_select on public.user_lists;
 drop policy if exists user_lists_insert on public.user_lists;
+drop policy if exists user_lists_update on public.user_lists;
 drop policy if exists user_lists_delete on public.user_lists;
 create policy user_lists_select on public.user_lists for select to authenticated using (user_id = auth.uid());
 create policy user_lists_insert on public.user_lists for insert to authenticated with check (user_id = auth.uid());
+create policy user_lists_update on public.user_lists for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy user_lists_delete on public.user_lists for delete to authenticated using (user_id = auth.uid());
 commit;

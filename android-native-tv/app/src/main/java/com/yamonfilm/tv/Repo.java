@@ -429,6 +429,30 @@ public final class Repo {
         return q;
     }
 
+    /** Favoris et « À regarder plus tard » du profil, du plus récent au plus ancien. */
+    public Map<String, List<String>> lists() throws IOException {
+        JSONArray rows = api.select("user_lists", mine(new Q().select("media_id,list")).order("created_at.desc").limit(1000));
+        Map<String, List<String>> out = new HashMap<>();
+        out.put("favorite", new ArrayList<>());
+        out.put("later", new ArrayList<>());
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject row = rows.optJSONObject(i);
+            List<String> ids = row == null ? null : out.get(Models.str(row, "list"));
+            if (ids != null) ids.add(Models.str(row, "media_id"));
+        }
+        return out;
+    }
+
+    public void setListed(String mediaId, String list, boolean present) throws IOException {
+        if (!present) { api.delete("user_lists", mine(new Q()).eq("media_id", mediaId).eq("list", list)); return; }
+        String profile = profileId();
+        if (profile == null) throw new IOException("Choisis un profil pour utiliser les listes.");
+        JSONObject row = new JSONObject();
+        try { row.put("user_id", requireUser()).put("profile_id", profile).put("media_id", mediaId).put("list", list); }
+        catch (org.json.JSONException e) { throw new IOException("Liste indisponible.", e); }
+        api.insert("user_lists", new JSONArray().put(row), "user_id,profile_id,media_id,list", false);
+    }
+
     public List<History> history() throws IOException {
         JSONArray rows = api.select("watch_history", mine(new Q().select("*")).order("updated_at.desc"));
         List<History> list = new ArrayList<>();

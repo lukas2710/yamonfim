@@ -62,6 +62,7 @@ public final class HomeScreen extends Screen {
     private final LinkedHashMap<String, Shelf> shelves = new LinkedHashMap<>();
     private String signature = "";
     private List<History> history = Collections.emptyList();
+    private java.util.Map<String, List<String>> lists = Collections.emptyMap();
     private List<Discovery.Viewing> viewingHistory = Collections.emptyList();
     private int historyGeneration;
     private List<Collection> collections = Collections.emptyList();
@@ -193,6 +194,7 @@ public final class HomeScreen extends Screen {
     }
 
     private void loadHistory() {
+        io(() -> App.repo().lists(), (rows, e) -> { if (rows != null) { lists = rows; renderLists(); } });
         final int generation = ++historyGeneration;
         final String profileId = App.repo().profileId();
         io(() -> { App.repo().flushWrites(4000); return App.repo().history(); }, (list, e) -> {
@@ -590,7 +592,7 @@ public final class HomeScreen extends Screen {
             // Seule une série entièrement vue sort de cette rangée.
             if (m.isSeries() ? App.repo().completed(m.id) : App.repo().seenPosition(m.id, false, h.seasonIdx, h.episodeIdx)) continue;
             // Comme sur le site : un film à peine commencé ou déjà à son générique (92 %) ne va pas dans « Reprendre ».
-            if (!Logic.showInContinue(m.isSeries(), h.currentTime, h.duration)) continue;
+            if (!Logic.showInContinue(m.isSeries(), h.currentTime, h.duration) || !m.isSeries() && Logic.episodeFinished(h.currentTime, h.duration)) continue;
             Card c = new Card(main, 260, 146, true, true);
             c.data = h;
             String sub = m.isSeries() ? "S" + h.seasonNumber + " · É" + h.episodeNumber : "FILM";
@@ -602,6 +604,21 @@ public final class HomeScreen extends Screen {
         }
         if (cards.isEmpty()) removeShelf("continue");
         else setShelf("continue", "Reprendre", cards);
+        renderLists();
+    }
+
+    private void renderLists() {
+        if (App.repo().catalogue().isEmpty()) return;
+        listShelf("favorites", "Mes favoris", "favorite");
+        listShelf("later", "À regarder plus tard", "later");
+    }
+
+    private void listShelf(String key, String label, String list) {
+        List<Media> items = new ArrayList<>();
+        List<String> ids = lists.get(list);
+        if (ids != null) for (String id : ids) { Media m = App.repo().cached(id); if (m != null) items.add(m); }
+        if (items.isEmpty()) removeShelf(key);
+        else posterShelf(key, label, items, null);
     }
 
     private void renderCollections() {
@@ -626,7 +643,7 @@ public final class HomeScreen extends Screen {
 
     private void resume(Media cachedMedia, History h) { Actions.resume(main, cachedMedia.id, h); }
 
-    private static final String[] ORDER = {"continue", "recommended", "daily", "trend_movies", "trend_series", "top_movies", "top_series", "banner", "collections", "new", "movies", "series", "mangas", "foreign"};
+    private static final String[] ORDER = {"continue", "favorites", "later", "recommended", "daily", "trend_movies", "trend_series", "top_movies", "top_series", "banner", "collections", "new", "movies", "series", "mangas", "foreign"};
 
     private int rank(String key) {
         String k = key.startsWith("banner:") ? "banner" : key;

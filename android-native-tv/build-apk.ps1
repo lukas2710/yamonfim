@@ -2,7 +2,7 @@
 # Compile, teste, signe et vérifie l'APK YAMONFILM pour Android TV.
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
-$version = '2.7.7'
+$version = '2.7.8'
 if ($PrepareTools) { & (Join-Path $root 'prepare-tools.ps1') }
 
 # Outils : ceux de ce dossier, sinon ceux déjà téléchargés pour le site (lecture seule).
