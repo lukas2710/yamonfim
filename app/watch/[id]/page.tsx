@@ -718,7 +718,8 @@ export default function WatchPage() {
     // cause a wall-clock countdown to advance while the video is stopped.
     if (decision.countdown !== nextCountdown) setNextCountdown(decision.countdown);
     const key = mediaRef.current?.type === 'series' ? epKey(position.s, position.e) : 'movie_main';
-    if (shouldMarkSeen(time, duration, vipPlaybackRef.current) && !mediaRef.current?.watched?.[key]) void markAsWatched(key);
+    // An episode left during its credits is watched, even under the percentage rule.
+    if ((shouldMarkSeen(time, duration, vipPlaybackRef.current) || (mediaRef.current?.type === 'series' && episodeFinished(time, duration))) && !mediaRef.current?.watched?.[key]) void markAsWatched(key);
     if (Math.abs(time - lastProgressSaveRef.current) >= 10) {
       lastProgressSaveRef.current = time;
       persistProgress();
@@ -749,7 +750,8 @@ export default function WatchPage() {
       const next = position && nextPositionOf(mediaRef.current?.seasons, position);
       if (next) {
         const progress = currentProgressRef.current;
-        if (endedRef.current || shouldMarkSeen(progress.currentTime, progress.duration, vipPlaybackRef.current)) void markAsWatched(epKey(position.s, position.e));
+        // Moving on from the credits counts as seen, whatever percentage they start at.
+        if (automatic || nextCountdown !== null || endedRef.current || shouldMarkSeen(progress.currentTime, progress.duration, vipPlaybackRef.current) || episodeFinished(progress.currentTime, progress.duration)) void markAsWatched(epKey(position.s, position.e));
         void startPlaying(next.s, next.e, true);
       }
     };

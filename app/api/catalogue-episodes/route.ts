@@ -11,7 +11,8 @@ export async function GET(request: Request) {
     if (error) return Response.json({ error: 'Épisodes indisponibles' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
     for (const row of data || []) {
       const keys: string[] = [];
-      if (Array.isArray(row.seasons)) row.seasons.forEach((season, s) => { if (Array.isArray(season?.episodes)) season.episodes.forEach((_: unknown, e: number) => keys.push(`s${s}_e${e}`)); });
+      // Specials (season 0) are optional: skipping them must not leave a series unfinished.
+      if (Array.isArray(row.seasons)) row.seasons.forEach((season, s) => { if (season?.seasonNumber !== 0 && Array.isArray(season?.episodes)) season.episodes.forEach((_: unknown, e: number) => keys.push(`s${s}_e${e}`)); });
       cache.set(String(row.id), { at: Date.now(), keys });
     }
     while (cache.size > 500) cache.delete(cache.keys().next().value!);

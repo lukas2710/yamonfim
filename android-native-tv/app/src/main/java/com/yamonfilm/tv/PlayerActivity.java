@@ -1029,7 +1029,8 @@ public final class PlayerActivity extends Activity implements App.Alive {
         }
         if (automatic) autoChainCount++;
         else autoChainCount = 0;
-        if (ended || Logic.shouldMarkSeen(safePosition(), safeDuration(), ps.unlimited)) markSeen();
+        // Passer à la suite depuis le générique compte comme vu, quel que soit le pourcentage.
+        if (ended || automatic || watchedEnough(safePosition() / 1000.0, safeDuration() / 1000.0)) markSeen();
         step(1, automatic);
     }
 
@@ -1141,6 +1142,11 @@ public final class PlayerActivity extends Activity implements App.Alive {
 
     private String key() { return media.isSeries() ? Logic.epKey(season, episode) : "movie_main"; }
 
+    /** Un épisode quitté pendant son générique est vu, même sous le pourcentage (site : episodeFinished). */
+    private boolean watchedEnough(double pos, double dur) {
+        return Logic.shouldMarkSeen(pos, dur, ps.unlimited) || media != null && media.hasEpisodes() && Logic.episodeFinished(pos, dur);
+    }
+
     private void markSeen() {
         if (live || media == null) return;
         final String k = key();
@@ -1169,7 +1175,7 @@ public final class PlayerActivity extends Activity implements App.Alive {
             if (live || media == null) return;
             long posMs = webPosition(), durMs = durationForProgress();
             double pos = posMs / 1000.0, dur = durMs / 1000.0;
-            if (dur > 0 && Logic.shouldMarkSeen(pos, dur, ps.unlimited)) markSeen();
+            if (dur > 0 && watchedEnough(pos, dur)) markSeen();
             if (lastSavedPosition < 0 || Math.abs(pos - lastSavedPosition) >= 10) persist();
             if (!media.hasEpisodes()) return;
             int[] next = media.next(season, episode);
@@ -1198,7 +1204,7 @@ public final class PlayerActivity extends Activity implements App.Alive {
         // Image figée plus de 30 s pendant la lecture : on passe à une autre source.
         if (playing && stallSince > 0 && SystemClock.elapsedRealtime() - stallSince > 30000 && mode == MODE_NATIVE) { stallSince = -1; failover(posMs, "Flux bloqué."); return; }
 
-        if (Logic.shouldMarkSeen(pos, dur, ps.unlimited)) markSeen();
+        if (watchedEnough(pos, dur)) markSeen();
         if (lastSavedPosition < 0 || Math.abs(pos - lastSavedPosition) >= 10) persist();
 
         if (!media.hasEpisodes()) return;
@@ -1510,7 +1516,7 @@ public final class PlayerActivity extends Activity implements App.Alive {
         if (!live && media != null && prepared && mode != MODE_WEB) {
             double pos = safePosition() / 1000.0, dur = safeDuration() / 1000.0;
             // Un épisode quitté dans ses deux dernières minutes compte comme vu (site : episodeFinished).
-            if (Logic.shouldMarkSeen(pos, dur, ps.unlimited)) markSeen();
+            if (watchedEnough(pos, dur)) markSeen();
         }
         persist();
         super.finish();

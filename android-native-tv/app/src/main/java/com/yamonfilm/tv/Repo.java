@@ -495,7 +495,13 @@ public final class Repo {
         } catch (IOException ignored) { }
         List<Discovery.Viewing> actual = new ArrayList<>(); for (History h : history) actual.add(new Discovery.Viewing(h.mediaId, h.currentTime, h.duration, Logic.parseTime(h.updatedAt)));
         if (java.util.Objects.equals(profileId, profileId())) {
-            completed = Collections.unmodifiableSet(Completion.titles(titles, seen, actual, required));
+            Set<String> done = new HashSet<>(Completion.titles(titles, seen, actual, required));
+            // Dernier épisode terminé : la série est finie, même si d'anciens épisodes passés au générique n'ont pas été cochés.
+            for (History h : history) {
+                List<String> episodes = required.get(h.mediaId);
+                if (episodes != null && !episodes.isEmpty() && Logic.episodeFinished(h.currentTime, h.duration) && episodes.get(episodes.size() - 1).equals(Logic.epKey(h.seasonIdx, h.episodeIdx))) done.add(h.mediaId);
+            }
+            completed = Collections.unmodifiableSet(done);
             Map<String, Set<String>> flags = new HashMap<>(); for (Map.Entry<String, Map<String, Long>> entry : seen.entrySet()) flags.put(entry.getKey(), new HashSet<>(entry.getValue().keySet()));
             homeSeen = flags; Set<String> started = new HashSet<>(seen.keySet());
             for (History h : history) if (h.currentTime > 0) started.add(h.mediaId);

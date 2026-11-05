@@ -230,19 +230,22 @@ export default function Home() {
   const [completionData, setCompletionData] = useState<{ seen: SeenRow[]; history: CompletionProgress[] }>({ seen: [], history: [] });
   const [listEntries, setListEntries] = useState<ListEntry[]>([]);
   const [listRows, setListRows] = useState<MediaItem[]>([]);
-  const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
-  const inProgressIds = useMemo(() => inProgressTitles(completionData.seen, completionData.history, completedIds), [completionData, completedIds]);
+  const [seriesKeys, setSeriesKeys] = useState<Record<string, string[]>>({});
+  const completedIds = useMemo(() => completedTitles(mediaList, completionData.seen, completionData.history, seriesKeys), [mediaList, completionData, seriesKeys]);
+  const seenSeries = useMemo(() => [...new Set(completionData.seen.filter(row => /^s\d+_e\d+$/.test(row.ep_key)).map(row => String(row.media_id)))], [completionData.seen]);
+  // Until a series' episode list arrives its state is unknown: no badge rather than a wrong « Lecture en cours ».
+  const inProgressIds = useMemo(() => {
+    const started = inProgressTitles(completionData.seen, completionData.history, completedIds);
+    for (const id of seenSeries) if (!seriesKeys[id]) started.delete(id);
+    return started;
+  }, [completionData, completedIds, seenSeries, seriesKeys]);
   const resumableList = useMemo(() => continueWatchingList.filter(item => !completedIds.has(String(item.id))), [continueWatchingList, completedIds]);
   useEffect(() => {
+    if (!seenSeries.length) return;
     const controller = new AbortController();
-    const seenIds = new Set(completionData.seen.map(row => String(row.media_id)));
-    const series = mediaList.filter(item => item.type === 'series' && seenIds.has(String(item.id))).map(item => String(item.id));
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Completion data is independent of the main catalogue's loading state.
-    setCompletedIds(completedTitles(mediaList, completionData.seen, completionData.history, {}));
-    // Series keys are costly: wait for the whole catalogue instead of refetching at each page.
-    if (series.length && !catalogueLoading) void fetchSeriesEpisodeKeys(series, controller.signal, keys => { if (!controller.signal.aborted) setCompletedIds(completedTitles(mediaList, completionData.seen, completionData.history, keys)); }).catch(() => {});
+    void fetchSeriesEpisodeKeys(seenSeries, controller.signal, keys => { if (!controller.signal.aborted) setSeriesKeys(keys); }).catch(() => {});
     return () => controller.abort();
-  }, [mediaList, completionData, catalogueLoading]);
+  }, [seenSeries]);
   const [rankings, setRankings] = useState<HomeRankings | null>(rankingBootstrap);
   const [browseSort, setBrowseSort] = useState<'recent' | 'rating'>('recent');
   useEffect(() => {
