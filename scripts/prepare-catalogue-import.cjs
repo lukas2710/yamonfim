@@ -8,11 +8,14 @@ const output = path.resolve(__dirname, '../outputs/catalogue-direct');
 fs.mkdirSync(output, { recursive: true });
 const hosted = path.resolve(__dirname, '../public/catalogues');
 fs.mkdirSync(hosted, { recursive: true });
-const bridge = fs.readFileSync(path.join(__dirname, 'catalogue-direct-import.js'), 'utf8');
+const directImport = fs.readFileSync(path.join(__dirname, 'catalogue-direct-import.js'), 'utf8');
+// Titles confirmed unavailable on TMDB (absent, unreleased or without episodes) on 2026-11-05.
+const unavailable = require('./catalogue-unavailable.json');
 const identity = ts.transpileModule(fs.readFileSync(path.join(__dirname, '../lib/content-identity.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
 const presence = 'const catalogueIdentity = (() => { const exports = {};\n' + identity + '\nreturn exports; })();\n' + fs.readFileSync(path.join(__dirname, 'catalogue-presence.js'), 'utf8');
 for (const name of ['catalogue-films-moviez.html', 'catalogue-series-moviez.html']) {
   let html = fs.readFileSync(path.join(original, name), 'utf8');
+  const bridge = 'const catalogueUnavailable=' + JSON.stringify(unavailable[name.includes('films') ? 'movie' : 'series'].map(row => row.id)) + ';\n' + directImport;
   if (html.includes('const importSite =')) {
     let start = html.indexOf('// Included inline in the two standalone catalogue pages (file://).');
     if (start < 0) start = html.indexOf('// The catalogue and background worker share');
@@ -32,7 +35,7 @@ for (const name of ['catalogue-films-moviez.html', 'catalogue-series-moviez.html
   const presenceEnd = html.indexOf("$('#syncNow').onclick=syncDatabase;", presenceStart);
   if (presenceStart < 0 || presenceEnd < 0) throw Error('Suivi du catalogue introuvable');
   html = html.slice(0, presenceStart) + presence + '\n' + html.slice(presenceEnd);
-  if (!html.includes('id="downloadCatalogues"')) html = html.replace('</nav><div class="eyebrow">', '<a id="downloadCatalogues" class="link primary" href="catalogues-yamonfim.zip" download>Télécharger les catalogues ↓</a></nav><p class="note">Même catalogue sur tous tes PC · ajouts synchronisés depuis le site toutes les 15 secondes. Connecte-toi avec ton compte administrateur pour ajouter des titres.</p><div class="eyebrow">');
+  if (!html.includes('id="downloadCatalogues"')) html = html.replace('</nav><div class="eyebrow">', '<a id="downloadCatalogues" class="link primary" href="catalogues-yamonfim.zip" download>Télécharger les catalogues ↓</a></nav><p class="note">Même catalogue sur tous tes PC · ajouts synchronisés depuis le site toutes les minutes. Connecte-toi avec ton compte administrateur pour ajouter des titres.</p><div class="eyebrow">');
   html = html.replace('function rebuildDone(){done=new Set([...manualDone,...dbDone])}', 'function rebuildDone(){done=new Set(dbDone)}');
   if (!html.includes('cataloguePageItems=list.slice(p*40,p*40+40);updateBulkControls();')) {
     const pageItems = 'for(const x of list.slice(p*40,p*40+40)){';
@@ -45,8 +48,8 @@ for (const name of ['catalogue-films-moviez.html', 'catalogue-series-moviez.html
   html = html.replace('check.disabled=dbDone.has(id);', 'check.disabled=true;');
   html = html.replace("text.textContent=dbDone.has(id)?'Ajouté sur ton site ✓':isDone?'Ajouté manuellement ✓':'Marquer comme ajouté'", "text.textContent=dbDone.has(id)?'Ajouté sur ton site ✓':'Pas encore ajouté au site'");
   html = html.replace("text.textContent=dbDone.has(id)?'Ajoutée sur ton site ✓':isDone?'Ajoutée manuellement ✓':'Marquer comme ajoutée'", "text.textContent=dbDone.has(id)?'Ajoutée sur ton site ✓':'Pas encore ajoutée au site'");
-  html = html.replace('setInterval(()=>{if(!document.hidden)syncDatabase()},60000)', 'setInterval(()=>{if(!document.hidden)syncDatabase()},15000)');
-  html = html.replace(/toutes les minutes/g, 'toutes les 15 secondes');
+  html = html.replace('let syncing=false,lastSync=null;', 'let syncing=false,lastSync=null,cachedCatalogueRows=null,cachedCatalogueAt=0;');
+  html = html.replace('syncDatabase()},15000)', 'syncDatabase()},60000)').replace(/toutes les 15 secondes/g, 'toutes les minutes');
   html = html.replace('Garder une copie de ma progression', 'Anciennes annotations locales').replace('Exporte tes coches manuelles pour les conserver. Les coches automatiques sont récupérées depuis ton site à chaque connexion.', 'Les vrais ajouts au site sont synchronisés automatiquement entre tes PC. Cette sauvegarde conserve uniquement tes anciennes annotations locales.');
   html = html.replace(/Les (?:films|séries) sans identifiant TMDB ne peuvent pas être reconnus automatiquement\./g, 'Les anciens titres sont également reconnus grâce à leurs liens Moviez.').replace('Aucun ajout ni changement n’est envoyé à ta base.', 'Le bouton Ajouter au site est réservé au compte administrateur.');
   html = injectNews(html, name.includes('films') ? 'movie' : 'tv');

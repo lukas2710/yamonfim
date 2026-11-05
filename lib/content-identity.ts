@@ -1,7 +1,7 @@
 export interface ContentIdentity {
   id?: string | number; title?: string | null; type?: string | null;
   tmdb_id?: string | number | null; status?: string;
-  url?: string | null; embedUrl?: string | null;
+  url?: string | null; embedUrl?: string | null; release_year?: number | null;
 }
 
 export function normalizeContentTitle(value: string) {
@@ -35,17 +35,32 @@ export function contentTmdbId(row: ContentIdentity) {
   }
   return '';
 }
+// Without an identifier the year still separates « Dune (1984) » from « Dune (2021) ».
+export function contentYear(row: ContentIdentity) {
+  return row.title?.trim().match(/\(((?:18|19|20|21)\d{2})\)$/)?.[1] || (row.release_year ? String(row.release_year) : '');
+}
+// A saved film with neither a link nor an identifier is an empty card, not the film.
+export function isEmptyFilm(row: ContentIdentity) {
+  return row.type === 'movie' && row.url !== undefined && !row.url?.trim() && !row.embedUrl?.trim() && !contentTmdbId(row);
+}
+// `second` is the saved row. Keep this in step with public.yf_guard_content_duplicates.
 export function sameContent(first: ContentIdentity, second: ContentIdentity) {
   if (!first.type || first.type !== second.type) return false;
   const a = contentTmdbId(first), b = contentTmdbId(second);
   if (a && b) return a === b;
+  if (isEmptyFilm(second)) return false;
   const title = normalizeContentTitle(first.title || '');
-  return !!title && title === normalizeContentTitle(second.title || '');
+  if (!title || title !== normalizeContentTitle(second.title || '')) return false;
+  const firstYear = contentYear(first), secondYear = contentYear(second);
+  return !firstYear || !secondYear || firstYear === secondYear;
 }
 export function findContentDuplicate<T extends ContentIdentity>(candidate: ContentIdentity, rows: T[], excludeId?: string | number | null): T | null {
   return rows.find(row => (excludeId === null || excludeId === undefined || String(row.id) !== String(excludeId)) && sameContent(candidate, row)) || null;
 }
-export function duplicateErrorMessage(error: { code?: string; message?: string }, fallback: string) {
-  return error.code === '23505' || /YF_DUPLICATE/.test(error.message || '')
-    ? 'Ce film ou cette série est déjà disponible ou déjà enregistré. Aucun doublon n’a été ajouté.' : fallback;
+export function duplicateErrorMessage(error: { code?: string; message?: string; details?: string | null }, fallback: string) {
+  const guarded = /YF_DUPLICATE/.test(error.message || '');
+  if (error.code !== '23505' && !guarded) return fallback;
+  // The guard names the row that blocked the addition, so it can be checked.
+  const existing = guarded && error.details ? ` Fiche existante : « ${error.details} ».` : '';
+  return `Ce film ou cette série est déjà disponible ou déjà enregistré.${existing} Aucun doublon n’a été ajouté.`;
 }

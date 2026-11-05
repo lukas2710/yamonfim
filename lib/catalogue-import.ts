@@ -6,6 +6,8 @@ import { cataloguePlayer } from './catalogue-source';
 import { clearClientResources } from './resource-cache';
 
 export const CATALOGUE_ADMIN = 'lukas.leclerc312@gmail.com';
+// These titles can never be added: the catalogue pages hide them.
+export const UNAVAILABLE_ERRORS = ['Titre introuvable sur TMDB.', 'Aucune saison exploitable sur cette fiche.', 'Aucun épisode sur cette fiche. La série n’a pas été ajoutée.'];
 // update: complete a series already on the site with its new seasons and episodes.
 export type ImportRequest = { id: string; type: 'movie' | 'series'; job: string; update?: boolean };
 export function parseImportRequest(value: unknown): ImportRequest | null {
@@ -27,12 +29,21 @@ export async function importCatalogueItem(item: ImportRequest, progress: (messag
 
 type SeriesSeason = { seasonNumber: number; poster_path: string; episodes: { number: number; title: string; embedUrl: string; still_path: string; runtime: number }[] };
 const TMDB_KEY = 'af281c5089038e174e83c576ff765be9';
-async function tmdbMetadata(path: string) {
-  const response = await fetch(`https://api.themoviedb.org/3/${path}?api_key=${TMDB_KEY}&language=fr-FR`, { signal: AbortSignal.timeout(20000) });
-  if (response.status === 404) throw new Error('Titre introuvable sur TMDB.');
-  if (!response.ok) throw new Error('TMDB est temporairement indisponible. Réessaie.');
-  return response.json();
+// Bulk additions hit TMDB's rate limit and short outages: wait instead of failing the title.
+async function tmdbMetadata(path: string, missing = UNAVAILABLE_ERRORS[0]) {
+  for (let attempt = 1; ; attempt++) {
+    const response = await fetch(`https://api.themoviedb.org/3/${path}?api_key=${TMDB_KEY}&language=fr-FR`, { signal: AbortSignal.timeout(20000) }).catch(() => null);
+    if (response?.status === 404) throw new Error(missing);
+    if (response?.ok) return response.json();
+    if (attempt >= 3) throw new Error('TMDB est temporairement indisponible. Réessaie.');
+    await new Promise(resolve => setTimeout(resolve, attempt * 1500));
+  }
 }
+// TMDB's numbering can have gaps and it lists empty seasons: only real ones are read.
+function listedSeasons(details: { seasons?: { season_number: number; episode_count?: number }[] }) {
+  return (details.seasons || []).filter(season => Number.isSafeInteger(season.season_number) && season.season_number >= 1 && season.episode_count !== 0);
+}
+const seasonDetails = (id: string, season: number) => tmdbMetadata(`tv/${id}/season/${season}`, `Saison ${season} introuvable sur TMDB. Réessaie.`);
 function seasonEpisodes(id: string, season: number, info: { episodes: { episode_number: number; name?: string; still_path?: string; runtime?: number }[] }, poster: string, runtime: number) {
   return info.episodes.map(episode => ({ number: episode.episode_number, title: episode.name || `Épisode ${episode.episode_number}`, embedUrl: cataloguePlayer({ id, type: 'tv', season, episode: episode.episode_number }), still_path: episode.still_path ? `https://image.tmdb.org/t/p/w500${episode.still_path}` : poster, runtime: episode.runtime || runtime }));
 }
@@ -44,12 +55,11 @@ async function completeSeries(item: ImportRequest, existing: { id: string; seaso
   const poster = details.poster_path ? `https://image.tmdb.org/t/p/w500${details.poster_path}` : '';
   const seasons = (existing.seasons || []).map(season => ({ ...season, episodes: [...(season.episodes || [])] }));
   let added = 0;
-  for (const listed of (details.seasons || []) as { season_number: number; episode_count?: number }[]) {
-    if (!Number.isSafeInteger(listed.season_number) || listed.season_number < 1) continue;
+  for (const listed of listedSeasons(details)) {
     const current = seasons.find(season => season.seasonNumber === listed.season_number);
     if (current && current.episodes.length >= (listed.episode_count || 0)) continue;
     progress(`Récupération de la saison ${listed.season_number}…`);
-    const info = await tmdbMetadata(`tv/${item.id}/season/${listed.season_number}`);
+    const info = await seasonDetails(item.id, listed.season_number);
     if (!Array.isArray(info.episodes)) throw new Error(`Saison ${listed.season_number} incomplète. Réessaie.`);
     const episodes = seasonEpisodes(item.id, listed.season_number, info, poster, details.episode_run_time?.[0] || 45);
     if (!current) { if (episodes.length) { seasons.push({ seasonNumber: listed.season_number, poster_path: info.poster_path ? `https://image.tmdb.org/t/p/w500${info.poster_path}` : poster, episodes }); added += episodes.length; } continue; }
@@ -73,7 +83,8 @@ async function importCatalogueItemOnce(item: ImportRequest, progress: (message: 
   if (!session || session.user.email !== CATALOGUE_ADMIN) throw new Error('Connecte-toi avec ton compte administrateur sur le site, puis réessaie.');
   const identity = { tmdb_id: item.id, type: item.type, title: '' };
   if (item.update) {
-    const { data: existing } = await supabase.from('media').select('id,seasons').eq('type', 'series').eq('tmdb_id', item.id).limit(1).maybeSingle();
+    const { data: existing, error } = await supabase.from('media').select('id,seasons').eq('type', 'series').eq('tmdb_id', item.id).limit(1).maybeSingle();
+    if (error) throw new Error('Lecture de la série impossible. Réessaie.');
     if (existing) return completeSeries(item, existing as { id: string; seasons: SeriesSeason[] | null }, session.user.id, progress);
   }
   if (await checkContentDuplicate(supabase, identity, 'media')) return { already: true };
@@ -91,20 +102,20 @@ async function importCatalogueItemOnce(item: ImportRequest, progress: (message: 
     payload.url = payload.embedUrl = cataloguePlayer({ id: item.id, type: 'movie', season: 1, episode: 1 });
   } else {
     payload.seasons = [];
-    const count = details.number_of_seasons;
-    if (!Number.isSafeInteger(count) || count < 1 || count > 1000) throw new Error('Aucune saison exploitable sur cette fiche.');
-    let nextSeason = 1;
-    await Promise.all(Array.from({ length: Math.min(3, count) }, async () => {
-    while (nextSeason <= count) {
-      const season = nextSeason++;
-      progress(`Récupération de la saison ${season}/${details.number_of_seasons}…`);
-      const info = await metadata(`tv/${item.id}/season/${season}`);
+    const listed = listedSeasons(details);
+    if (!listed.length) throw new Error(UNAVAILABLE_ERRORS[1]);
+    let nextSeason = 0;
+    await Promise.all(Array.from({ length: Math.min(3, listed.length) }, async () => {
+    while (nextSeason < listed.length) {
+      const position = nextSeason++, season = listed[position].season_number;
+      progress(`Récupération de la saison ${position + 1}/${listed.length}…`);
+      const info = await seasonDetails(item.id, season);
       if (!Array.isArray(info.episodes)) throw new Error(`Saison ${season} incomplète. Réessaie.`);
-      payload.seasons!.push({ seasonNumber: season, poster_path: info.poster_path ? `https://image.tmdb.org/t/p/w500${info.poster_path}` : poster, episodes: info.episodes.map((episode: { episode_number: number; name?: string; still_path?: string; runtime?: number }) => ({ number: episode.episode_number, title: episode.name || `Épisode ${episode.episode_number}`, embedUrl: cataloguePlayer({ id: item.id, type: 'tv', season, episode: episode.episode_number }), still_path: episode.still_path ? `https://image.tmdb.org/t/p/w500${episode.still_path}` : poster, runtime: episode.runtime || details.episode_run_time?.[0] || 45 })) });
+      payload.seasons!.push({ seasonNumber: season, poster_path: info.poster_path ? `https://image.tmdb.org/t/p/w500${info.poster_path}` : poster, episodes: seasonEpisodes(item.id, season, info, poster, details.episode_run_time?.[0] || 45) });
     }
     }));
     payload.seasons.sort((a, b) => a.seasonNumber - b.seasonNumber);
-    if (!payload.seasons.some(season => season.episodes.length)) throw new Error('Aucun épisode sur cette fiche. La série n’a pas été ajoutée.');
+    if (!payload.seasons.some(season => season.episodes.length)) throw new Error(UNAVAILABLE_ERRORS[2]);
   }
   progress('Enregistrement sur ton site…');
   const { data: { session: current } } = await getPersistentSession();
