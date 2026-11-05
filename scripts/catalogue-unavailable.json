@@ -14,7 +14,9 @@
     {"id": 1630585, "title": "Kev & Gad : Tout est possible", "year": 2016, "why": "404"},
     {"id": 1683179, "title": "Nirvana the Band the Show the Adventures", "year": 2010, "why": "404"},
     {"id": 1686081, "title": "À l'origine de la vie : Les impacts d'astéroïdes", "year": 2026, "why": "404"},
-    {"id": 1764147, "title": "Podium - Version Longue", "year": null, "why": "404"}
+    {"id": 1764147, "title": "Podium - Version Longue", "year": null, "why": "404"},
+    {"id": 156274, "title": "(sans titre)", "year": 2004, "why": "sans-titre"},
+    {"id": 154245, "title": "(sans titre)", "year": 2001, "why": "sans-titre"}
   ],
   "series": [
     {"id": 6586, "title": "The Last Word", "year": null, "why": "sans-episode"},

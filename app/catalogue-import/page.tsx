@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { getPersistentSession } from '@/lib/auth-session';
-import { CATALOGUE_ADMIN, importCatalogueItem, parseImportRequest, UNAVAILABLE_ERRORS } from '@/lib/catalogue-import';
+import { CATALOGUE_ADMIN, importCatalogueItem, isPermanentImportError, parseImportRequest } from '@/lib/catalogue-import';
 
 export default function CatalogueImportPage() {
   const [allowed, setAllowed] = useState(false);
@@ -60,7 +60,7 @@ export default function CatalogueImportPage() {
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : 'Ajout impossible. Réessaie.';
         setError(message);
-        reply({ action: 'catalogue:result', ...item, ok: false, error: message, permanent: UNAVAILABLE_ERRORS.includes(message) });
+        reply({ action: 'catalogue:result', ...item, ok: false, error: message, permanent: isPermanentImportError(message) });
       } finally { busy.current = false; }
     };
     window.addEventListener('message', receive);

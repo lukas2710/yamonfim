@@ -45,6 +45,11 @@ test('request rejects unknown types and malformed IDs', () => {
   assert.equal(api.parseImportRequest({ ...request, id: '../x' }), null);
   assert.equal(api.parseImportRequest(request).id, '123');
 });
+test('only a real refusal removes a title for good', () => {
+  const api = setup();
+  for (const message of ['Titre introuvable sur TMDB.', 'La fiche ne contient pas de titre valide.', 'Ce film ou cette série est déjà disponible ou déjà enregistré. Aucun doublon n’a été ajouté.']) assert.equal(api.isPermanentImportError(message), true);
+  for (const message of ['TMDB est temporairement indisponible. Réessaie.', 'Enregistrement impossible : timeout']) assert.equal(api.isPermanentImportError(message), false);
+});
 test('non-admin never fetches or writes', async () => {
   const api = setup({ admin: false });
   await assert.rejects(api.importCatalogueItem(request, () => {}));
@@ -151,10 +156,107 @@ test('a worker that stops answering does not block the next titles', () => {
   vm.runInContext(fs.readFileSync('scripts/catalogue-direct-import.js', 'utf8') + '\ncatalogueStatusReady=true; queueImportItems([{source_id:1,kind:"movie"},{source_id:2,kind:"movie"}]); globalThis.state=id=>importStates.get(id);', context);
   listeners.message({ source: popup, origin: 'https://yamonfi.netlify.app', data: { action: 'catalogue:ready', channel: 'test-id-1' } });
   assert.equal(messages.length, 1);
-  timers.at(-1)();
-  assert.match(context.state('1').error, /ne répond plus/);
-  assert.equal(messages.length, 2);
-  assert.equal(messages[1].id, '2');
+  for (let tries = 2; tries <= 3; tries++) {
+    timers.at(-1)(); timers.at(-1)();
+    assert.equal(messages.length, tries);
+    assert.equal(messages.at(-1).id, '1');
+  }
+  timers.at(-1)(); timers.at(-1)();
+  assert.equal(context.state('1'), undefined);
+  assert.equal(messages.length, 4);
+  assert.equal(messages[3].id, '2');
+});
+
+// A page with its hidden worker: answers are given by hand.
+function worker({ storage = new Map(), path = '/catalogues/catalogue-films-moviez.html' } = {}) {
+  const messages = [], listeners = {}, timers = [], nodes = {};
+  const popup = { postMessage: message => messages.push(message) };
+  const node = () => ({ append() {}, setAttribute() {}, replaceChildren() {} });
+  let sequence = 0;
+  const context = { Map, Set, location: { origin: 'https://yamonfi.netlify.app', pathname: path }, crypto: { randomUUID: () => `test-id-${++sequence}` },
+    localStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) },
+    document: { body: node(), createElement: type => type === 'iframe' ? { contentWindow: popup } : node(), querySelector: node },
+    window: { addEventListener: (type, fn) => { listeners[type] = fn; } }, setTimeout: run => { timers.push(run); return timers.length; }, clearTimeout() {}, setInterval() {},
+    dbDone: new Set(), render() {}, rebuildDone() {} };
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync('scripts/catalogue-direct-import.js', 'utf8') + `
+    catalogueStatusReady = true;
+    Object.assign(globalThis, { queueImportItems, importStates, importQueue, status: () => directStatus.textContent, hidden: () => [...unavailableImports.keys()], reset: () => resetUnavailableButton.onclick(), bulk: () => bulkStatus.textContent });`, context);
+  const answer = result => listeners.message({ source: popup, origin: 'https://yamonfi.netlify.app', data: { ...messages.at(-1), action: 'catalogue:result', ...result } });
+  listeners.message({ source: popup, origin: 'https://yamonfi.netlify.app', data: { action: 'catalogue:ready', channel: 'test-id-1' } });
+  const add = (...ids) => context.queueImportItems(ids.map(source_id => ({ source_id, kind: 'movie' })));
+  const next = () => { timers.at(-1)(); };
+  return { ...context, context, messages, answer, add, next, storage };
+}
+test('a title the site refuses disappears at once and stays out after a reload', () => {
+  const page = worker();
+  page.add(1, 2);
+  page.answer({ ok: false, permanent: true, error: 'Ce film ou cette série est déjà disponible ou déjà enregistré.' });
+  assert.deepEqual([...page.context.hidden()], ['1']);
+  assert.match(page.context.status(), /retiré de la liste/);
+  assert.match(page.context.bulk(), /1 retiré\(s\)/);
+  page.next();
+  assert.equal(page.messages.at(-1).id, '2');
+  assert.deepEqual([...worker({ storage: page.storage }).context.hidden()], ['1']);
+});
+test('a title the site already holds leaves the list instead of coming back', () => {
+  const page = worker();
+  page.add(1);
+  page.answer({ ok: true, already: true });
+  assert.deepEqual([...page.context.hidden()], ['1']);
+  assert.equal(page.context.dbDone.has('1'), true);
+  assert.match(page.context.status(), /Déjà présent/);
+});
+test('a passing failure is tried three times before the title leaves the list', () => {
+  const page = worker();
+  page.add(1);
+  for (let tries = 1; tries <= 3; tries++) {
+    assert.equal(page.messages.length, tries);
+    assert.deepEqual([...page.context.hidden()], []);
+    page.answer({ ok: false, error: 'Enregistrement impossible : timeout' });
+    page.next();
+  }
+  assert.deepEqual([...page.context.hidden()], ['1']);
+  assert.equal(page.context.importStates.has('1'), false);
+  page.context.reset();
+  assert.deepEqual([...page.context.hidden()], []);
+});
+test('a title that succeeds on a retry stays on the site', () => {
+  const page = worker();
+  page.add(1);
+  page.answer({ ok: false, error: 'TMDB est temporairement indisponible. Réessaie.' });
+  page.next();
+  page.answer({ ok: true });
+  assert.equal(page.context.dbDone.has('1'), true);
+  assert.deepEqual([...page.context.hidden()], []);
+});
+test('a login problem never removes a title', () => {
+  const page = worker();
+  page.add(1);
+  page.answer({ ok: false, error: 'Connecte-toi avec ton compte administrateur sur le site, puis réessaie.' });
+  assert.deepEqual([...page.context.hidden()], []);
+  assert.match(page.context.importStates.get('1').error, /Connecte-toi/);
+  assert.equal(page.context.importQueue.length, 0);
+});
+test('when every title fails the queue stops instead of emptying the list', () => {
+  const page = worker();
+  page.add(1, 2, 3, 4, 5);
+  for (let failures = 0; failures < 9; failures++) {
+    page.answer({ ok: false, error: 'Enregistrement impossible : réseau' });
+    page.next();
+  }
+  assert.deepEqual([...page.context.hidden()], ['1', '2']);
+  assert.equal(page.context.importQueue.length, 0);
+  assert.equal(page.context.importStates.has('4'), false);
+  assert.match(page.context.importStates.get('3').error, /réseau/);
+  assert.match(page.context.status(), /Ajouts arrêtés/);
+});
+test('films and series keep separate lists, since their numbers overlap', () => {
+  const storage = new Map();
+  const films = worker({ storage });
+  films.add(1);
+  films.answer({ ok: false, permanent: true, error: 'Titre introuvable sur TMDB.' });
+  assert.deepEqual([...worker({ storage, path: '/catalogues/catalogue-series-moviez.html' }).context.hidden()], []);
 });
 
 test('bulk import skips existing and queued titles, and stopping preserves the active job', () => {
@@ -176,7 +278,7 @@ test('bulk import skips existing and queued titles, and stopping preserves the a
   `, context);
 });
 
-test('only titles confirmed missing from TMDB stay disabled after reload', () => {
+test('a removed title stays disabled after reload until the list is reset', () => {
   const storage = new Map();
   const node = () => ({ append() {}, setAttribute() {} });
   function load() {
@@ -219,10 +321,10 @@ test('titles confirmed unavailable at generation stay hidden, even after a reset
     updateBulkControls();
     if (canQueueImport(item) || unavailableImports.has('456') || !resetUnavailableButton.disabled) throw Error('Reset must keep the known list only');
   `, context);
-  assert.equal(storage.get('moviez-unavailable-films-v1'), '[]');
+  assert.equal(storage.get('moviez-unavailable-films-v2'), '[]');
 });
 
-test('temporary add failures are not persisted as unavailable', () => {
+test('the older list, which also held passing failures, is left aside', () => {
   const storage = new Map([[ 'moviez-unavailable-films-v1', JSON.stringify([['123', 'Connexion administrateur indisponible']]) ]]);
   const node = () => ({ append() {}, setAttribute() {} });
   const context = { location: { origin: 'null', protocol: 'file:' }, crypto: require('node:crypto').webcrypto,

@@ -28,6 +28,35 @@ function hideCatalogueItem(item, selectedFilter) {
   if (selectedFilter !== 'news' || !dbDone.has(id)) return false;
   return window.yfNews?.get(id)?.update !== true;
 }
+async function readMediaRows(params) {
+  const endpoint = new URL(databaseUrl + '/rest/v1/media');
+  endpoint.search = new URLSearchParams({ select: 'id,title,type,tmdb_id,url,embedUrl,genres', type: 'eq.' + catalogueType, ...params });
+  const response = await fetch(endpoint, { headers: { apikey: publicKey }, cache: 'no-store', signal: AbortSignal.timeout(15000) });
+  const rows = response.ok ? await response.json() : null;
+  if (!Array.isArray(rows)) throw Error('Lecture du catalogue impossible');
+  return rows;
+}
+// Everything added since the prepared list, however many titles a bulk addition made.
+async function readNewerRows(after) {
+  const rows = [];
+  for (let last = after; ;) {
+    const page = await readMediaRows({ id: 'gt.' + last, order: 'id.asc', limit: '1000' });
+    rows.push(...page);
+    if (page.length < 1000) return rows;
+    last = page[page.length - 1].id;
+  }
+}
+// The prepared list has no links and is rebuilt once a day: the base tells which
+// film its cards without a number really are.
+async function identifyPreparedRows(rows) {
+  const ids = rows.filter(row => !catalogueIdentity.contentTmdbId(row)).map(row => row.id), read = new Map();
+  try {
+    for (let start = 0; start < ids.length; start += 100) {
+      for (const row of await readMediaRows({ id: 'in.(' + ids.slice(start, start + 100).join(',') + ')' })) read.set(String(row.id), row);
+    }
+  } catch { /* These cards are then recognised by their title. */ }
+  return rows.map(row => read.get(String(row.id)) || row);
+}
 async function syncDatabase() {
   if (syncing) return;
   syncing = true;
@@ -36,27 +65,21 @@ async function syncDatabase() {
   $('#syncStatus').textContent = 'Vérification des titres déjà présents sur ton site…';
   let catalogueRows = cachedCatalogueRows;
   try {
-    if (!catalogueRows || Date.now() - cachedCatalogueAt >= 5 * 60 * 1000) {
-      const response = await fetch('/api/catalogue', { cache: 'force-cache', signal: AbortSignal.timeout(20000) });
+    if (!catalogueRows || Date.now() - cachedCatalogueAt >= 30 * 60 * 1000) {
+      const response = await fetch('/api/catalogue', { signal: AbortSignal.timeout(45000) });
       if (!response.ok) throw Error('Catalogue indisponible');
       const rows = await response.json();
       if (!Array.isArray(rows)) throw Error('Réponse catalogue invalide');
-      cachedCatalogueRows = rows;
+      catalogueRows = await identifyPreparedRows(rows.filter(row => row.type === catalogueType));
+      cachedCatalogueRows = catalogueRows;
       cachedCatalogueAt = Date.now();
-      catalogueRows = rows;
     }
-    const endpoint = new URL(databaseUrl + '/rest/v1/media');
-    endpoint.search = new URLSearchParams({ select: 'id,title,type,tmdb_id,url,embedUrl,genres', type: 'eq.' + catalogueType, order: 'created_at.desc,id.desc', limit: '250' });
     // A slow read of the latest rows must not lock the add buttons: the prepared
     // list is enough, and the database still refuses real duplicates.
     let latestRows = [];
-    try {
-      const latestResponse = await fetch(endpoint, { headers: { apikey: publicKey }, cache: 'no-store', signal: AbortSignal.timeout(15000) });
-      const rows = latestResponse.ok ? await latestResponse.json() : null;
-      if (Array.isArray(rows)) latestRows = rows;
-    } catch { /* Read again at the next refresh. */ }
-    const latestIds = new Set(latestRows.map(row => String(row.id)));
-    catalogueRows = [...latestRows, ...catalogueRows.filter(row => row.type === catalogueType && !latestIds.has(String(row.id)))];
+    try { latestRows = await readNewerRows(catalogueRows.reduce((top, row) => Math.max(top, Number(row.id) || 0), 0)); }
+    catch { /* Read again at the next refresh. */ }
+    catalogueRows = [...latestRows, ...catalogueRows];
     const matched = reconcileCatalogueRows(catalogueRows);
     const fresh = new Set(matched.keys());
     // An import completed after this read began must not be erased by its snapshot.

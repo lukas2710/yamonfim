@@ -7,7 +7,8 @@ import { clearClientResources } from './resource-cache';
 
 export const CATALOGUE_ADMIN = 'lukas.leclerc312@gmail.com';
 // These titles can never be added: the catalogue pages hide them.
-export const UNAVAILABLE_ERRORS = ['Titre introuvable sur TMDB.', 'Aucune saison exploitable sur cette fiche.', 'Aucun épisode sur cette fiche. La série n’a pas été ajoutée.'];
+export const UNAVAILABLE_ERRORS = ['Titre introuvable sur TMDB.', 'Aucune saison exploitable sur cette fiche.', 'Aucun épisode sur cette fiche. La série n’a pas été ajoutée.', 'La fiche ne contient pas de titre valide.'];
+export const isPermanentImportError = (message: string) => UNAVAILABLE_ERRORS.includes(message) || message.startsWith('Ce film ou cette série est déjà');
 // update: complete a series already on the site with its new seasons and episodes.
 export type ImportRequest = { id: string; type: 'movie' | 'series'; job: string; update?: boolean };
 export function parseImportRequest(value: unknown): ImportRequest | null {
@@ -93,7 +94,7 @@ async function importCatalogueItemOnce(item: ImportRequest, progress: (message: 
   const endpoint = item.type === 'movie' ? 'movie' : 'tv';
   const details = await metadata(`${endpoint}/${item.id}`);
   const name = details.title || details.name;
-  if (typeof name !== 'string' || !name.trim()) throw new Error('La fiche ne contient pas de titre valide.');
+  if (typeof name !== 'string' || !name.trim()) throw new Error(UNAVAILABLE_ERRORS[3]);
   const date = details.release_date || details.first_air_date || '';
   const title = name + (date ? ` (${date.slice(0, 4)})` : '');
   const poster = details.poster_path ? `https://image.tmdb.org/t/p/w500${details.poster_path}` : '';

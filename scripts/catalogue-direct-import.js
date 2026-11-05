@@ -1,14 +1,12 @@
 // The catalogue and background worker share the site's authenticated origin.
 const importSite = location.protocol === 'file:' ? 'https://yamonfi.netlify.app' : location.origin;
-const importStates = new Map(), importQueue = [];
-const unavailableKey = 'moviez-unavailable-films-v1';
-const unavailableErrors = new Set(['Titre introuvable sur TMDB.', 'Aucune saison exploitable sur cette fiche.', 'Aucun épisode sur cette fiche. La série n’a pas été ajoutée.']);
+const importStates = new Map(), importQueue = [], importAttempts = new Map();
+// Film and series numbers overlap on TMDB: each page keeps its own list.
+const unavailableKey = 'moviez-unavailable-' + (/series/.test(location.pathname) ? 'series' : 'films') + '-v2';
 let unavailableImports = new Map();
 try {
   const saved = JSON.parse(localStorage.getItem(unavailableKey) || '[]');
-  // Only a confirmed TMDB answer is permanent. Older versions stored temporary
-  // auth/network/database failures here too, which incorrectly blocked retry.
-  if (Array.isArray(saved)) unavailableImports = new Map(saved.filter(row => Array.isArray(row) && /^\d+$/.test(row[0]) && unavailableErrors.has(row[1])));
+  if (Array.isArray(saved)) unavailableImports = new Map(saved.filter(row => Array.isArray(row) && /^\d+$/.test(row[0]) && typeof row[1] === 'string'));
 } catch { /* Storage may be unavailable. */ }
 // Confirmed on TMDB when the pages were generated: hidden on every PC.
 const knownUnavailable = new Set(typeof catalogueUnavailable === 'undefined' ? [] : catalogueUnavailable.map(String));
@@ -18,7 +16,34 @@ function saveUnavailableImports() {
   catch { directStatus.textContent = 'Les films non disponibles sont ignorés pour cette session. Leur mémorisation est impossible dans ce navigateur.'; }
 }
 
-let importFrame = null, importChannel = '', importPending = null, importReady = false, catalogueStatusReady = false, importTimer = 0;
+let importFrame = null, importChannel = '', importPending = null, importReady = false, catalogueStatusReady = false, importTimer = 0, importFailures = 0;
+const importRetryDelay = 3000;
+// A login problem or a busy worker says nothing about the title itself.
+const sessionError = /^(Connecte-toi|La connexion administrateur|Un ajout est déjà)/;
+// What the site refuses leaves the list at once. A passing failure gets three
+// tries, unless several titles in a row fail: then the site or TMDB is down.
+function importFailed(job, reason, permanent) {
+  const id = job.id, tries = (importAttempts.get(id) || 0) + 1;
+  if (job.update || sessionError.test(reason)) {
+    importStates.set(id, { error: reason }); directStatus.textContent = reason + ' Tu peux réessayer.';
+    return;
+  }
+  if (!permanent && tries < 3) {
+    importAttempts.set(id, tries); importQueue.unshift({ ...job, job: crypto.randomUUID() });
+    directStatus.textContent = reason + ' Nouvel essai…';
+    return;
+  }
+  importAttempts.delete(id);
+  if (!permanent && ++importFailures >= 3) {
+    importFailures = 0; importStates.set(id, { error: reason });
+    for (const item of importQueue) importStates.delete(item.id);
+    bulkTotal -= importQueue.length; importQueue.length = 0;
+    directStatus.textContent = 'Ajouts arrêtés : le site ou TMDB ne répond plus. Relance-les dans un moment.';
+    return;
+  }
+  unavailableImports.set(id, reason); importStates.delete(id); bulkRemoved++; saveUnavailableImports();
+  directStatus.textContent = reason + ' Titre retiré de la liste.';
+}
 function sendImport() {
   if (!importReady || !importFrame?.contentWindow || importPending) return;
   importPending = importQueue.shift() || null;
@@ -32,9 +57,9 @@ function watchImport() {
   if (!importPending) return;
   importTimer = setTimeout(() => {
     if (!importPending) return;
-    importStates.set(importPending.id, { error: 'Le site ne répond plus pour ce titre.' });
-    directStatus.textContent = 'Le site ne répond plus pour ce titre. Tu peux réessayer.';
-    importPending = null; updateBulkStatus(); render(); sendImport();
+    const job = importPending; importPending = null;
+    importFailed(job, 'Le site ne répond plus pour ce titre.', false);
+    updateBulkStatus(); render(); setTimeout(sendImport, importRetryDelay);
   }, 120000);
 }
 function importButton(item) {
@@ -65,13 +90,17 @@ window.addEventListener('message', event => {
   }
   if (!importPending || message.job !== importPending.job || message.id !== importPending.id || message.type !== importPending.type) return;
   if (message.action === 'catalogue:result') {
-    importStates.set(message.id, message.ok === true ? { ok: true, confirmedAt: Date.now() } : { error: String(message.error || 'Ajout impossible') });
-    if (message.ok === true) { dbDone.add(message.id); unavailableImports.delete(message.id); rebuildDone(); }
-    else if (message.permanent === true && unavailableErrors.has(message.error)) { unavailableImports.set(message.id, message.error); importStates.delete(message.id); }
-    else unavailableImports.delete(message.id);
-    saveUnavailableImports();
-    directStatus.textContent = message.ok === true ? (message.already ? 'Déjà présent sur ton site ✓' : 'Ajouté sur ton site ✓') : String(message.error || 'Ajout impossible') + (message.permanent ? ' Titre retiré de la liste.' : ' Tu peux réessayer.');
-    importPending = null; watchImport(); updateBulkStatus(); render(); sendImport();
+    const job = importPending; importPending = null;
+    if (message.ok === true) {
+      importStates.set(job.id, { ok: true, confirmedAt: Date.now() }); importAttempts.delete(job.id); importFailures = 0;
+      dbDone.add(job.id); unavailableImports.delete(job.id);
+      // The site holds this title although the list did not show it: never offer it again.
+      if (message.already && !job.update) unavailableImports.set(job.id, 'Déjà présent sur ton site.');
+      saveUnavailableImports(); rebuildDone();
+      directStatus.textContent = !message.already ? 'Ajouté sur ton site ✓' : job.update ? 'Déjà à jour sur ton site ✓' : 'Déjà présent sur ton site ✓ Titre retiré de la liste.';
+    } else importFailed(job, String(message.error || 'Ajout impossible'), message.permanent === true);
+    watchImport(); updateBulkStatus(); render();
+    if (message.ok === true) sendImport(); else setTimeout(sendImport, importRetryDelay);
   }
 });
 const directStatus = document.createElement('p');
@@ -95,21 +124,21 @@ addPageButton.disabled = true;
 const stopImportsButton = document.createElement('button');
 stopImportsButton.textContent = 'Arrêter les ajouts en attente';
 const resetUnavailableButton = document.createElement('button');
-resetUnavailableButton.textContent = 'Réinitialiser les films non disponibles';
+resetUnavailableButton.textContent = 'Remettre les titres retirés';
 resetUnavailableButton.onclick = () => {
   for (const id of [...unavailableImports.keys()]) if (!knownUnavailable.has(id)) unavailableImports.delete(id);
   saveUnavailableImports(); render();
 };
 const bulkStatus = document.createElement('p');
 bulkStatus.className = 'note'; bulkStatus.setAttribute('role', 'status');
-let bulkTotal = 0, bulkFinished = 0, bulkErrors = 0;
+let bulkTotal = 0, bulkFinished = 0, bulkErrors = 0, bulkRemoved = 0;
 function canQueueImport(item) {
   const id = String(item.source_id), state = importStates.get(id);
   return !dbDone.has(id) && !state?.busy && !state?.ok && !unavailableImports.has(id);
 }
 function queueImportItems(items) {
   if (!catalogueStatusReady) return;
-  if (!importPending && !importQueue.length) { bulkTotal = 0; bulkFinished = 0; bulkErrors = 0; }
+  if (!importPending && !importQueue.length) { bulkTotal = 0; bulkFinished = 0; bulkErrors = 0; bulkRemoved = 0; }
   for (const item of items) {
     if (!canQueueImport(item)) continue;
     const id = String(item.source_id);
@@ -121,7 +150,7 @@ function queueImportItems(items) {
 function updateBulkStatus() {
   bulkFinished = bulkTotal - importQueue.length - (importPending ? 1 : 0);
   bulkErrors = [...importStates.values()].filter(state => state.error).length;
-  bulkStatus.textContent = bulkTotal ? bulkFinished + ' / ' + bulkTotal + ' titres traités · ' + importQueue.length + ' en attente' + (bulkErrors ? ' · ' + bulkErrors + ' échec(s), à relancer avec « Réessayer l’ajout »' : '') + '. Garde cet onglet ouvert jusqu’à la fin.' : '';
+  bulkStatus.textContent = bulkTotal ? bulkFinished + ' / ' + bulkTotal + ' titres traités · ' + importQueue.length + ' en attente' + (bulkRemoved ? ' · ' + bulkRemoved + ' retiré(s) de la liste' : '') + (bulkErrors ? ' · ' + bulkErrors + ' à relancer avec « Réessayer l’ajout »' : '') + '. Garde cet onglet ouvert jusqu’à la fin.' : '';
 }
 function updateBulkControls() {
   addPageButton.disabled = !catalogueStatusReady || !cataloguePageItems.some(canQueueImport);

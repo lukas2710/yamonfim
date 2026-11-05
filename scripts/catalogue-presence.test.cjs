@@ -60,15 +60,46 @@ function syncFixture(fetch, overrides = {}) {
   return api;
 }
 const preparedRows = { ok: true, json: async () => [{ id: 10, title: 'Un', type: 'movie', tmdb_id: '1' }] };
-test('the prepared catalogue is read once, then only the latest additions', async () => {
+test('the prepared catalogue is read once, then only what is newer', async () => {
   const asked = [], latest = [];
-  const api = syncFixture(async url => { const prepared = url === '/api/catalogue'; asked.push(prepared ? 'prepared' : 'latest'); return prepared ? preparedRows : { ok: true, json: async () => latest }; });
+  const api = syncFixture(async (url, options) => {
+    if (url === '/api/catalogue') { asked.push('prepared'); assert.notEqual(options.cache, 'force-cache'); return preparedRows; }
+    asked.push(new URL(url).searchParams.get('id'));
+    return { ok: true, json: async () => latest };
+  });
   await api.sync();
   assert.deepEqual([...api.seen()], ['1']);
   latest.push({ id: 11, title: 'Deux', type: 'movie', tmdb_id: '2', url: 'x', embedUrl: 'x' });
   await api.sync();
-  assert.deepEqual(asked, ['prepared', 'latest', 'latest']);
+  assert.deepEqual(asked, ['prepared', 'gt.10', 'gt.10']);
   assert.deepEqual([...api.seen()].sort(), ['1', '2']);
+});
+test('a long bulk addition never falls out of what the page reads', async () => {
+  const rows = Array.from({ length: 1500 }, (_, index) => ({ id: 11 + index, title: 'Film ' + index, type: 'movie', tmdb_id: String(index ? 5000 + index : 2) }));
+  const pages = [];
+  const api = syncFixture(async url => {
+    if (url === '/api/catalogue') return preparedRows;
+    const params = new URL(url).searchParams, after = Number(params.get('id').slice(3));
+    pages.push(after);
+    return { ok: true, json: async () => rows.filter(row => row.id > after).slice(0, Number(params.get('limit'))) };
+  });
+  await api.sync();
+  assert.deepEqual(pages, [10, 1010]);
+  assert.deepEqual([...api.seen()].sort(), ['1', '2']);
+});
+test('a card of the prepared list without a number is identified by the base', async () => {
+  const asked = [];
+  const api = syncFixture(async url => {
+    if (url === '/api/catalogue') return { ok: true, json: async () => [{ id: 10, title: 'Sans rapport', type: 'movie', tmdb_id: null }, { id: 12, title: 'Un', type: 'movie', tmdb_id: null }] };
+    const filter = new URL(url).searchParams.get('id');
+    asked.push(filter);
+    return { ok: true, json: async () => filter.startsWith('in.') ? [{ id: 10, title: 'Sans rapport', type: 'movie', tmdb_id: '2', url: 'x', embedUrl: 'x' }, { id: 12, title: 'Un', type: 'movie', tmdb_id: '9999', url: 'x', embedUrl: 'x' }] : [] };
+  });
+  await api.sync();
+  assert.deepEqual(asked, ['in.(10,12)', 'gt.12']);
+  assert.deepEqual([...api.seen()], ['2']);
+  await api.sync();
+  assert.deepEqual(asked, ['in.(10,12)', 'gt.12', 'gt.12']);
 });
 test('a failed read of the latest rows never locks the add buttons', async () => {
   for (const latest of [async () => { throw new Error('timeout'); }, async () => ({ ok: false, json: async () => ({}) })]) {
