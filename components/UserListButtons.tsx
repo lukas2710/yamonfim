@@ -40,14 +40,14 @@ export default function UserListButtons({ mediaId }: { mediaId: string }) {
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Réessaie.'); }
     finally { setBusy(false); }
   };
-  return <div className="mx-auto mt-4 flex max-w-7xl flex-wrap items-center gap-2 px-4 sm:px-8">
+  return <>
     {LISTS.map(list => {
       const on = active.has(list);
-      return <button key={list} type="button" disabled={busy} aria-pressed={on} onClick={() => void toggle(list)} className={`inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ring-1 transition disabled:opacity-60 ${on ? 'bg-red-600 text-white ring-red-500' : 'bg-white/5 text-zinc-200 ring-white/10 hover:bg-white/10'}`}>
+      return <button key={list} type="button" disabled={busy} aria-pressed={on} onClick={() => void toggle(list)} className={`watch-secondary-button disabled:opacity-60 ${on ? '!border-red-500 !bg-red-600 !text-white' : ''}`}>
         <span aria-hidden="true">{list === 'favorite' ? (on ? '♥' : '♡') : (on ? '✓' : '+')}</span>
         {on ? LIST_LABELS[list].added : LIST_LABELS[list].add}
       </button>;
     })}
-    {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
-  </div>;
+    {error && <p role="alert" className="w-full text-sm text-red-300">{error}</p>}
+  </>;
 }

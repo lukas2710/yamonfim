@@ -47,7 +47,7 @@ public final class DetailScreen extends Screen {
     private ImageView backdrop;
     private TextView kicker, title, progressText, description, episodeLabel;
     private LinearLayout meta;
-    private LinearLayout buttons;
+    private LinearLayout buttons, listButtons;
     private TextView play, restart, watchedButton, favorite, later;
     private boolean favoriteOn, laterOn;
     private Shelf seasons, episodes;
@@ -117,9 +117,14 @@ public final class DetailScreen extends Screen {
         later = Ui.button(main, "Plus tard", R.drawable.ic_list, Ui.STYLE_NORMAL);
         later.setOnClickListener(v -> toggleList("later"));
         later.setVisibility(View.GONE);
-        buttons.addView(favorite, Ui.lp(Ui.WRAP, Ui.WRAP, dp(14), 0, 0, 0));
-        buttons.addView(later, Ui.lp(Ui.WRAP, Ui.WRAP, dp(14), 0, 0, 0));
         c.addView(buttons, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(22), 0, 0));
+        // Sur leur propre ligne : avec Regarder, Recommencer et « Marquer la saison », ils sortiraient de l'écran.
+        listButtons = Ui.row(main);
+        Ui.noClip(listButtons);
+        listButtons.setPadding(0, dp(6), 0, dp(6));
+        listButtons.addView(favorite);
+        listButtons.addView(later, Ui.lp(Ui.WRAP, Ui.WRAP, dp(14), 0, 0, 0));
+        c.addView(listButtons, Ui.lp(Ui.WRAP, Ui.WRAP, 0, dp(6), 0, 0));
         loadingRow = Ui.row(main);
         loadingRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
         loadingRow.setBackground(Ui.stroked(0x99141E38, 0x1FFFFFFF, 1, 18));
@@ -476,6 +481,7 @@ public final class DetailScreen extends Screen {
         View f = main.getCurrentFocus();
         List<View> sections = new ArrayList<>();
         sections.add(buttons);
+        if (favorite.getVisibility() == View.VISIBLE) sections.add(listButtons);
         if (seasons.getVisibility() == View.VISIBLE) sections.add(seasons);
         if (episodes.getVisibility() == View.VISIBLE && episodes.count() > 0) sections.add(episodes);
         int current = -1;
@@ -486,13 +492,15 @@ public final class DetailScreen extends Screen {
             if (target < 0 || target >= sections.size()) return true;
             View s = sections.get(target);
             if (s == buttons) { play.requestFocus(); scroll.smoothScrollTo(0, 0); }
+            else if (s == listButtons) favorite.requestFocus();
             else ((Shelf) s).focusLast();
             return true;
         }
         View section = sections.get(current);
-        if (section == buttons) {
+        if (section == buttons || section == listButtons) {
+            LinearLayout row = (LinearLayout) section;
             List<View> visible = new ArrayList<>();
-            for (int i = 0; i < buttons.getChildCount(); i++) if (buttons.getChildAt(i).getVisibility() == View.VISIBLE) visible.add(buttons.getChildAt(i));
+            for (int i = 0; i < row.getChildCount(); i++) if (row.getChildAt(i).getVisibility() == View.VISIBLE) visible.add(row.getChildAt(i));
             int index = visible.indexOf(f);
             int next = index + (code == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1);
             if (index >= 0 && next >= 0 && next < visible.size()) visible.get(next).requestFocus();

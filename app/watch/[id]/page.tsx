@@ -928,8 +928,7 @@ export default function WatchPage() {
         watched={isSeries ? seriesDone : movieSeen} inProgress={isSeries ? seenEpisodes > 0 : hasMovieHistory} playLabel={playLabel}
         episodeLabel={`${seasonLabel} ${currentSeason?.seasonNumber || 1} · Épisode ${currentEpisode?.number || 1}${currentEpisode?.title ? ' — ' + currentEpisode.title : ''}`}
         disabled={isStarting} showRestart={showRestart} onPlay={() => void startPlaying(selectedSeasonIdx, selectedEpisodeIdx)}
-        onRestart={restartFromBeginning} onToggleWatched={() => void toggleMovieWatched()} />
-      <UserListButtons mediaId={String(media.id)} />
+        onRestart={restartFromBeginning} onToggleWatched={() => void toggleMovieWatched()} actions={<UserListButtons mediaId={String(media.id)} />} />
 
       {isSeries && currentSeason && (
         <section id="watch-episodes" className="watch-episodes-panel max-w-7xl mx-auto px-4 sm:px-8 mt-10 space-y-6">

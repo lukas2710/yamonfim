@@ -7,9 +7,9 @@ export const LIST_LABELS: Record<UserList, { add: string; added: string; row: st
   later: { add: 'À regarder plus tard', added: 'Dans « Plus tard »', row: 'À regarder plus tard' },
 };
 
-// Until the table exists the lists stay hidden instead of showing an error.
-export function listsMissing(error: { code?: string; message?: string } | null) {
-  return !!error && (error.code === '42P01' || error.code === 'PGRST205' || /user_lists/.test(error.message || ''));
+// Until the table exists the lists stay hidden; any other failure must stay visible.
+export function listsMissing(error: { code?: string } | null) {
+  return !!error && (error.code === '42P01' || error.code === 'PGRST205');
 }
 
 export async function fetchUserLists(client: SupabaseClient, userId: string, profileId: string) {
