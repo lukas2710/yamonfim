@@ -6,9 +6,10 @@ import { getPersistentSession } from '@/lib/auth-session';
 import { supabase } from '@/lib/supabase';
 import { loadWatchMedia } from '@/lib/client-media';
 import { withTimeout } from '@/lib/with-timeout';
+import UserListButtons from '@/components/UserListButtons';
 import WatchPlayer, { type WatchPlayerControl } from '@/components/WatchPlayer';
 import { playbackRequest } from '@/lib/playback-request';
-import { isNativePlayback as isDirectVideo, isCompleted, shouldMarkSeen, sameEpisode, playbackProgress, preparePlayerUrl, nextEpisodePosition as nextPositionOf, episodeFinished, resumeStart } from '@/lib/watch-progress';
+import { isNativePlayback as isDirectVideo, shouldMarkSeen, sameEpisode, playbackProgress, preparePlayerUrl, nextEpisodePosition as nextPositionOf, episodeFinished, resumeStart } from '@/lib/watch-progress';
 import { episodeCreditsDecision, playbackCreditsMarker, type CreditsMarker } from '@/lib/episode-credits';
 import { creditsTmdb } from '@/lib/credits-identity';
 import useEstimatedEpisodeClock from '@/components/useEstimatedEpisodeClock';
@@ -367,8 +368,10 @@ export default function WatchPage() {
 
         void sessionTask.then(async user => {
           if (cancelled || !user) return;
-          const watchedTask = supabase.from('user_watched').select('ep_key')
-            .eq('user_id', user.id).eq('media_id', String(mediaData.id)).abortSignal(controller.signal);
+          // Seen ticks belong to one profile: another profile's episodes must not move this resume.
+          let seenQuery = supabase.from('user_watched').select('ep_key').eq('user_id', user.id).eq('media_id', String(mediaData.id));
+          if (profileIdRef.current) seenQuery = seenQuery.eq('profile_id', profileIdRef.current);
+          const watchedTask = seenQuery.abortSignal(controller.signal);
           let historyQuery = supabase.from('watch_history').select('*').eq('user_id', user.id).eq('media_id', String(id));
           if (profileIdRef.current) historyQuery = historyQuery.eq('profile_id', profileIdRef.current);
           const [watchedRes, historyRes] = await Promise.all([
@@ -389,7 +392,7 @@ export default function WatchPage() {
           // resume the series at the next episode instead of dropping playback history.
           const historyDuration = userHistory.duration || 0;
           const historyEpisodeSeen = item.type === 'series' && !!userWatched[epKey(historySeason, historyEpisode)];
-          if (item.type === 'series' ? (historyEpisodeSeen || episodeFinished(historyTime, historyDuration)) : isCompleted(historyTime, historyDuration)) {
+          if (historyEpisodeSeen || episodeFinished(historyTime, historyDuration)) {
             const next = item.type === 'series' ? nextPositionOf(seasons, { s: historySeason, e: historyEpisode }) : null;
             if (next) { historySeason = next.s; historyEpisode = next.e; }
             historyTime = 0;
@@ -926,6 +929,7 @@ export default function WatchPage() {
         episodeLabel={`${seasonLabel} ${currentSeason?.seasonNumber || 1} · Épisode ${currentEpisode?.number || 1}${currentEpisode?.title ? ' — ' + currentEpisode.title : ''}`}
         disabled={isStarting} showRestart={showRestart} onPlay={() => void startPlaying(selectedSeasonIdx, selectedEpisodeIdx)}
         onRestart={restartFromBeginning} onToggleWatched={() => void toggleMovieWatched()} />
+      <UserListButtons mediaId={String(media.id)} />
 
       {isSeries && currentSeason && (
         <section id="watch-episodes" className="watch-episodes-panel max-w-7xl mx-auto px-4 sm:px-8 mt-10 space-y-6">

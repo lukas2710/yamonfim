@@ -43,7 +43,7 @@ export function continueWatchingEntries(rows: ResumeRow[], available: (id: strin
     const series = row.type === 'series';
     // A movie barely started or already at its credits does not need resuming.
     // For series, keep the row: the player advances to the next episode if needed.
-    if (!series && (time < 60 || isCompleted(time, duration))) continue;
+    if (!series && (time < 60 || episodeFinished(time, duration))) continue;
     seen.add(id);
     entries.push({ id, series, ratio: duration > 0 ? Math.min(1, time / duration) : 0, finished: series && episodeFinished(time, duration),
       seasonNumber: Number(row.season_number) || 1, episodeNumber: Number(row.episode_number) || 1 });

@@ -21,7 +21,7 @@ export function fetchCatalogueCards<T extends { id: string | number }>(client: S
   }).then(rows => { onPage?.(rows); return rows; });
 }
 
-const PAGE_SIZE = 2000, PARALLEL = 4, REFRESH_EVERY = 5;
+const PAGE_SIZE = 2000, PARALLEL = 4, REFRESH_EVERY = 8;
 // The list weighs tens of megabytes: the first page shows the home at once, and
 // the rest arrives in order, refreshing the screen only every few pages.
 export async function readCataloguePages<T>(read: (offset: number) => Promise<Response>, onPage?: (rows: T[]) => void) {

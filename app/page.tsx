@@ -13,9 +13,11 @@ import { readClientResource } from '@/lib/resource-cache';
 import { supabase } from '@/lib/supabase';
 import { fetchSubscriptionProfile } from '@/lib/subscription';
 import { fetchPublicCatalogueCards } from '@/lib/client-catalogue';
+import { CATALOGUE_CARD_COLUMNS } from '@/lib/catalogue';
 import { indexSearch, rankSearch, type SearchEntry } from '@/lib/search';
 import { inCategory, isMainstream, MANGA_GENRE, FOREIGN_GENRE, type Category } from '@/lib/catalogue-categories';
-import { continueWatchingEntries } from '@/lib/watch-progress';
+import { continueWatchingEntries, type ResumeRow } from '@/lib/watch-progress';
+import { fetchUserLists, LIST_LABELS, listTitles, type ListEntry, type UserList } from '@/lib/user-lists';
 import { personalizedRecommendations, discoveryPreferences, homeDiscoveryTitles, type RecommendationHistory } from '@/lib/recommendations';
 import { bestRated, weeklyTrending, tmdbKey, type HomeRankings } from '@/lib/home-rankings';
 import rankingBootstrap from '@/lib/home-rankings-bootstrap.json';
@@ -116,7 +118,8 @@ const activateProps = (onActivate: () => void) => ({
   tabIndex: 0,
   onClick: onActivate,
   onKeyDown: (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
+    // Inner buttons (remove, lists) handle their own keys.
+    if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
       e.preventDefault();
       onActivate();
     }
@@ -223,7 +226,10 @@ export default function Home() {
   const [activeProfile, setActiveProfile] = useState<any>(null);
   const [continueWatchingList, setContinueWatchingList] = useState<MediaItem[]>([]);
   const [recommendationHistory, setRecommendationHistory] = useState<RecommendationHistory[]>([]);
+  const [catalogueLoading, setCatalogueLoading] = useState(true);
   const [completionData, setCompletionData] = useState<{ seen: SeenRow[]; history: CompletionProgress[] }>({ seen: [], history: [] });
+  const [listEntries, setListEntries] = useState<ListEntry[]>([]);
+  const [listRows, setListRows] = useState<MediaItem[]>([]);
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   const inProgressIds = useMemo(() => inProgressTitles(completionData.seen, completionData.history, completedIds), [completionData, completedIds]);
   const resumableList = useMemo(() => continueWatchingList.filter(item => !completedIds.has(String(item.id))), [continueWatchingList, completedIds]);
@@ -233,9 +239,10 @@ export default function Home() {
     const series = mediaList.filter(item => item.type === 'series' && seenIds.has(String(item.id))).map(item => String(item.id));
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Completion data is independent of the main catalogue's loading state.
     setCompletedIds(completedTitles(mediaList, completionData.seen, completionData.history, {}));
-    if (series.length) void fetchSeriesEpisodeKeys(series, controller.signal, keys => { if (!controller.signal.aborted) setCompletedIds(completedTitles(mediaList, completionData.seen, completionData.history, keys)); }).catch(() => {});
+    // Series keys are costly: wait for the whole catalogue instead of refetching at each page.
+    if (series.length && !catalogueLoading) void fetchSeriesEpisodeKeys(series, controller.signal, keys => { if (!controller.signal.aborted) setCompletedIds(completedTitles(mediaList, completionData.seen, completionData.history, keys)); }).catch(() => {});
     return () => controller.abort();
-  }, [mediaList, completionData]);
+  }, [mediaList, completionData, catalogueLoading]);
   const [rankings, setRankings] = useState<HomeRankings | null>(rankingBootstrap);
   const [browseSort, setBrowseSort] = useState<'recent' | 'rating'>('recent');
   useEffect(() => {
@@ -268,7 +275,6 @@ export default function Home() {
   const [customBanners, setCustomBanners] = useState<any[]>([]);
   const [hero, setHero] = useState<{ ids: string[]; seasonsById: Record<string, SeasonSummary[]> }>({ ids: [], seasonsById: {} });
   const [loading, setLoading] = useState(true);
-  const [catalogueLoading, setCatalogueLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [resultLimit, setResultLimit] = useState(60);
@@ -330,8 +336,14 @@ export default function Home() {
           setWatchCount(profile?.watch_count || 0);
           accessReady = true; reveal();
         });
+        // « Reprendre » must not wait for tens of thousands of titles: the viewer's own
+        // titles are read directly, then the rows refresh as the catalogue arrives.
+        let knownRows: MediaItem[] = [], ownRows: MediaItem[] = [];
+        let refreshResume = () => {};
         const catalogueTask = fetchPublicCatalogueCards<MediaItem>(supabase, rows => {
+          knownRows = rows;
           setMediaList(rows.filter(item => canWatch(item, currentProfile.profile_mode || 'standard'))); firstPageReady = true; reveal();
+          refreshResume();
         }).finally(() => setCatalogueLoading(false));
         const watchedTask = fetchProfileWatched(supabase, user.id, currentProfile.id).then(data => ({ data }), () => ({ data: [] }));
         let progressQuery = supabase.from('watch_history').select('media_id,type,current_time,duration,season_idx,episode_idx,season_number,episode_number,updated_at').eq('user_id', user.id);
@@ -364,17 +376,24 @@ export default function Home() {
           const { data: seasonRows } = await supabase.from('media').select('id,seasons').in('id', seriesIds);
           return { ids, seasonsById: Object.fromEntries((seasonRows || []).map((row: { id: unknown; seasons: SeasonSummary[] }) => [String(row.id), row.seasons])) };
         }).then(setHero).catch(() => { /* The latest additions remain a valid carousel. */ });
-        const historyTask = Promise.all([catalogueTask, watchedTask, progressTask]).then(([mediaData, watchedRes, progressRes]) => {
+        const historyTask = Promise.all([watchedTask, progressTask]).then(async ([watchedRes, progressRes]) => {
           const progress = progressRes.data || [];
           setCompletionData({ seen: watchedRes.data || [], history: progress });
           const recorded = new Set(progress.map(row => String(row.media_id)));
           setRecommendationHistory([...progress, ...(watchedRes.data || []).filter(row => !recorded.has(String(row.media_id))).map(row => ({ media_id: row.media_id, current_time: 600, updated_at: row.watched_at }))]);
-          const byId = new Map(mediaData.filter(item => canWatch(item, currentProfile.profile_mode || 'standard')).map(item => [String(item.id), item]));
+          // A film ticked by hand leaves « Reprendre »; one seen automatically at 80 %
+          // (VIP) stays there while it is still being watched.
+          const seenAt = new Map((watchedRes.data || []).map(row => [`${row.media_id}/${row.ep_key}`, row.watched_at || '']));
+          const markedSeen = (row: ResumeRow) => {
+            const at = seenAt.get(`${row.media_id}/movie_main`);
+            return at !== undefined && String(at) >= String(row.updated_at || '');
+          };
+          refreshResume = () => {
+          const byId = new Map([...ownRows, ...knownRows].filter(item => canWatch(item, currentProfile.profile_mode || 'standard')).map(item => [String(item.id), item]));
           // « Reprendre » suit l'historique de lecture (dernier titre regardé en premier) :
           // films en cours jusqu'à leur générique, séries sur l'épisode en cours ou le suivant.
           const resume = new Map<string, MediaItem>();
-          const seenKeys = new Set((watchedRes.data || []).map(row => `${row.media_id}/${row.ep_key}`));
-          for (const entry of continueWatchingEntries(progressRes.data || [], id => byId.has(id), row => row.type !== 'series' && seenKeys.has(`${row.media_id}/movie_main`))) {
+          for (const entry of continueWatchingEntries(progressRes.data || [], id => byId.has(id), markedSeen)) {
             resume.set(entry.id, { ...byId.get(entry.id)!, progress: { seasonIdx: 0, episodeIdx: 0, seasonNumber: entry.seasonNumber, episodeNumber: entry.episodeNumber, fromHistory: true, ratio: entry.ratio, finished: entry.finished } });
           }
           // Older series watched before the viewing history existed keep their last episode.
@@ -387,8 +406,23 @@ export default function Home() {
             resume.set(id, { ...item, progress: { seasonIdx, episodeIdx, seasonNumber: seasonIdx + 1, episodeNumber: episodeIdx + 1 } });
           }
           setContinueWatchingList([...resume.values()]);
+          };
+          refreshResume();
+          const ownIds = [...new Set(progress.slice(0, 60).map(row => String(row.media_id)))];
+          if (ownIds.length) {
+            const { data } = await supabase.from('media').select(CATALOGUE_CARD_COLUMNS).in('id', ownIds);
+            ownRows = (data || []) as unknown as MediaItem[];
+            refreshResume();
+          }
         });
-        await Promise.all([accessTask, historyTask, bannerTask, heroTask]);
+        const listsTask = fetchUserLists(supabase, user.id, currentProfile.id).then(async ({ entries }) => {
+          const ids = [...new Set(entries.map(entry => entry.media_id))].slice(0, 200);
+          if (!ids.length) return;
+          const { data } = await supabase.from('media').select(CATALOGUE_CARD_COLUMNS).in('id', ids);
+          setListRows(((data || []) as unknown as MediaItem[]).filter(item => canWatch(item, currentProfile.profile_mode || 'standard')));
+          setListEntries(entries);
+        }).catch(() => { /* Personal lists never block the catalogue. */ });
+        await Promise.all([accessTask, catalogueTask, historyTask, bannerTask, heroTask, listsTask]);
       } catch (err) {
         setLoadError("Le catalogue n’a pas pu être chargé entièrement. Actualise la page pour réessayer.");
         console.error("Erreur lors du chargement de l'accueil:", err);
@@ -412,7 +446,8 @@ export default function Home() {
     prepareMedia(item);
     let vip = isVip;
     let count = watchCount;
-    if (currentUserId && userEmail !== ADMIN_EMAIL) {
+    // Only free accounts need a fresh count here; playback re-checks every account.
+    if (currentUserId && userEmail !== ADMIN_EMAIL && !isVip) {
       try {
         const { data: profile } = await fetchSubscriptionProfile(currentUserId);
         if (profile) {
@@ -456,9 +491,9 @@ export default function Home() {
         historyDelete = historyDelete.eq('profile_id', activeProfile.id);
       }
 
-      const [{ error }] = await Promise.all([deleteQuery, historyDelete]);
+      const [{ error }, { error: historyError }] = await Promise.all([deleteQuery, historyDelete]);
 
-      if (!error) {
+      if (!error && !historyError) {
         const updatedList: MediaItem[] = [];
         for (const item of continueWatchingList) {
           if (String(item.id) !== String(mediaId)) {
@@ -551,7 +586,10 @@ export default function Home() {
 
   const deferredQuery = useDeferredValue(searchQuery);
   // Normalized once per catalogue load, not on every keystroke (slow TV browsers).
-  const searchIndex = useMemo(() => new Map<MediaItem, SearchEntry>(mediaList.map(item => [item, indexSearch(item.title, item.description, ...(item.genres || []))])), [mediaList]);
+  const searching = !!deferredQuery.trim();
+  const searchIndex = useMemo(() => new Map<MediaItem, SearchEntry>(searching ? mediaList.map(item => [item, indexSearch(item.title, item.description, ...(item.genres || []))]) : []), [mediaList, searching]);
+  // Memoized: the carousel re-renders this page every five seconds.
+  const releaseYears = useMemo(() => [...new Set(mediaList.filter(item => inCategory(item, selectedType)).map(releaseYear).filter((year): year is number => year !== null))].sort((a, b) => b - a), [mediaList, selectedType]);
   const filteredMedia = useMemo(() => {
     const matches = rankSearch(
     mediaList.filter(item => inCategory(item, selectedType)
@@ -585,7 +623,7 @@ export default function Home() {
   const userLimitReached = (!isVip && watchCount >= MAX_FREE_LIMIT) || quotaPreview;
   const isAdmin = userEmail === ADMIN_EMAIL;
   const isFiltered = selectedYear !== 'all' || !!searchQuery || selectedGenre !== 'all' || selectedType !== 'all';
-  const showHero = selectedYear === 'all' && !searchQuery && selectedType === 'all';
+  const showHero = selectedYear === 'all' && !searchQuery && selectedType === 'all' && selectedGenre === 'all';
 
   if (loading) {
     return (
@@ -609,7 +647,6 @@ export default function Home() {
   }
 
   const navItems: { key: Category; label: string }[] = (['all', 'movie', 'series', 'manga', 'foreign'] as Category[]).map(key => ({ key, label: CATEGORY_TITLES[key] }));
-  const releaseYears = [...new Set(mediaList.filter(item => inCategory(item, selectedType)).map(releaseYear).filter((year): year is number => year !== null))].sort((a, b) => b - a);
 
   return (
     <CompletionContext.Provider value={completedIds}><InProgressContext.Provider value={inProgressIds}><main className="yf-page yf-home min-h-screen max-w-[100vw] overflow-x-hidden bg-[#0a0a0b] pb-28 font-sans text-white antialiased selection:bg-red-600 selection:text-white sm:pb-16">
@@ -872,7 +909,7 @@ export default function Home() {
         <div className="h-16" />
       )}
 
-      {selectedType !== 'all' && (
+      {(selectedType !== 'all' || selectedGenre !== 'all') && (
         <div className="px-4 pt-8 sm:px-10">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h1 className="text-3xl font-black tracking-tight sm:text-4xl">{CATEGORY_TITLES[selectedType]}</h1>
@@ -940,7 +977,7 @@ export default function Home() {
                 <button
                   onClick={(e) => handleRemoveFromContinue(e, item.id)}
                   aria-label="Supprimer de l'historique"
-                  className="absolute right-2 top-2 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-zinc-300 opacity-0 backdrop-blur-md transition hover:bg-red-600 hover:text-white group-hover:opacity-100"
+                  className="absolute right-2 top-2 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-zinc-300 opacity-0 backdrop-blur-md transition hover:bg-red-600 hover:text-white focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                 >
                   <Icon name="trash" className="h-4 w-4" />
                 </button>
@@ -970,6 +1007,13 @@ export default function Home() {
             ))}
           </Row>
         )}
+
+        {!isFiltered && (['favorite', 'later'] as UserList[]).map(list => {
+          const items = listTitles(listEntries, list, listRows);
+          return items.length > 0 && <Row key={list} title={LIST_LABELS[list].row} icon={<Icon name="sparkles" className="h-5 w-5 text-red-500" />}>
+            {items.map(item => <PosterCard key={item.id} item={item} locked={userLimitReached} onOpen={() => handleMediaClick(item)} onPrepare={() => prepareMedia(item)} className="w-[130px] sm:w-[170px]" />)}
+          </Row>;
+        })}
 
             {!isFiltered && recommendedForYou.length > 0 && (
               <Row title="Recommandé pour vous" subtitle="Selon les films et séries regardés sur ce profil" icon={<Icon name="sparkles" className="h-5 w-5 text-red-500" />}>
@@ -1123,7 +1167,7 @@ export default function Home() {
               const genreItems = genreSections.get(genre) || [];
               if (genreItems.length === 0) return null;
               return (
-                <Row key={genre} title={genre === MANGA_GENRE ? 'Mangas populaires' : genre === FOREIGN_GENRE ? 'Populaires en langue étrangère' : `Populaires en ${genre}`} subtitle="Classement par note TMDB · 300 avis minimum par film, 150 par série" onSeeAll={() => { if (genre === MANGA_GENRE) selectType('manga'); else if (genre === FOREIGN_GENRE) selectType('foreign'); else { setSelectedGenre(genre); setSelectedType('all'); setSearchQuery(''); setBrowseSort('rating'); } }} icon={<Icon name="film" className="h-5 w-5 text-zinc-400" />}>
+                <Row key={genre} title={genre === MANGA_GENRE ? 'Mangas populaires' : genre === FOREIGN_GENRE ? 'Populaires en langue étrangère' : `Populaires en ${genre}`} subtitle="Classement par note TMDB · 300 avis minimum par film, 150 par série" onSeeAll={() => { if (genre === MANGA_GENRE) selectType('manga'); else if (genre === FOREIGN_GENRE) selectType('foreign'); else { setSelectedGenre(genre); setSelectedType('all'); setSearchQuery(''); setBrowseSort('rating'); setResultLimit(60); window.scrollTo({ top: 0 }); } }} icon={<Icon name="film" className="h-5 w-5 text-zinc-400" />}>
                   {genreItems.slice(0, 20).map((item: MediaItem) => (
                     <PosterCard
                       key={genre + '-' + item.id}
