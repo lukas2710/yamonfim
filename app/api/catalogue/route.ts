@@ -36,10 +36,12 @@ export async function GET(request: Request) {
     const limit = paged ? Math.max(1, Math.min(2000, Number(url.searchParams.get('limit')) || 1000)) : memory.rows.length;
     const offset = paged ? Math.max(0, Number(url.searchParams.get('offset')) || 0) : 0;
     const rows = memory.rows.slice(offset, offset + limit);
-    const end = rows.length ? offset + rows.length - 1 : offset;
     return NextResponse.json(rows, { headers: {
       'Cache-Control': 'public, max-age=60', 'CDN-Cache-Control': CDN_CACHE, 'Netlify-CDN-Cache-Control': NETLIFY_CACHE,
-      'Content-Range': `items ${offset}-${end}/${memory.rows.length}`,
+      // Without this the CDN serves one cached copy for every page.
+      'Netlify-Vary': 'query=limit|offset',
+      // Not Content-Range: it turns the answer into a 206, which the TV app rejects.
+      'X-Total-Count': String(memory.rows.length),
     } });
   } catch {
     return NextResponse.json({ error: 'Le catalogue ne peut pas être chargé. Réessaie dans un instant.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
